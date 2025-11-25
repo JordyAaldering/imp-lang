@@ -9,6 +9,7 @@ fn main() {
     let parse_ast = scanparse::parse(&src).unwrap();
 
     let ast = convert_to_ssa::ConvertToSsa::new().convert_program(parse_ast).unwrap();
+    let ast = type_infer::TypeInfer::new().infer_program(ast).unwrap();
 
     unsafe {
         let cg = codegen::CodegenContext::new("my_module");

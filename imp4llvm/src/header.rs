@@ -1,16 +1,16 @@
 use compiler::ast::*;
 
-pub fn compile_header(fundef: &Fundef) -> String {
+pub fn compile_header(fundef: &Fundef<TypedAst>) -> String {
     let mut s = String::new();
 
-    let ret_type = match fundef.vars[fundef.ret_value].ty.unwrap_or(Type::U32) {
+    let ret_type = match fundef.vars[fundef.ret_value].ty {
         Type::U32 => "u32",
         Type::Bool => "bool",
     };
 
     let args: Vec<String> = fundef.args.iter().map(|key| {
         let vinfo = &fundef.vars[*key];
-        let ty_str = match vinfo.ty.unwrap_or(Type::U32) {
+        let ty_str = match vinfo.ty {
             Type::U32 => "u32",
             Type::Bool => "bool",
         };

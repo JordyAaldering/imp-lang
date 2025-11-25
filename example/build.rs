@@ -15,6 +15,7 @@ fn main() {
     let src = fs::read_to_string(&"src/simple.imp").unwrap();
     let parse_ast = scanparse::parse(&src).unwrap();
     let ast = convert_to_ssa::ConvertToSsa::new().convert_program(parse_ast).unwrap();
+    let ast = type_infer::TypeInfer::new().infer_program(ast).unwrap();
     imp4llvm::compile(&ast.fundefs[0], dst_ll.to_str().unwrap());
 
     // 2. Convert LLVM IR → object file using llvm-as + llc

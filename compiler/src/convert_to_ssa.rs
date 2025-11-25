@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 
-use slotmap::{Key, SecondaryMap, SlotMap};
+use slotmap::{SecondaryMap, SlotMap};
 
-use crate::{ast::{self, VarInfo, VarKey}, scanparse::parse_ast};
+use crate::{ast::{self, UntypedAst, VarInfo, VarKey}, scanparse::parse_ast};
 
 pub struct ConvertToSsa {
     uid: usize,
-    vars: Option<SlotMap<VarKey, VarInfo>>,
+    vars: Option<SlotMap<VarKey, VarInfo<UntypedAst>>>,
     ssa: Option<SecondaryMap<VarKey, ast::Expr>>,
     parse_name_to_key: HashMap<String, VarKey>,
 }
@@ -34,7 +34,7 @@ impl ConvertToSsa {
         s
     }
 
-    pub fn convert_program(&mut self, program: parse_ast::Program) -> SsaResult<ast::Program> {
+    pub fn convert_program(&mut self, program: parse_ast::Program) -> SsaResult<ast::Program<UntypedAst>> {
         let mut fundefs = Vec::new();
         for f in program.fundefs {
             fundefs.push(self.convert_fundef(f)?);
@@ -43,7 +43,7 @@ impl ConvertToSsa {
         Ok(ast::Program { fundefs })
     }
 
-    pub fn convert_fundef(&mut self, fundef: parse_ast::Fundef) -> SsaResult<ast::Fundef> {
+    pub fn convert_fundef(&mut self, fundef: parse_ast::Fundef) -> SsaResult<ast::Fundef<UntypedAst>> {
         // Reset self
         self.uid = 0;
         self.vars = Some(SlotMap::with_key());
@@ -52,9 +52,9 @@ impl ConvertToSsa {
 
         let mut args = Vec::new();
         for (ty, id) in fundef.args {
-            let var = VarInfo { key: VarKey::null(), id: id.clone(), ty: Some(ty) };
-            let key = self.vars.as_mut().unwrap().insert(var);
-            self.vars.as_mut().unwrap()[key].key = key;
+            let key = self.vars.as_mut().unwrap().insert_with_key(|key| {
+                VarInfo { key, id: id.clone(), ty: Some(ty) }
+            });
             args.push(key);
 
             let prev_arg_key = self.parse_name_to_key.insert(id, key);
@@ -62,6 +62,7 @@ impl ConvertToSsa {
         }
 
         let ret_value = self.convert_body(fundef.body)?;
+        self.vars.as_mut().unwrap()[ret_value].ty = Some(fundef.ret_type);
 
         Ok(ast::Fundef {
             id: fundef.id,
@@ -115,9 +116,9 @@ impl ConvertToSsa {
                 };
 
                 let id = self.fresh_uid(Some(&lhs));
-                let var = VarInfo { key: VarKey::null(), id, ty: None };
-                let key = self.vars.as_mut().unwrap().insert(var);
-                self.vars.as_mut().unwrap()[key].key = key;
+                let key = self.vars.as_mut().unwrap().insert_with_key(|key| {
+                    VarInfo { key, id, ty: None }
+                });
 
                 self.ssa.as_mut().unwrap().insert(key, e);
 
@@ -160,9 +161,9 @@ impl ConvertToSsa {
         };
 
         let id = self.fresh_uid(None);
-        let var = VarInfo { key: VarKey::null(), id, ty: None };
-        let key = self.vars.as_mut().unwrap().insert(var);
-        self.vars.as_mut().unwrap()[key].key = key;
+        let key = self.vars.as_mut().unwrap().insert_with_key(|key| {
+            VarInfo { key, id, ty: None }
+        });
 
         let prev_key = self.ssa.as_mut().unwrap().insert(key, e);
         // Check that the inserted key was indeed unique

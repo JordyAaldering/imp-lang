@@ -1,17 +1,23 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, marker::PhantomData};
 
 use crate::ast::*;
 
-pub struct Show;
+pub struct Show<Ast: AstConfig> {
+    _phantom: PhantomData<Ast>,
+}
 
-impl Show {
-    pub fn show_program(&mut self, program: &Program) {
+impl<Ast: AstConfig> Show<Ast> {
+    pub fn new() -> Self {
+        Self { _phantom: PhantomData::default() }
+    }
+
+    pub fn show_program(&mut self, program: &Program<Ast>) {
         for fundef in &program.fundefs {
             self.show_fundef(fundef);
         }
     }
 
-    fn show_fundef(&mut self, fundef: &Fundef) {
+    fn show_fundef(&mut self, fundef: &Fundef<Ast>) {
         // Extract var names/types so we can consume the maps while still having lookups
         let mut names: HashMap<VarKey, String> = HashMap::new();
         for (k, v) in fundef.vars.iter() {
