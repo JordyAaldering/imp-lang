@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use slotmap::{Key, SecondaryMap, SlotMap};
 
-use crate::{ast::{self, ExprKey, VarInfo, VarKey}, scanparse::parse_ast};
+use crate::{ast::{self, VarInfo, VarKey}, scanparse::parse_ast};
 
 pub struct ConvertToSsa {
     uid: usize,
@@ -91,7 +91,7 @@ impl ConvertToSsa {
         match stmt {
             parse_ast::Stmt::Assign { lhs, expr } => {
                 // We need explicit handling of the outermost expression, which is why we don't call convert_expr immediately
-
+                // We can probably make this nicer though
                 let e = match expr {
                     parse_ast::Expr::Binary { l, r, op } => {
                         let l_key = self.convert_expr(*l)?;
@@ -138,36 +138,33 @@ impl ConvertToSsa {
             return Ok(self.parse_name_to_key[id])
         }
 
-        let id = self.fresh_uid(None);
-        let var = VarInfo { key: VarKey::null(), id, ty: None };
-        let key = self.vars.as_mut().unwrap().insert(var);
-        self.vars.as_mut().unwrap()[key].key = key;
-
-        let prev_key = match expr {
+        let e = match expr {
             parse_ast::Expr::Binary { l, r, op } => {
                 let l_key = self.convert_expr(*l)?;
                 let r_key = self.convert_expr(*r)?;
-                let e = ast::Expr::Binary(ast::Binary { l: l_key, r: r_key, op });
-                self.ssa.as_mut().unwrap().insert(key, e)
+                ast::Expr::Binary(ast::Binary { l: l_key, r: r_key, op })
             },
             parse_ast::Expr::Unary { r, op } => {
                 let r_key = self.convert_expr(*r)?;
-                let e = ast::Expr::Unary(ast::Unary { r: r_key, op });
-                self.ssa.as_mut().unwrap().insert(key, e)
+                ast::Expr::Unary(ast::Unary { r: r_key, op })
             },
             parse_ast::Expr::Identifier(_) => {
                 unreachable!()
             },
             parse_ast::Expr::Bool(v) => {
-                let e = ast::Expr::Bool(v);
-                self.ssa.as_mut().unwrap().insert(key, e)
+                ast::Expr::Bool(v)
             }
             parse_ast::Expr::U32(v) => {
-                let e = ast::Expr::U32(v);
-                self.ssa.as_mut().unwrap().insert(key, e)
+                ast::Expr::U32(v)
             },
         };
 
+        let id = self.fresh_uid(None);
+        let var = VarInfo { key: VarKey::null(), id, ty: None };
+        let key = self.vars.as_mut().unwrap().insert(var);
+        self.vars.as_mut().unwrap()[key].key = key;
+
+        let prev_key = self.ssa.as_mut().unwrap().insert(key, e);
         // Check that the inserted key was indeed unique
         debug_assert!(prev_key.is_none());
         Ok(key)
