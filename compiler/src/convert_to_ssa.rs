@@ -29,7 +29,9 @@ impl ConvertToSsa {
     }
 
     fn fresh_uid(&mut self, id: Option<&str>) -> String {
-        let s = format!("@{}_{}", id.unwrap_or("ssa"), self.uid);
+        // TODO: generate a name that the user could never write, e.g. something containing `@`
+        // This requires us to sanitize these strings again before compiling
+        let s = format!("_{}_{}", id.unwrap_or("ssa"), self.uid);
         self.uid += 1;
         s
     }
@@ -135,7 +137,6 @@ impl ConvertToSsa {
 
     pub fn convert_expr(&mut self, expr: parse_ast::Expr) -> SsaResult<VarKey> {
         if let parse_ast::Expr::Identifier(id) = &expr {
-            println!("Found an rhs identifier: {}", id);
             return Ok(self.parse_name_to_key[id])
         }
 
