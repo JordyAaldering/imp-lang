@@ -30,6 +30,7 @@ name = "example"
 version = "0.1.0"
 dependencies = [
  "compiler",
+ "imp4llvm",
 ]
 
 [[package]]

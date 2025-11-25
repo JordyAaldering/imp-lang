@@ -1,4 +1,0 @@
-fn foo(u32 a, u32 b, u32 c) -> bool {
-    b = a + a * b;
-    return c * b == 42;
-}
