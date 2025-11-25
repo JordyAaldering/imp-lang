@@ -1,4 +1,6 @@
-use super::{parse_ast as ast, parser::ParseError};
+use crate::ast;
+
+use super::parser::ParseError;
 
 pub trait Operator {
     fn precedence(&self) -> usize;

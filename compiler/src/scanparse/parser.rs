@@ -1,5 +1,7 @@
 use std::iter::Peekable;
 
+use crate::ast::{Bop, Type, Uop};
+
 use super::{lexer::{Lexer, Token}, operator::{self, Operator}, parse_ast::*, span::Span};
 
 pub struct Parser<'src> {
@@ -9,6 +11,7 @@ pub struct Parser<'src> {
 #[derive(Debug)]
 pub enum ParseError {
     NonAssociative,
+    #[allow(unused)]
     UnexpectedToken(String, Token, Span),
     UnexpectedEof,
 }

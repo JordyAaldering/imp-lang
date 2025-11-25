@@ -1,3 +1,4 @@
+#[allow(unused)]
 #[derive(Clone, Copy, Debug)]
 pub struct Span {
     line: usize,

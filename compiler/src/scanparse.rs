@@ -1,5 +1,5 @@
 mod lexer;
-mod parse_ast;
+pub mod parse_ast;
 mod parser;
 mod operator;
 mod span;

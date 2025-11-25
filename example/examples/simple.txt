@@ -1,4 +1,4 @@
 fn foo(u32 a, u32 b, u32 c) -> bool {
-    d = a + a * b;
-    return c / d == 42;
+    b = a + a * b;
+    return c / b == 42;
 }

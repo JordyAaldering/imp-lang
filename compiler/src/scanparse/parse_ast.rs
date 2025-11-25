@@ -1,3 +1,5 @@
+use crate::ast::{Bop, Type, Uop};
+
 #[derive(Debug)]
 pub struct Program {
     pub fundefs: Vec<Fundef>,
@@ -36,21 +38,4 @@ pub enum Expr {
     Identifier(String),
     Bool(bool),
     U32(u32),
-}
-
-#[derive(Copy, Clone, Debug)]
-pub enum Bop {
-    Add, Sub, Mul, Div,
-    Eq, Ne, Lt, Le, Gt, Ge,
-}
-
-#[derive(Copy, Clone, Debug)]
-pub enum Uop {
-    Neg, Not,
-}
-
-#[derive(Copy, Clone, Debug)]
-pub enum Type {
-    U32,
-    Bool,
 }
