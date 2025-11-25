@@ -40,7 +40,8 @@ impl CodegenContext {
 
         c_code.push_str(&format!("{} DSL_{}({}) {{\n", ret_type, fundef.id, args.join(", ")));
 
-        let ret_code = self.compile_arg_or_expr(fundef, fundef.ret_value);
+        let ret_code = self.compile_arg_or_expr(fundef, fundef.ret_value)
+            .unwrap_or(fundef.vars[fundef.ret_value].id.clone());
 
         let mut stmts = Vec::new();
         mem::swap(&mut stmts, &mut self.stmts);
@@ -55,11 +56,11 @@ impl CodegenContext {
         c_code
     }
 
-    pub fn compile_arg_or_expr(&mut self, fundef: &Fundef<TypedAst>, key: VarKey) -> String {
+    pub fn compile_arg_or_expr(&mut self, fundef: &Fundef<TypedAst>, key: VarKey) -> Option<String> {
         if let Some(expr) = fundef.ssa.get(key) {
-            self.compile_expr(fundef, expr)
+            Some(self.compile_expr(fundef, expr))
         } else {
-            fundef.vars[key].id.clone()
+            None
         }
     }
 
@@ -69,19 +70,22 @@ impl CodegenContext {
         match expr {
             Expr::Binary(Binary { l, r, op }) => {
                 let l_info = &fundef.vars[*l];
-                let l_code = self.compile_arg_or_expr(fundef, *l);
-                self.stmts.push(format!("{} {} = {};", to_ctype(l_info.ty), l_info.id, l_code));
+                if let Some(l_code) = self.compile_arg_or_expr(fundef, *l) {
+                    self.stmts.push(format!("{} {} = {};", to_ctype(l_info.ty), l_info.id, l_code));
+                }
 
                 let r_info = &fundef.vars[*r];
-                let r_code = self.compile_arg_or_expr(fundef, *r);
-                self.stmts.push(format!("{} {} = {};", to_ctype(r_info.ty), r_info.id, r_code));
+                if let Some(r_code) = self.compile_arg_or_expr(fundef, *r) {
+                    self.stmts.push(format!("{} {} = {};", to_ctype(r_info.ty), r_info.id, r_code));
+                }
 
                 c_code.push_str(&format!("{} {} {}", l_info.id, op, r_info.id));
             },
             Expr::Unary(Unary { r, op }) => {
                 let r_info = &fundef.vars[*r];
-                let r_code = self.compile_arg_or_expr(fundef, *r);
-                self.stmts.push(format!("{} {} = {};", to_ctype(r_info.ty), r_info.id, r_code));
+                if let Some(r_code) = self.compile_arg_or_expr(fundef, *r) {
+                    self.stmts.push(format!("{} {} = {};", to_ctype(r_info.ty), r_info.id, r_code));
+                }
 
                 c_code.push_str(&format!("{} {}", op, r_info.id));
             },
