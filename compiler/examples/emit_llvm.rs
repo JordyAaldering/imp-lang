@@ -1,5 +1,4 @@
 use compiler::*;
-use imp4llvm::*;
 
 use std::{env, fs};
 
@@ -12,7 +11,7 @@ fn main() {
     let ast = type_infer::TypeInfer::new().infer_program(ast).unwrap();
 
     unsafe {
-        let cg = codegen::CodegenContext::new("my_module");
+        let cg = codegen_llvm::CodegenContext::new("my_module");
         cg.compile_fundef(&ast.fundefs[0]);
         llvm_sys::core::LLVMDumpModule(cg.module);
     }

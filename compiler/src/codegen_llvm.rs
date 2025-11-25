@@ -1,7 +1,8 @@
 use std::{collections::HashMap, ffi::CString};
 
-use compiler::ast::*;
 use llvm_sys::{core::*, prelude::*};
+
+use crate::ast::*;
 
 pub struct CodegenContext {
     pub context: LLVMContextRef,

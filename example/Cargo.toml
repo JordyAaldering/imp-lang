@@ -5,4 +5,3 @@ edition = "2024"
 
 [build-dependencies]
 compiler = { path = "../compiler" }
-imp4llvm = { path = "../imp4llvm" }

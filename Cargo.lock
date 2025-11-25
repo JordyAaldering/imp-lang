@@ -22,6 +22,7 @@ dependencies = [
 name = "compiler"
 version = "0.1.0"
 dependencies = [
+ "llvm-sys",
  "slotmap",
 ]
 
@@ -30,7 +31,6 @@ name = "example"
 version = "0.1.0"
 dependencies = [
  "compiler",
- "imp4llvm",
 ]
 
 [[package]]
@@ -38,14 +38,6 @@ name = "find-msvc-tools"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a3076410a55c90011c298b04d0cfa770b00fa04e1e3c97d3f6c9de105a03844"
-
-[[package]]
-name = "imp4llvm"
-version = "0.1.0"
-dependencies = [
- "compiler",
- "llvm-sys",
-]
 
 [[package]]
 name = "lazy_static"

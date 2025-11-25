@@ -1,4 +1,4 @@
-use compiler::ast::*;
+use crate::ast::*;
 
 pub fn compile_header(fundef: &Fundef<TypedAst>) -> String {
     let mut s = String::new();
