@@ -24,6 +24,9 @@ impl<'src> Parser<'src> {
         Self { lexer: lexer.peekable() }
     }
 
+    /// ```bnf
+    /// <program> := <fundef>*
+    /// ```
     pub fn parse_program(&mut self) -> ParseResult<Program> {
         let mut fundefs = Vec::new();
 
@@ -34,6 +37,10 @@ impl<'src> Parser<'src> {
         Ok(Program { fundefs } )
     }
 
+    /// ```bnf
+    /// <fundef> := "fn" <id> "(" [<farg> ("," <farg>)*]? ")" "->" <type>
+    ///                 <block>
+    /// ```
     fn parse_fundef(&mut self) -> ParseResult<Fundef> {
         let (_, _span_start) = self.expect(Token::Fn)?;
 
@@ -62,6 +69,9 @@ impl<'src> Parser<'src> {
         Ok(Fundef { id, args, ret_type, body })
     }
 
+    /// ```bnf
+    /// <farg> := <type> <id>
+    /// ```
     fn parse_farg(&mut self) -> ParseResult<(Type, String)> {
         let (token, span) = self.next()?;
         let ty = match token {
@@ -75,6 +85,9 @@ impl<'src> Parser<'src> {
         Ok((ty, id))
     }
 
+    /// ```bnf
+    /// <block> := "{" <stmt>* "}"
+    /// ```
     fn parse_block(&mut self) -> ParseResult<Vec<Stmt>> {
         self.expect(Token::LBrace)?;
 
@@ -86,17 +99,28 @@ impl<'src> Parser<'src> {
         Ok(stmts)
     }
 
+    /// ```bnf
+    /// <stmt> := <assign>
+    ///         | <return>
+    ///
+    /// <vardec> := <type> <id> "=" <expr> ";"
+    ///           | <type> <id> ";"
+    ///
+    /// <assign> := <id> "=" <expr> ";"
+    ///
+    /// <return> := "return" <expr> ";"
+    /// ```
     fn parse_stmt(&mut self) -> ParseResult<Stmt> {
         let (token, span) = self.next()?;
 
         let stmt = match token {
             Token::Identifier(lhs) => {
                 self.expect(Token::Assign)?;
-                let expr = self.parse_expr()?;
+                let expr = self.parse_expr(None::<Bop>)?;
                 Stmt::Assign { lhs, expr }
             },
             Token::Return => {
-                Stmt::Return { expr: self.parse_expr()? }
+                Stmt::Return { expr: self.parse_expr(None::<Bop>)? }
             },
             _ => return Err(ParseError::UnexpectedToken("statement".to_owned(), token, span)),
         };
@@ -106,11 +130,25 @@ impl<'src> Parser<'src> {
         Ok(stmt)
     }
 
-    fn parse_expr(&mut self) -> ParseResult<Expr> {
-        self.parse_binary(None::<Bop>)
+    /// ```bnf
+    /// <expr> := "(" <expr> ")"
+    ///         | <binary>
+    ///         | <unary>
+    ///         | <literal>
+    /// ```
+    fn parse_expr(&mut self, prev_op: Option<impl Operator>) -> ParseResult<Expr> {
+        self.parse_binary(prev_op)
     }
 
-    fn parse_binary(&mut self, previous: Option<impl Operator>) -> ParseResult<Expr> {
+    /// Uses Pratt parsing to handle associativity and operator precedence.
+    ///
+    /// ```bnf
+    /// <binary> := <expr> <bop> <expr>
+    ///
+    /// <bop> := "+" | "-" | "*" | "/"
+    ///        | "==" | "!=" | "<" | "<=" | ">" | ">="
+    /// ```
+    fn parse_binary(&mut self, prev_op: Option<impl Operator>) -> ParseResult<Expr> {
         let (token, span_start) = self.next()?;
 
         let mut left = match token {
@@ -119,7 +157,7 @@ impl<'src> Parser<'src> {
             Token::U32Value(v) => Expr::U32(v),
             // Nested expression
             Token::LParen => {
-                let expr = self.parse_expr()?;
+                let expr = self.parse_expr(None::<Bop>)?;
 
                 let (token, rloc) = self.next()?;
                 if token != Token::RParen {
@@ -137,8 +175,8 @@ impl<'src> Parser<'src> {
             },
         };
 
-        while let Some((op, _loc)) = self.parse_binary_operator(&previous)? {
-            let right = self.parse_binary(Some(op))?;
+        while let Some((op, _loc)) = self.parse_binary_operator(&prev_op)? {
+            let right = self.parse_expr(Some(op))?;
             // Update `left`
             left = Expr::Binary {
                 l: Box::new(left),
@@ -150,8 +188,13 @@ impl<'src> Parser<'src> {
         Ok(left)
     }
 
+    /// ```bnf
+    /// <unary> := <uop> <expr>
+    ///
+    /// <uop> := "!" | "-"
+    /// ```
     fn parse_unary(&mut self, op: Uop) -> ParseResult<Expr> {
-        let r = self.parse_binary(Some(op))?;
+        let r = self.parse_expr(Some(op))?;
         Ok(Expr::Unary { r: Box::new(r), op })
     }
 

@@ -23,14 +23,14 @@ impl AstConfig for TypedAst {
 
 #[derive(Clone, Debug)]
 pub struct VarInfo<Ast: AstConfig> {
-    key: VarKey,
+    _key: VarKey,
     id: String,
     ty: Ast::ValueType,
 }
 
 impl<Ast: AstConfig> VarInfo<Ast> {
     pub fn new(key: VarKey, id: &str, ty: Ast::ValueType) -> Self {
-        Self { key, id: id.to_owned(), ty }
+        Self { _key: key, id: id.to_owned(), ty }
     }
 
     pub fn ty(&self) -> &Ast::ValueType {
@@ -93,7 +93,7 @@ impl<Ast: AstConfig> Fundef<Ast> {
 pub enum Expr {
     Binary(Binary),
     Unary(Unary),
-    // I don't thik var is actually needed. During parsing we do still need such a construct because we lack context
+    // I don't think var is actually needed. During parsing we do still need such a construct because we lack context
     // (A slotmap does not even exist yet, everything is just identifiers that may or may not exist)
     // But afterwards it is redundant
     //Var(VarKey),

@@ -1,14 +1,14 @@
 mod lexer;
-pub mod parse_ast;
 mod parser;
 mod operator;
 mod span;
+pub(crate) mod parse_ast;
 
 use lexer::Lexer;
-use parse_ast::Program;
 use parser::Parser;
+use parse_ast::Program;
 
-pub fn parse(src: &str) -> Result<Program, String> {
+pub fn scanparse(src: &str) -> Result<Program, String> {
     let lexer = Lexer::new(src);
     let mut parser = Parser::new(lexer);
     parser.parse_program()
