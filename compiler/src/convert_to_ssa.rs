@@ -2,13 +2,13 @@ use std::collections::HashMap;
 
 use slotmap::{SecondaryMap, SlotMap};
 
-use crate::{ast::{self, UntypedAst, VarInfo, VarKey}, scanparse::parse_ast};
+use crate::{ast::*, scanparse::parse_ast};
 
 pub struct ConvertToSsa {
     uid: usize,
-    vars: Option<SlotMap<VarKey, VarInfo<UntypedAst>>>,
-    ssa: Option<SecondaryMap<VarKey, ast::Expr>>,
-    parse_name_to_key: HashMap<String, VarKey>,
+    vars: Option<SlotMap<VarKey, Avis>>,
+    ssa: Option<SecondaryMap<VarKey, Expr>>,
+    parse_name_to_key: HashMap<String, ArgOrVar>,
 }
 
 #[derive(Debug)]
@@ -36,16 +36,16 @@ impl ConvertToSsa {
         s
     }
 
-    pub fn convert_program(&mut self, program: parse_ast::Program) -> SsaResult<ast::Program<UntypedAst>> {
+    pub fn convert_program(&mut self, program: parse_ast::Program) -> SsaResult<Program> {
         let mut fundefs = Vec::new();
         for f in program.fundefs {
             fundefs.push(self.convert_fundef(f)?);
         }
 
-        Ok(ast::Program { fundefs })
+        Ok(Program { fundefs })
     }
 
-    pub fn convert_fundef(&mut self, fundef: parse_ast::Fundef) -> SsaResult<ast::Fundef<UntypedAst>> {
+    pub fn convert_fundef(&mut self, fundef: parse_ast::Fundef) -> SsaResult<Fundef> {
         // Reset self
         self.uid = 0;
         self.vars = Some(SlotMap::with_key());
@@ -53,27 +53,26 @@ impl ConvertToSsa {
         self.parse_name_to_key.clear();
 
         let mut args = Vec::new();
-        for (ty, id) in fundef.args {
-            let key = self.vars.as_mut().unwrap().insert_with_key(|key| {
-                VarInfo::new(key, &id, Some(ty))
-            });
-            args.push(key);
-            self.parse_name_to_key.insert(id, key);
+        for (i, (ty, id)) in fundef.args.into_iter().enumerate() {
+            args.push(Avis::new(ArgOrVar::Arg(i), &id, Some(ty)));
+            self.parse_name_to_key.insert(id, ArgOrVar::Arg(i));
         }
 
         let ret_value = self.convert_body(fundef.body)?;
-        self.vars.as_mut().unwrap()[ret_value].set_type(fundef.ret_type);
+        if let ArgOrVar::Var(k) = ret_value {
+            self.vars.as_mut().unwrap()[k].set_type(fundef.ret_type);
+        }
 
-        Ok(ast::Fundef {
+        Ok(Fundef {
             id: fundef.id,
             args,
             vars: self.vars.take().unwrap(),
             ssa: self.ssa.take().unwrap(),
-            ret_value,
+            ret_id: ret_value,
         })
     }
 
-    pub fn convert_body(&mut self, body: Vec<parse_ast::Stmt>) -> SsaResult<VarKey> {
+    pub fn convert_body(&mut self, body: Vec<parse_ast::Stmt>) -> SsaResult<ArgOrVar> {
         for stmt in body {
             if let Some(ret_value_key) = self.convert_stmt(stmt)? {
                 // A return statement was encountered, we can stop now
@@ -88,7 +87,7 @@ impl ConvertToSsa {
         Err(SsaError::MissingReturnStatement)
     }
 
-    pub fn convert_stmt(&mut self, stmt: parse_ast::Stmt) -> SsaResult<Option<VarKey>> {
+    pub fn convert_stmt(&mut self, stmt: parse_ast::Stmt) -> SsaResult<Option<ArgOrVar>> {
         match stmt {
             parse_ast::Stmt::Assign { lhs, expr } => {
                 // We need explicit handling of the outermost expression, which is why we don't call convert_expr immediately
@@ -97,32 +96,31 @@ impl ConvertToSsa {
                     parse_ast::Expr::Binary { l, r, op } => {
                         let l_key = self.convert_expr(*l)?;
                         let r_key = self.convert_expr(*r)?;
-                        ast::Expr::Binary(ast::Binary { l: l_key, r: r_key, op })
+                        Expr::Binary(Binary { l: l_key, r: r_key, op })
                     },
                     parse_ast::Expr::Unary { r, op } => {
                         let r_key = self.convert_expr(*r)?;
-                        ast::Expr::Unary(ast::Unary { r: r_key, op })
+                        Expr::Unary(Unary { r: r_key, op })
                     },
                     parse_ast::Expr::Identifier(id) => {
-                        println!("Found an rhs identifier: {}", id);
                         return Ok(Some(self.parse_name_to_key[&id]));
                     },
                     parse_ast::Expr::Bool(v) => {
-                        ast::Expr::Bool(v)
+                        Expr::Bool(v)
                     }
                     parse_ast::Expr::U32(v) => {
-                        ast::Expr::U32(v)
+                        Expr::U32(v)
                     },
                 };
 
                 let id = self.fresh_uid(Some(&lhs));
                 let key = self.vars.as_mut().unwrap().insert_with_key(|key| {
-                    VarInfo::new(key, &id, None)
+                    Avis::new(ArgOrVar::Var(key), &id, None)
                 });
 
                 self.ssa.as_mut().unwrap().insert(key, e);
 
-                self.parse_name_to_key.insert(lhs, key);
+                self.parse_name_to_key.insert(lhs, ArgOrVar::Var(key));
 
                 Ok(None)
             },
@@ -133,40 +131,34 @@ impl ConvertToSsa {
         }
     }
 
-    pub fn convert_expr(&mut self, expr: parse_ast::Expr) -> SsaResult<VarKey> {
-        if let parse_ast::Expr::Identifier(id) = &expr {
-            return Ok(self.parse_name_to_key[id])
-        }
-
+    pub fn convert_expr(&mut self, expr: parse_ast::Expr) -> SsaResult<ArgOrVar> {
         let e = match expr {
             parse_ast::Expr::Binary { l, r, op } => {
                 let l_key = self.convert_expr(*l)?;
                 let r_key = self.convert_expr(*r)?;
-                ast::Expr::Binary(ast::Binary { l: l_key, r: r_key, op })
+                Expr::Binary(Binary { l: l_key, r: r_key, op })
             },
             parse_ast::Expr::Unary { r, op } => {
                 let r_key = self.convert_expr(*r)?;
-                ast::Expr::Unary(ast::Unary { r: r_key, op })
-            },
-            parse_ast::Expr::Identifier(_) => {
-                unreachable!()
+                Expr::Unary(Unary { r: r_key, op })
             },
             parse_ast::Expr::Bool(v) => {
-                ast::Expr::Bool(v)
+                Expr::Bool(v)
             }
             parse_ast::Expr::U32(v) => {
-                ast::Expr::U32(v)
+                Expr::U32(v)
+            },
+            parse_ast::Expr::Identifier(id) => {
+                return Ok(self.parse_name_to_key[&id])
             },
         };
 
         let id = self.fresh_uid(None);
         let key = self.vars.as_mut().unwrap().insert_with_key(|key| {
-            VarInfo::new(key, &id, None)
+            Avis::new(ArgOrVar::Var(key), &id, None)
         });
 
-        let prev_key = self.ssa.as_mut().unwrap().insert(key, e);
-        // Check that the inserted key was indeed unique
-        debug_assert!(prev_key.is_none());
-        Ok(key)
+        self.ssa.as_mut().unwrap().insert(key, e);
+        Ok(ArgOrVar::Var(key))
     }
 }

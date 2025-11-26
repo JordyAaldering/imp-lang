@@ -13,14 +13,14 @@ use llvm_sys::core::LLVMPrintModuleToFile;
 
 use ast::*;
 
-pub fn compile(src: &str) -> Program<TypedAst> {
+pub fn compile(src: &str) -> Program {
     let ast = scanparse::scanparse(&src).unwrap();
     let ast = convert_to_ssa::ConvertToSsa::new().convert_program(ast).unwrap();
     let ast = type_infer::TypeInfer::new().infer_program(ast).unwrap();
     ast
 }
 
-pub fn emit_header(ast: &Program<TypedAst>, outfile: &str) {
+pub fn emit_header(ast: &Program, outfile: &str) {
     // Just do the first fundef for now
     let ast = &ast.fundefs[0];
 
@@ -28,7 +28,7 @@ pub fn emit_header(ast: &Program<TypedAst>, outfile: &str) {
     std::fs::write(outfile, header).unwrap();
 }
 
-pub fn emit_llvm(ast: &Program<TypedAst>, outfile: &str) {
+pub fn emit_llvm(ast: &Program, outfile: &str) {
     // Just do the first fundef for now
     let ast = &ast.fundefs[0];
 
@@ -38,10 +38,4 @@ pub fn emit_llvm(ast: &Program<TypedAst>, outfile: &str) {
         let err = ptr::null_mut();
         LLVMPrintModuleToFile(cg.module, CString::new(outfile).unwrap().as_ptr(), err);
     }
-}
-
-pub fn emit_c(ast: &Program<TypedAst>) -> String {
-    // Just do the first fundef for now
-    let ast = &ast.fundefs[0];
-    codegen_c::CodegenContext::new().compile_fundef(&ast)
 }

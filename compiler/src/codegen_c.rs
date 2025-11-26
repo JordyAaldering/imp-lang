@@ -15,7 +15,7 @@ impl CodegenContext {
         }
     }
 
-    pub fn compile_program(&mut self, program: &Program<TypedAst>) -> String {
+    pub fn compile_program(&mut self, program: &Program) -> String {
         let mut c_code = String::new();
 
         c_code.push_str("#include <stdbool.h>\n");
@@ -29,21 +29,23 @@ impl CodegenContext {
         c_code
     }
 
-    pub fn compile_fundef(&mut self, fundef: &Fundef<TypedAst>) -> String {
+    fn compile_fundef(&mut self, fundef: &Fundef) -> String {
         let mut c_code = String::new();
 
         // Function signature
-        let ret_type = to_ctype(fundef.typof(fundef.ret_value));
+        let ret_type = to_ctype(fundef[fundef.ret_id].ty);
 
-        let args: Vec<String> = fundef.args.iter().map(|key| {
-            let ty_str = to_ctype(fundef.typof(*key));
-            format!("{} {}", ty_str, fundef.nameof(*key))
+        let args: Vec<String> = fundef.args.iter().map(|avis| {
+            let ty_str = to_ctype(avis.ty);
+            format!("{} {}", ty_str, avis.id)
         }).collect();
 
         c_code.push_str(&format!("{} DSL_{}({}) {{\n", ret_type, fundef.id, args.join(", ")));
 
-        let ret_code = self.compile_arg_or_expr(fundef, fundef.ret_value)
-            .unwrap_or(fundef.nameof(fundef.ret_value).to_owned());
+        let ret_code = match fundef.ret_id {
+            ArgOrVar::Arg(i) => fundef.args[i].id.to_owned(),
+            ArgOrVar::Var(k) => self.compile_expr(fundef, &fundef.ssa[k]),
+        };
 
         let mut stmts = Vec::new();
         mem::swap(&mut stmts, &mut self.stmts);
@@ -58,35 +60,25 @@ impl CodegenContext {
         c_code
     }
 
-    pub fn compile_arg_or_expr(&mut self, fundef: &Fundef<TypedAst>, key: VarKey) -> Option<String> {
-        if let Some(expr) = fundef.ssa.get(key) {
-            Some(self.compile_expr(fundef, expr))
-        } else {
-            None
-        }
-    }
-
-    pub fn compile_expr(&mut self, fundef: &Fundef<TypedAst>, expr: &Expr) -> String {
+    fn compile_expr(&mut self, fundef: &Fundef, expr: &Expr) -> String {
         let mut c_code = String::new();
 
         match expr {
             Expr::Binary(Binary { l, r, op }) => {
-                if let Some(l_code) = self.compile_arg_or_expr(fundef, *l) {
-                    self.stmts.push(format!("{} {} = {};", to_ctype(fundef.typof(*l)), fundef.nameof(*l), l_code));
+                if let ArgOrVar::Var(k) = l {
+                    let l_code = self.compile_expr(fundef, &fundef.ssa[*k]);
+                    self.stmts.push(format!("{} {} = {};", to_ctype(fundef[*k].ty), fundef[*k].id, l_code));
                 }
 
-                if let Some(r_code) = self.compile_arg_or_expr(fundef, *r) {
-                    self.stmts.push(format!("{} {} = {};", to_ctype(fundef.typof(*r)), fundef.nameof(*r), r_code));
-                }
-
-                c_code.push_str(&format!("{} {} {}", fundef.nameof(*l), op, fundef.nameof(*r)));
+                c_code.push_str(&format!("{} {} {}", fundef[*l].id, op, fundef[*r].id));
             },
             Expr::Unary(Unary { r, op }) => {
-                if let Some(r_code) = self.compile_arg_or_expr(fundef, *r) {
-                    self.stmts.push(format!("{} {} = {};", to_ctype(fundef.typof(*r)), fundef.nameof(*r), r_code));
+                if let ArgOrVar::Var(k) = r {
+                    let r_code = self.compile_expr(fundef, &fundef.ssa[*k]);
+                    self.stmts.push(format!("{} {} = {};", to_ctype(fundef[*k].ty), fundef[*k].id, r_code));
                 }
 
-                c_code.push_str(&format!("{} {}", op, fundef.nameof(*r)));
+                c_code.push_str(&format!("{} {}", op, fundef[*r].id));
             },
             Expr::Bool(v) => {
                 c_code.push_str(if *v { "true" } else { "false" });
@@ -100,8 +92,8 @@ impl CodegenContext {
     }
 }
 
-fn to_ctype(ty: &Type) -> &'static str {
-    match ty {
+fn to_ctype(ty: Option<Type>) -> &'static str {
+    match ty.unwrap() {
         Type::U32 => "uint32_t",
         Type::Bool => "bool",
     }

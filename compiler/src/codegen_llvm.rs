@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ffi::CString};
+use std::ffi::CString;
 
 use llvm_sys::{core::*, prelude::*};
 
@@ -26,14 +26,14 @@ impl CodegenContext {
         }
     }
 
-    pub fn compile_fundef(&self, f: &Fundef<TypedAst>) -> LLVMValueRef {
+    pub fn compile_fundef(&self, f: &Fundef) -> LLVMValueRef {
         unsafe {
-            let arg_types: Vec<LLVMTypeRef> = f.args.iter().map(|key| {
-                self.llvm_type(f.typof(*key))
+            let arg_types: Vec<LLVMTypeRef> = f.args.iter().map(|avis| {
+                self.llvm_type(&avis.ty.unwrap())
             }).collect();
 
             let fn_type = LLVMFunctionType(
-                self.llvm_type(f.typof(f.ret_value)),
+                self.llvm_type(&f[f.ret_id].ty.unwrap()),
                 arg_types.as_ptr() as *mut _,
                 arg_types.len() as u32,
                 0,
@@ -53,13 +53,15 @@ impl CodegenContext {
 
             LLVMPositionBuilderAtEnd(self.builder, entry);
 
-            let mut fargs = HashMap::new();
-            for (i, key) in f.args.iter().enumerate() {
-                let param = LLVMGetParam(function, i as u32);
-                fargs.insert(f.nameof(*key).to_owned(), param);
+            let mut fargs = Vec::new();
+            for (i, _) in f.args.iter().enumerate() {
+                fargs.push(LLVMGetParam(function, i as u32));
             }
 
-            let ret_val = self.compile_expr(&f.ssa[f.ret_value], &fargs, f);
+            let ret_val = match f.ret_id {
+                ArgOrVar::Arg(i) => fargs[i],
+                ArgOrVar::Var(k) => self.compile_expr(&f.ssa[k], &fargs, f),
+            };
 
             LLVMBuildRet(self.builder, ret_val);
 
@@ -70,27 +72,21 @@ impl CodegenContext {
     pub fn compile_expr(
         &self,
         expr: &Expr,
-        fargs: &HashMap<String, LLVMValueRef>,
-        fundef: &Fundef<TypedAst>,
+        fargs: &Vec<LLVMValueRef>,
+        fundef: &Fundef,
     ) -> LLVMValueRef {
         match expr {
             Expr::U32(v) => self.build_u32(*v),
             Expr::Bool(v) => self.build_bool(*v),
             Expr::Binary(Binary { l, r, op }) => {
-                let l_expr = &fundef.ssa.get(*l);
-                let l = if let Some(l_expr) = *l_expr {
-                    self.compile_expr(l_expr, fargs, fundef)
-                } else {
-                    // It must be an argument
-                    fargs[fundef.nameof(*l)]
+                let l = match l {
+                    ArgOrVar::Arg(i) => fargs[*i],
+                    ArgOrVar::Var(k) => self.compile_expr(&fundef.ssa[*k], fargs, fundef),
                 };
 
-                let r_expr = &fundef.ssa.get(*r);
-                let r = if let Some(r_expr) = *r_expr {
-                    self.compile_expr(r_expr, fargs, fundef)
-                } else {
-                    // It must be an argument
-                    fargs[fundef.nameof(*r)]
+                let r = match r {
+                    ArgOrVar::Arg(i) => fargs[*i],
+                    ArgOrVar::Var(k) => self.compile_expr(&fundef.ssa[*k], fargs, fundef),
                 };
 
                 unsafe {
@@ -110,12 +106,9 @@ impl CodegenContext {
                 }
             }
             Expr::Unary(Unary { r, op }) => {
-                let r_expr = &fundef.ssa.get(*r);
-                let r = if let Some(r_expr) = *r_expr {
-                    self.compile_expr(r_expr, fargs, fundef)
-                } else {
-                    // It must be an argument
-                    fargs[fundef.nameof(*r)]
+                let r = match r {
+                    ArgOrVar::Arg(i) => fargs[*i],
+                    ArgOrVar::Var(k) => self.compile_expr(&fundef.ssa[*k], fargs, fundef),
                 };
 
                 unsafe {

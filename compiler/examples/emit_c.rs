@@ -5,7 +5,11 @@ use std::{env, fs};
 fn main() {
     let file = env::args().nth(1).unwrap();
     let src = fs::read_to_string(&file).unwrap();
-    let ast = compile(&src);
-    let c_code = emit_c(&ast);
+    let ast = scanparse::scanparse(&src).unwrap();
+    let ast = convert_to_ssa::ConvertToSsa::new().convert_program(ast).unwrap();
+    show::Show::new().show_program(&ast);
+    let ast = type_infer::TypeInfer::new().infer_program(ast).unwrap();
+    show::Show::new().show_program(&ast);
+    let c_code = codegen_c::CodegenContext::new().compile_program(&ast);
     println!("{}", c_code);
 }

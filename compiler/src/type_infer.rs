@@ -1,13 +1,6 @@
-use std::collections::HashMap;
-
-use slotmap::SlotMap;
-
 use crate::ast::*;
 
-pub struct TypeInfer {
-    vars: Option<SlotMap<VarKey, VarInfo<TypedAst>>>,
-    varkey_rename: HashMap<VarKey, VarKey>,
-}
+pub struct TypeInfer;
 
 #[derive(Debug)]
 pub enum InferenceError {}
@@ -16,13 +9,10 @@ type InferenceResult<T> = Result<T, InferenceError>;
 
 impl TypeInfer {
     pub fn new() -> Self {
-        Self {
-            vars: None,
-            varkey_rename: HashMap::new(),
-        }
+        Self
     }
 
-    pub fn infer_program(&mut self, program: Program<UntypedAst>) -> InferenceResult<Program<TypedAst>> {
+    pub fn infer_program(&mut self, program: Program) -> InferenceResult<Program> {
         let mut fundefs = Vec::new();
         for f in program.fundefs {
             fundefs.push(self.infer_fundef(f)?);
@@ -31,97 +21,69 @@ impl TypeInfer {
         Ok(Program { fundefs })
     }
 
-    pub fn infer_fundef(&mut self, fundef: Fundef<UntypedAst>) -> InferenceResult<Fundef<TypedAst>> {
-        self.vars = Some(SlotMap::with_key());
-        self.varkey_rename.clear();
-
-        for old_key in &fundef.args {
-            let arg_ty = fundef.typof(*old_key).expect("function arguments can never be untyped");
-            let new_key = self.vars.as_mut().unwrap().insert_with_key(|key| {
-                VarInfo::new(key, &fundef.nameof(*old_key), arg_ty)
-            });
-            self.varkey_rename.insert(*old_key, new_key);
-        }
-
-        // Insert return type as well
-        let ret_value = {
-            let ret_ty = fundef.typof(fundef.ret_value).expect("return value can never be untyped");
-            let new_key = self.vars.as_mut().unwrap().insert_with_key(|key| {
-                VarInfo::new(key, &fundef.nameof(fundef.ret_value), ret_ty)
-            });
-            self.varkey_rename.insert(fundef.ret_value, new_key);
-            new_key
-        };
+    pub fn infer_fundef(&mut self, fundef: Fundef) -> InferenceResult<Fundef> {
+        let mut new_fundef = fundef.clone();
 
         // Go bottom-up using the return value to infer all types
-        self.infer_type(&fundef, fundef.ret_value);
+        let _ret_value = self.infer_type(&mut new_fundef, fundef.ret_id);
+        // todo: check if matches user given return type
 
-        Ok(Fundef {
-            id: fundef.id,
-            args: fundef.args,
-            vars: self.vars.take().unwrap(),
-            ssa: fundef.ssa,
-            ret_value,
-        })
+        Ok(new_fundef)
     }
 
-    pub fn infer_type(&mut self, scope: &Fundef<UntypedAst>, varkey: VarKey) -> Type {
-        if let Some(expr) = scope.ssa.get(varkey) {
-            match expr {
-                Expr::Binary(Binary { l, r, op }) => {
-                    let _l_ty = self.infer_type(scope, *l);
-                    let _r_ty = self.infer_type(scope, *r);
-                    // TODO: check if l_ty and r_ty unify
+    pub fn infer_type(&mut self, scope: &mut Fundef, aov: ArgOrVar) -> Type {
+        match aov {
+            ArgOrVar::Arg(i) => {
+                scope.args[i].ty.unwrap()
+            },
+            ArgOrVar::Var(k) => {
+                let ty = match scope.ssa[k] {
+                    Expr::Binary(Binary { l, r, op }) => {
+                        let _l_ty = self.infer_type(scope, l);
+                        let _r_ty = self.infer_type(scope, r);
+                        // TODO: check if l_ty and r_ty unify
 
-                    use Bop::*;
-                    match op {
-                        Add | Sub | Mul | Div => {
-                            // TODO: check if unifies with num
-                            Type::U32
-                        },
-                        Eq | Ne => {
-                            Type::Bool
-                        },
-                        Lt | Le | Gt | Ge => {
-                            // TODO: check if unifies with num
-                            Type::Bool
-                        },
-                    }
-                },
-                Expr::Unary(Unary { r, op }) => {
-                    let _r_ty = self.infer_type(scope, *r);
+                        use Bop::*;
+                        match op {
+                            Add | Sub | Mul | Div => {
+                                // TODO: check if unifies with num
+                                Type::U32
+                            },
+                            Eq | Ne => {
+                                Type::Bool
+                            },
+                            Lt | Le | Gt | Ge => {
+                                // TODO: check if unifies with num
+                                Type::Bool
+                            },
+                        }
+                    },
+                    Expr::Unary(Unary { r, op }) => {
+                        let _r_ty = self.infer_type(scope, r);
 
-                    use Uop::*;
-                    match op {
-                        Neg => {
-                            // TODO: check if r_ty unifies with num
-                            Type::U32
-                        },
-                        Not => {
-                            // TODO: check if r_ty unifies with bool
-                            Type::Bool
-                        },
-                    }
-                },
-                Expr::Bool(_) => {
-                    let new_key = self.vars.as_mut().unwrap().insert_with_key(|key| {
-                        VarInfo::new(key, scope.nameof(varkey), Type::Bool)
-                    });
-                    self.varkey_rename.insert(varkey, new_key);
-                    Type::Bool
-                },
-                Expr::U32(_) => {
-                    let new_key = self.vars.as_mut().unwrap().insert_with_key(|key| {
-                        VarInfo::new(key, scope.nameof(varkey), Type::U32)
-                    });
-                    self.varkey_rename.insert(varkey, new_key);
-                    Type::U32
-                },
+                        use Uop::*;
+                        match op {
+                            Neg => {
+                                // TODO: check if r_ty unifies with num
+                                Type::U32
+                            },
+                            Not => {
+                                // TODO: check if r_ty unifies with bool
+                                Type::Bool
+                            },
+                        }
+                    },
+                    Expr::Bool(_) => {
+                        Type::Bool
+                    },
+                    Expr::U32(_) => {
+                        Type::U32
+                    },
+                };
+
+                scope.vars[k].ty = Some(ty);
+                ty
             }
-        } else {
-            // No expression exists, so this must be an argument
-            let argkey = self.varkey_rename[&varkey];
-            *self.vars.as_mut().unwrap()[argkey].ty()
         }
     }
 }

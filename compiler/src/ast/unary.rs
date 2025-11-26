@@ -1,10 +1,10 @@
 use std::fmt;
 
-use super::VarKey;
+use super::ArgOrVar;
 
 #[derive(Clone, Debug)]
 pub struct Unary {
-    pub r: VarKey,
+    pub r: ArgOrVar,
     pub op: Uop,
 }
 

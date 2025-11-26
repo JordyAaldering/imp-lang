@@ -1,11 +1,11 @@
 use std::fmt;
 
-use super::VarKey;
+use super::ArgOrVar;
 
 #[derive(Clone, Debug)]
 pub struct Binary {
-    pub l: VarKey,
-    pub r: VarKey,
+    pub l: ArgOrVar,
+    pub r: ArgOrVar,
     pub op: Bop,
 }
 
