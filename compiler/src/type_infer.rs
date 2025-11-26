@@ -36,28 +36,18 @@ impl TypeInfer {
         self.varkey_rename.clear();
 
         for old_key in &fundef.args {
-            let arg_info = &fundef.vars[*old_key];
-            let arg_ty = arg_info.ty.expect("formal arguments can never be untyped");
+            let arg_ty = fundef.typof(*old_key).expect("function arguments can never be untyped");
             let new_key = self.vars.as_mut().unwrap().insert_with_key(|key| {
-                VarInfo {
-                    key,
-                    id: arg_info.id.clone(),
-                    ty: arg_ty,
-                }
+                VarInfo::new(key, &fundef.nameof(*old_key), arg_ty)
             });
             self.varkey_rename.insert(*old_key, new_key);
         }
 
         // Insert return type as well
         let ret_value = {
-            let ret_info = &fundef.vars[fundef.ret_value];
-            let ret_ty = ret_info.ty.expect("return value can never be untyped");
+            let ret_ty = fundef.typof(fundef.ret_value).expect("return value can never be untyped");
             let new_key = self.vars.as_mut().unwrap().insert_with_key(|key| {
-                VarInfo {
-                    key,
-                    id: ret_info.id.clone(),
-                    ty: ret_ty,
-                }
+                VarInfo::new(key, &fundef.nameof(fundef.ret_value), ret_ty)
             });
             self.varkey_rename.insert(fundef.ret_value, new_key);
             new_key
@@ -76,8 +66,6 @@ impl TypeInfer {
     }
 
     pub fn infer_type(&mut self, scope: &Fundef<UntypedAst>, varkey: VarKey) -> Type {
-        let old_varinfo = &scope.vars[varkey];
-
         if let Some(expr) = scope.ssa.get(varkey) {
             match expr {
                 Expr::Binary(Binary { l, r, op }) => {
@@ -117,22 +105,14 @@ impl TypeInfer {
                 },
                 Expr::Bool(_) => {
                     let new_key = self.vars.as_mut().unwrap().insert_with_key(|key| {
-                        VarInfo {
-                            key,
-                            id: old_varinfo.id.clone(),
-                            ty: Type::Bool,
-                        }
+                        VarInfo::new(key, scope.nameof(varkey), Type::Bool)
                     });
                     self.varkey_rename.insert(varkey, new_key);
                     Type::Bool
                 },
                 Expr::U32(_) => {
                     let new_key = self.vars.as_mut().unwrap().insert_with_key(|key| {
-                        VarInfo {
-                            key,
-                            id: old_varinfo.id.clone(),
-                            ty: Type::U32,
-                        }
+                        VarInfo::new(key, scope.nameof(varkey), Type::U32)
                     });
                     self.varkey_rename.insert(varkey, new_key);
                     Type::U32
@@ -141,7 +121,7 @@ impl TypeInfer {
         } else {
             // No expression exists, so this must be an argument
             let argkey = self.varkey_rename[&varkey];
-            self.vars.as_mut().unwrap()[argkey].ty
+            *self.vars.as_mut().unwrap()[argkey].ty()
         }
     }
 }

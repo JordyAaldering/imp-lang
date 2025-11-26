@@ -2,6 +2,8 @@ use std::mem;
 
 use crate::ast::*;
 
+// TODO: we probably want an undo-ssa traversal before code generation
+// to share computation where possible, or push scope-local computations inside their scope
 pub struct CodegenContext {
     stmts: Vec<String>,
 }
@@ -16,6 +18,7 @@ impl CodegenContext {
     pub fn compile_program(&mut self, program: &Program<TypedAst>) -> String {
         let mut c_code = String::new();
 
+        c_code.push_str("#include <stdbool.h>\n");
         c_code.push_str("#include <stdint.h>\n");
 
         for fundef in &program.fundefs {
@@ -30,18 +33,17 @@ impl CodegenContext {
         let mut c_code = String::new();
 
         // Function signature
-        let ret_type = to_ctype(fundef.vars[fundef.ret_value].ty);
+        let ret_type = to_ctype(fundef.typof(fundef.ret_value));
 
         let args: Vec<String> = fundef.args.iter().map(|key| {
-            let varinfo = &fundef.vars[*key];
-            let ty_str = to_ctype(varinfo.ty);
-            format!("{} {}", ty_str, varinfo.id)
+            let ty_str = to_ctype(fundef.typof(*key));
+            format!("{} {}", ty_str, fundef.nameof(*key))
         }).collect();
 
         c_code.push_str(&format!("{} DSL_{}({}) {{\n", ret_type, fundef.id, args.join(", ")));
 
         let ret_code = self.compile_arg_or_expr(fundef, fundef.ret_value)
-            .unwrap_or(fundef.vars[fundef.ret_value].id.clone());
+            .unwrap_or(fundef.nameof(fundef.ret_value).to_owned());
 
         let mut stmts = Vec::new();
         mem::swap(&mut stmts, &mut self.stmts);
@@ -69,28 +71,25 @@ impl CodegenContext {
 
         match expr {
             Expr::Binary(Binary { l, r, op }) => {
-                let l_info = &fundef.vars[*l];
                 if let Some(l_code) = self.compile_arg_or_expr(fundef, *l) {
-                    self.stmts.push(format!("{} {} = {};", to_ctype(l_info.ty), l_info.id, l_code));
+                    self.stmts.push(format!("{} {} = {};", to_ctype(fundef.typof(*l)), fundef.nameof(*l), l_code));
                 }
 
-                let r_info = &fundef.vars[*r];
                 if let Some(r_code) = self.compile_arg_or_expr(fundef, *r) {
-                    self.stmts.push(format!("{} {} = {};", to_ctype(r_info.ty), r_info.id, r_code));
+                    self.stmts.push(format!("{} {} = {};", to_ctype(fundef.typof(*r)), fundef.nameof(*r), r_code));
                 }
 
-                c_code.push_str(&format!("{} {} {}", l_info.id, op, r_info.id));
+                c_code.push_str(&format!("{} {} {}", fundef.nameof(*l), op, fundef.nameof(*r)));
             },
             Expr::Unary(Unary { r, op }) => {
-                let r_info = &fundef.vars[*r];
                 if let Some(r_code) = self.compile_arg_or_expr(fundef, *r) {
-                    self.stmts.push(format!("{} {} = {};", to_ctype(r_info.ty), r_info.id, r_code));
+                    self.stmts.push(format!("{} {} = {};", to_ctype(fundef.typof(*r)), fundef.nameof(*r), r_code));
                 }
 
-                c_code.push_str(&format!("{} {}", op, r_info.id));
+                c_code.push_str(&format!("{} {}", op, fundef.nameof(*r)));
             },
             Expr::Bool(v) => {
-                c_code.push_str(&format!("{}", *v));
+                c_code.push_str(if *v { "true" } else { "false" });
             },
             Expr::U32(v) => {
                 c_code.push_str(&format!("{}", *v));
@@ -101,7 +100,7 @@ impl CodegenContext {
     }
 }
 
-fn to_ctype(ty: Type) -> &'static str {
+fn to_ctype(ty: &Type) -> &'static str {
     match ty {
         Type::U32 => "uint32_t",
         Type::Bool => "bool",

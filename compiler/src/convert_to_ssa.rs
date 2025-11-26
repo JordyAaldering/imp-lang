@@ -55,16 +55,14 @@ impl ConvertToSsa {
         let mut args = Vec::new();
         for (ty, id) in fundef.args {
             let key = self.vars.as_mut().unwrap().insert_with_key(|key| {
-                VarInfo { key, id: id.clone(), ty: Some(ty) }
+                VarInfo::new(key, &id, Some(ty))
             });
             args.push(key);
-
-            let prev_arg_key = self.parse_name_to_key.insert(id, key);
-            assert!(prev_arg_key.is_none())
+            self.parse_name_to_key.insert(id, key);
         }
 
         let ret_value = self.convert_body(fundef.body)?;
-        self.vars.as_mut().unwrap()[ret_value].ty = Some(fundef.ret_type);
+        self.vars.as_mut().unwrap()[ret_value].set_type(fundef.ret_type);
 
         Ok(ast::Fundef {
             id: fundef.id,
@@ -119,7 +117,7 @@ impl ConvertToSsa {
 
                 let id = self.fresh_uid(Some(&lhs));
                 let key = self.vars.as_mut().unwrap().insert_with_key(|key| {
-                    VarInfo { key, id, ty: None }
+                    VarInfo::new(key, &id, None)
                 });
 
                 self.ssa.as_mut().unwrap().insert(key, e);
@@ -163,7 +161,7 @@ impl ConvertToSsa {
 
         let id = self.fresh_uid(None);
         let key = self.vars.as_mut().unwrap().insert_with_key(|key| {
-            VarInfo { key, id, ty: None }
+            VarInfo::new(key, &id, None)
         });
 
         let prev_key = self.ssa.as_mut().unwrap().insert(key, e);

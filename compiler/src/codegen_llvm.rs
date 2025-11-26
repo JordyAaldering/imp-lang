@@ -29,12 +29,11 @@ impl CodegenContext {
     pub fn compile_fundef(&self, f: &Fundef<TypedAst>) -> LLVMValueRef {
         unsafe {
             let arg_types: Vec<LLVMTypeRef> = f.args.iter().map(|key| {
-                let var = &f.vars[*key];
-                self.llvm_type(&var.ty)
+                self.llvm_type(f.typof(*key))
             }).collect();
 
             let fn_type = LLVMFunctionType(
-                self.llvm_type(&f.vars[f.ret_value].ty),
+                self.llvm_type(f.typof(f.ret_value)),
                 arg_types.as_ptr() as *mut _,
                 arg_types.len() as u32,
                 0,
@@ -57,7 +56,7 @@ impl CodegenContext {
             let mut fargs = HashMap::new();
             for (i, key) in f.args.iter().enumerate() {
                 let param = LLVMGetParam(function, i as u32);
-                fargs.insert(f.vars[*key].id.clone(), param);
+                fargs.insert(f.nameof(*key).to_owned(), param);
             }
 
             let ret_val = self.compile_expr(&f.ssa[f.ret_value], &fargs, f);
@@ -78,22 +77,20 @@ impl CodegenContext {
             Expr::U32(v) => self.build_u32(*v),
             Expr::Bool(v) => self.build_bool(*v),
             Expr::Binary(Binary { l, r, op }) => {
-                let l_key = *l;
-                let l_expr = &fundef.ssa.get(l_key);
+                let l_expr = &fundef.ssa.get(*l);
                 let l = if let Some(l_expr) = *l_expr {
                     self.compile_expr(l_expr, fargs, fundef)
                 } else {
                     // It must be an argument
-                    fargs[&fundef.vars[l_key].id]
+                    fargs[fundef.nameof(*l)]
                 };
 
-                let r_key = *r;
-                let r_expr = &fundef.ssa.get(r_key);
+                let r_expr = &fundef.ssa.get(*r);
                 let r = if let Some(r_expr) = *r_expr {
                     self.compile_expr(r_expr, fargs, fundef)
                 } else {
                     // It must be an argument
-                    fargs[&fundef.vars[r_key].id]
+                    fargs[fundef.nameof(*r)]
                 };
 
                 unsafe {
@@ -113,13 +110,12 @@ impl CodegenContext {
                 }
             }
             Expr::Unary(Unary { r, op }) => {
-                let r_key = *r;
-                let r_expr = &fundef.ssa.get(r_key);
+                let r_expr = &fundef.ssa.get(*r);
                 let r = if let Some(r_expr) = *r_expr {
                     self.compile_expr(r_expr, fargs, fundef)
                 } else {
                     // It must be an argument
-                    fargs[&fundef.vars[r_key].id]
+                    fargs[fundef.nameof(*r)]
                 };
 
                 unsafe {
