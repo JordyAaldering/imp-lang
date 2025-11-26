@@ -37,13 +37,13 @@ impl CodegenContext {
 
         let args: Vec<String> = fundef.args.iter().map(|avis| {
             let ty_str = to_ctype(avis.ty);
-            format!("{} {}", ty_str, avis.id)
+            format!("{} {}", ty_str, avis.name)
         }).collect();
 
-        c_code.push_str(&format!("{} DSL_{}({}) {{\n", ret_type, fundef.id, args.join(", ")));
+        c_code.push_str(&format!("{} DSL_{}({}) {{\n", ret_type, fundef.name, args.join(", ")));
 
         let ret_code = match fundef.ret_id {
-            ArgOrVar::Arg(i) => fundef.args[i].id.to_owned(),
+            ArgOrVar::Arg(i) => fundef.args[i].name.to_owned(),
             ArgOrVar::Var(k) => self.compile_expr(fundef, &fundef.ssa[k]),
         };
 
@@ -67,18 +67,18 @@ impl CodegenContext {
             Expr::Binary(Binary { l, r, op }) => {
                 if let ArgOrVar::Var(k) = l {
                     let l_code = self.compile_expr(fundef, &fundef.ssa[*k]);
-                    self.stmts.push(format!("{} {} = {};", to_ctype(fundef[*k].ty), fundef[*k].id, l_code));
+                    self.stmts.push(format!("{} {} = {};", to_ctype(fundef[*k].ty), fundef[*k].name, l_code));
                 }
 
-                c_code.push_str(&format!("{} {} {}", fundef[*l].id, op, fundef[*r].id));
+                c_code.push_str(&format!("{} {} {}", fundef[*l].name, op, fundef[*r].name));
             },
             Expr::Unary(Unary { r, op }) => {
                 if let ArgOrVar::Var(k) = r {
                     let r_code = self.compile_expr(fundef, &fundef.ssa[*k]);
-                    self.stmts.push(format!("{} {} = {};", to_ctype(fundef[*k].ty), fundef[*k].id, r_code));
+                    self.stmts.push(format!("{} {} = {};", to_ctype(fundef[*k].ty), fundef[*k].name, r_code));
                 }
 
-                c_code.push_str(&format!("{} {}", op, fundef[*r].id));
+                c_code.push_str(&format!("{} {}", op, fundef[*r].name));
             },
             Expr::Bool(v) => {
                 c_code.push_str(if *v { "true" } else { "false" });

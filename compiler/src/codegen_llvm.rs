@@ -41,7 +41,7 @@ impl CodegenContext {
 
             let function = LLVMAddFunction(
                 self.module,
-                (format!("DSL_{}", f.id)).as_ptr() as *const _,
+                (format!("DSL_{}", f.name)).as_ptr() as *const _,
                 fn_type,
             );
 

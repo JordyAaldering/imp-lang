@@ -64,7 +64,7 @@ impl ConvertToSsa {
         }
 
         Ok(Fundef {
-            id: fundef.id,
+            name: fundef.id,
             args,
             vars: self.vars.take().unwrap(),
             ssa: self.ssa.take().unwrap(),

@@ -4,7 +4,7 @@ mod unary;
 pub use binary::{Binary, Bop};
 pub use unary::{Unary, Uop};
 
-use std::{fmt, ops::Index};
+use std::ops::Index;
 
 use slotmap::*;
 
@@ -14,13 +14,13 @@ new_key_type! { pub struct ExprKey; }
 #[derive(Clone, Debug)]
 pub struct Avis {
     pub _key: ArgOrVar,
-    pub id: String,
+    pub name: String,
     pub ty: Option<Type>,
 }
 
 impl Avis {
-    pub fn new(key: ArgOrVar, id: &str, ty: Option<Type>) -> Self {
-        Self { _key: key, id: id.to_owned(), ty }
+    pub fn new(key: ArgOrVar, name: &str, ty: Option<Type>) -> Self {
+        Self { _key: key, name: name.to_owned(), ty }
     }
 
     pub fn set_type(&mut self, ty: Type) {
@@ -42,7 +42,7 @@ pub struct Program {
 
 #[derive(Clone, Debug)]
 pub struct Fundef {
-    pub id: String,
+    pub name: String,
     pub args: Vec<Avis>,
     pub vars: SlotMap<VarKey, Avis>,
     /// arena containing a mapping of variable keys to their ssa assignment expressions
@@ -75,7 +75,7 @@ impl Index<VarKey> for Fundef {
 
 impl Fundef {
     pub fn nameof(&self, key: VarKey) -> &String {
-        &self.vars[key].id
+        &self.vars[key].name
     }
 
     pub fn typof(&self, key: VarKey) -> &Option<Type> {
