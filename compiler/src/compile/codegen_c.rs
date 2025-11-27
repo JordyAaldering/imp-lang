@@ -46,7 +46,7 @@ impl CodegenContext {
         let ret_code = match fundef.ret {
             ArgOrVar::Arg(i) => fundef.args[i].name.to_owned(),
             ArgOrVar::Var(k) => self.compile_expr(fundef, &fundef.ssa[k]),
-            ArgOrVar::IV(_) => unreachable!(),
+            ArgOrVar::Iv(_) => unreachable!(),
         };
 
         let mut stmts = Vec::new();
@@ -62,7 +62,7 @@ impl CodegenContext {
         c_code
     }
 
-    fn compile_expr(&mut self, fundef: &Fundef<TypedAst>, expr: &Expr<TypedAst>) -> String {
+    fn compile_expr(&mut self, fundef: &Fundef<TypedAst>, expr: &Expr) -> String {
         let mut c_code = String::new();
 
         match expr {
@@ -70,7 +70,7 @@ impl CodegenContext {
                 let mut forloop = String::new();
 
                 let ty = to_ctype(&fundef[expr.clone()].ty);
-                let iv_name = fundef.vars[**iv].name.clone();
+                let iv_name = fundef.vars[iv.0].name.clone();
                 let lb_name = fundef[lb.clone()].name.clone();
                 let ub_name = fundef[ub.clone()].name.clone();
 
@@ -100,17 +100,13 @@ impl CodegenContext {
             }
             Expr::Binary(Binary { l, r, op }) => {
                 if let ArgOrVar::Var(k) = l {
-                    if fundef.ssa.contains_key(*k) {
                     let l_code = self.compile_expr(fundef, &fundef.ssa[*k]);
                     self.stmts.push(format!("{} {} = {};", to_ctype(&fundef.vars[*k].ty), fundef.vars[*k].name, l_code));
-                    }
                 }
 
                 if let ArgOrVar::Var(k) = r {
-                    if fundef.ssa.contains_key(*k) {
                     let r_code = self.compile_expr(fundef, &fundef.ssa[*k]);
                     self.stmts.push(format!("{} {} = {};", to_ctype(&fundef.vars[*k].ty), fundef.vars[*k].name, r_code));
-                    }
                 }
 
                 c_code.push_str(&format!("{} {} {}", fundef[l.clone()].name, op, fundef[r.clone()].name));

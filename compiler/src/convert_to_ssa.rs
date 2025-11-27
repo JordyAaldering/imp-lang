@@ -1,14 +1,12 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, mem};
 
-use slotmap::{SecondaryMap, SlotMap};
-
-use crate::{ast::*, scanparse::parse_ast};
+use crate::{arena::{Arena, SecondaryArena}, ast::*, scanparse::parse_ast};
 
 pub struct ConvertToSsa {
     uid: usize,
-    vars: Option<SlotMap<UntypedKey, Avis<UntypedAst>>>,
-    ssa: Option<SecondaryMap<UntypedKey, Expr<UntypedAst>>>,
-    name_to_key: HashMap<String, ArgOrVar<UntypedAst>>,
+    vars: Arena<Avis<UntypedAst>>,
+    ssa: SecondaryArena<Expr>,
+    name_to_key: HashMap<String, ArgOrVar>,
 }
 
 #[derive(Debug)]
@@ -22,8 +20,8 @@ impl ConvertToSsa {
     pub fn new() -> Self {
         Self {
             uid: 0,
-            vars: None,
-            ssa: None,
+            vars: Arena::new(),
+            ssa: SecondaryArena::new(),
             name_to_key: HashMap::new(),
         }
     }
@@ -48,8 +46,6 @@ impl ConvertToSsa {
     pub fn convert_fundef(&mut self, fundef: parse_ast::Fundef) -> SsaResult<Fundef<UntypedAst>> {
         // Reset self
         self.uid = 0;
-        self.vars = Some(SlotMap::with_key());
-        self.ssa = Some(SecondaryMap::new());
         self.name_to_key.clear();
 
         let mut args = Vec::new();
@@ -60,19 +56,24 @@ impl ConvertToSsa {
 
         let ret_value = self.convert_body(fundef.body)?;
         if let ArgOrVar::Var(k) = ret_value {
-            self.vars.as_mut().unwrap()[k].ty = Some(fundef.ret_type);
+            self.vars[k].ty = Some(fundef.ret_type);
         }
+
+        let mut vars = Arena::new();
+        mem::swap(&mut self.vars, &mut vars);
+        let mut ssa = SecondaryArena::new();
+        mem::swap(&mut self.ssa, &mut ssa);
 
         Ok(Fundef {
             name: fundef.id,
             args,
-            vars: self.vars.take().unwrap(),
-            ssa: self.ssa.take().unwrap(),
+            vars,
+            ssa,
             ret: ret_value,
         })
     }
 
-    pub fn convert_body(&mut self, body: Vec<parse_ast::Stmt>) -> SsaResult<ArgOrVar<UntypedAst>> {
+    pub fn convert_body(&mut self, body: Vec<parse_ast::Stmt>) -> SsaResult<ArgOrVar> {
         for stmt in body {
             if let Some(ret_value_key) = self.convert_stmt(stmt)? {
                 // A return statement was encountered, we can stop now
@@ -87,17 +88,17 @@ impl ConvertToSsa {
         Err(SsaError::MissingReturnStatement)
     }
 
-    pub fn convert_stmt(&mut self, stmt: parse_ast::Stmt) -> SsaResult<Option<ArgOrVar<UntypedAst>>> {
+    pub fn convert_stmt(&mut self, stmt: parse_ast::Stmt) -> SsaResult<Option<ArgOrVar>> {
         match stmt {
             parse_ast::Stmt::Assign { lhs, expr } => {
                 // We need explicit handling of the outermost expression, which is why we don't call convert_expr immediately
                 // We can probably make this nicer though
                 let e = match expr {
                     parse_ast::Expr::Tensor { expr, iv, lb, ub } => {
-                        let key = self.vars.as_mut().unwrap().insert_with_key(|key| {
-                            Avis::new(ArgOrVar::IV(key), &iv.0, None)
+                        let key = self.vars.insert_with(|key| {
+                            Avis::new(ArgOrVar::Iv(key), &iv.0, None)
                         });
-                        self.name_to_key.insert(iv.0.clone(), ArgOrVar::IV(key));
+                        self.name_to_key.insert(iv.0.clone(), ArgOrVar::Iv(key));
                         let iv = IndexVector(key);
 
                         let expr = self.convert_expr(*expr)?;
@@ -127,11 +128,11 @@ impl ConvertToSsa {
                 };
 
                 let id = self.fresh_uid(Some(&lhs));
-                let key = self.vars.as_mut().unwrap().insert_with_key(|key| {
+                let key = self.vars.insert_with(|key| {
                     Avis::new(ArgOrVar::Var(key), &id, None)
                 });
 
-                self.ssa.as_mut().unwrap().insert(key, e);
+                self.ssa.insert(key, e);
 
                 self.name_to_key.insert(lhs, ArgOrVar::Var(key));
 
@@ -144,13 +145,13 @@ impl ConvertToSsa {
         }
     }
 
-    pub fn convert_expr(&mut self, expr: parse_ast::Expr) -> SsaResult<ArgOrVar<UntypedAst>> {
+    pub fn convert_expr(&mut self, expr: parse_ast::Expr) -> SsaResult<ArgOrVar> {
         let e = match expr {
             parse_ast::Expr::Tensor { expr, iv, lb, ub } => {
-                let key = self.vars.as_mut().unwrap().insert_with_key(|key| {
-                    Avis::new(ArgOrVar::IV(key), &iv.0, None)
+                let key = self.vars.insert_with(|key| {
+                    Avis::new(ArgOrVar::Iv(key), &iv.0, None)
                 });
-                self.name_to_key.insert(iv.0.clone(), ArgOrVar::IV(key));
+                self.name_to_key.insert(iv.0.clone(), ArgOrVar::Iv(key));
                 let iv = IndexVector(key);
 
                 let expr = self.convert_expr(*expr)?;
@@ -180,11 +181,11 @@ impl ConvertToSsa {
         };
 
         let id = self.fresh_uid(None);
-        let key = self.vars.as_mut().unwrap().insert_with_key(|key| {
+        let key = self.vars.insert_with(|key| {
             Avis::new(ArgOrVar::Var(key), &id, None)
         });
 
-        self.ssa.as_mut().unwrap().insert(key, e);
+        self.ssa.insert(key, e);
         Ok(ArgOrVar::Var(key))
     }
 }

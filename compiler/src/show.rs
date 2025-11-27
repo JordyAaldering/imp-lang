@@ -26,7 +26,7 @@ impl<Ast: AstConfig> Show<Ast> {
         }
 
         println!("  vars:");
-        for (_, v) in &fundef.vars {
+        for (_, v) in fundef.vars.iter() {
             println!("    {:?}", v);
         }
 
@@ -34,7 +34,7 @@ impl<Ast: AstConfig> Show<Ast> {
         for (k, expr) in fundef.ssa.iter() {
             match expr {
                 Expr::Tensor(Tensor { expr, iv, lb, ub }) => {
-                    println!("    {} = {{ {} | {} <= {} < {} }};", fundef.vars[k].name, fundef[expr].name, fundef[lb].name, fundef.vars[**iv].name, fundef[ub].name);
+                    println!("    {} = {{ {} | {} <= {} < {} }};", fundef.vars[k].name, fundef[expr].name, fundef[lb].name, fundef.vars[iv.0].name, fundef[ub].name);
                 }
                 Expr::Binary(Binary { l, r, op }) => {
                     println!("    {} = {} {} {};", fundef.vars[k].name, fundef[l].name, op, fundef[r].name);

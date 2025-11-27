@@ -1,13 +1,10 @@
-use std::{collections::HashMap, mem};
+use std::mem;
 
-use slotmap::{Key, SecondaryMap, SlotMap};
-
-use crate::{ast::*, traverse::Rewriter};
+use crate::{arena::{Arena, SecondaryArena}, ast::*, traverse::Rewriter};
 
 pub struct TypeInfer {
-    new_vars: SlotMap<TypedKey, Avis<TypedAst>>,
-    new_ssa: SecondaryMap<TypedKey, Expr<TypedAst>>,
-    iv_rename: HashMap<UntypedKey, TypedKey>,
+    new_vars: Arena<Avis<TypedAst>>,
+    new_ssa: SecondaryArena<Expr>,
     found_ty: Option<Type>,
 }
 
@@ -17,9 +14,8 @@ pub enum InferenceError {}
 impl TypeInfer {
     pub fn new() -> Self {
         Self {
-            new_vars: SlotMap::with_key(),
-            new_ssa: SecondaryMap::new(),
-            iv_rename: HashMap::new(),
+            new_vars: Arena::new(),
+            new_ssa: SecondaryArena::new(),
             found_ty: None,
         }
     }
@@ -33,32 +29,29 @@ impl Rewriter for TypeInfer {
     type Err = InferenceError;
 
     fn trav_fundef(&mut self, mut fundef: Fundef<Self::InAst>) -> Result<Fundef<Self::OutAst>, Self::Err> {
-        self.iv_rename.clear();
-
-        let mut new_fundef = Fundef {
-            name: fundef.name.to_owned(),
-            args: Vec::new(),
-            vars: SlotMap::with_key(),
-            ssa: SecondaryMap::new(),
-            ret: ArgOrVar::Var(TypedKey::null()),
-        };
-
+        let mut args = Vec::new();
         for (i, arg) in fundef.args.iter().enumerate() {
             let k = ArgOrVar::Arg(i);
-            new_fundef.args.push(Avis::new(k, &arg.name, arg.ty.clone().unwrap()));
+            args.push(Avis::new(k, &arg.name, arg.ty.clone().unwrap()));
         }
 
-        let old_key = fundef.ret.clone();
-        new_fundef.ret = self.trav_ssa(old_key, &mut fundef)?;
+        self.trav_ssa(fundef.ret, &mut fundef)?;
 
-        mem::swap(&mut self.new_vars, &mut new_fundef.vars);
+        let mut vars = Arena::new();
+        mem::swap(&mut self.new_vars, &mut vars);
+        let mut ssa = SecondaryArena::new();
+        mem::swap(&mut self.new_ssa, &mut ssa);
 
-        mem::swap(&mut self.new_ssa, &mut new_fundef.ssa);
-
-        Ok(new_fundef)
+        Ok(Fundef {
+            name: fundef.name,
+            args,
+            vars,
+            ssa,
+            ret: fundef.ret,
+        })
     }
 
-    fn trav_ssa(&mut self, id: ArgOrVar<UntypedAst>, fundef: &mut Fundef<Self::InAst>) -> Result<ArgOrVar<TypedAst>, Self::Err> {
+    fn trav_ssa(&mut self, id: ArgOrVar, fundef: &mut Fundef<Self::InAst>) -> Result<ArgOrVar, Self::Err> {
         let id = match id {
             ArgOrVar::Arg(i) => {
                 let ty = fundef.args[i].ty.clone().expect("function argument cannot be untyped");
@@ -69,24 +62,22 @@ impl Rewriter for TypeInfer {
                 let new_expr = self.trav_expr(fundef.ssa[old_key].clone(), fundef)?;
 
                 let old_avis = &fundef.vars[old_key];
-                let new_key = self.new_vars.insert_with_key(|new_key| {
+                let new_key = self.new_vars.insert_with(|new_key| {
                     Avis { name: old_avis.name.to_owned(), ty: self.found_ty.clone().unwrap(), _key: ArgOrVar::Var(new_key) }
                 });
                 println!("replaced {:?} by {:?} = {:?}", old_key, new_key, new_expr);
                 self.new_ssa.insert(new_key, new_expr);
                 ArgOrVar::Var(new_key)
             },
-            ArgOrVar::IV(old_key) => {
-                let new_key = self.iv_rename[&old_key];
-                println!("renamed index vector {:?} by {:?}", old_key, new_key);
-                ArgOrVar::IV(new_key)
+            ArgOrVar::Iv(old_key) => {
+                ArgOrVar::Iv(old_key)
             },
         };
 
         Ok(id)
     }
 
-    fn trav_tensor(&mut self, tensor: Tensor<Self::InAst>, fundef: &mut Fundef<Self::InAst>) -> Result<Tensor<Self::OutAst>, Self::Err> {
+    fn trav_tensor(&mut self, tensor: Tensor, fundef: &mut Fundef<Self::InAst>) -> Result<Tensor, Self::Err> {
         let iv = self.trav_iv(tensor.iv, fundef)?;
         let lb = self.trav_ssa(tensor.lb, fundef)?;
         let ub = self.trav_ssa(tensor.ub, fundef)?;
@@ -98,17 +89,16 @@ impl Rewriter for TypeInfer {
         Ok(Tensor { iv, expr, lb, ub })
     }
 
-    fn trav_iv(&mut self, iv: IndexVector<Self::InAst>, fundef: &mut Fundef<Self::InAst>) -> Result<IndexVector<Self::OutAst>, Self::Err> {
+    fn trav_iv(&mut self, iv: IndexVector, fundef: &mut Fundef<Self::InAst>) -> Result<IndexVector, Self::Err> {
         let old_avis = &fundef.vars[iv.0];
-        let new_key = self.new_vars.insert_with_key(|new_key| {
-            Avis { name: old_avis.name.to_owned(), ty: Type { basetype: BaseType::U32, shp: Shape::Scalar }, _key: ArgOrVar::IV(new_key) }
+        let new_key = self.new_vars.insert_with(|new_key| {
+            Avis { name: old_avis.name.to_owned(), ty: Type { basetype: BaseType::U32, shp: Shape::Scalar }, _key: ArgOrVar::Iv(new_key) }
         });
-        self.iv_rename.insert(iv.0, new_key);
         println!("replaced index vector {:?} by {:?}", iv.0, new_key);
         Ok(IndexVector(new_key))
     }
 
-    fn trav_binary(&mut self, binary: Binary<Self::InAst>, fundef: &mut Fundef<Self::InAst>) -> Result<Binary<Self::OutAst>, Self::Err> {
+    fn trav_binary(&mut self, binary: Binary, fundef: &mut Fundef<Self::InAst>) -> Result<Binary, Self::Err> {
         let l = self.trav_ssa(binary.l, fundef)?;
         let _lty = self.found_ty.take().unwrap();
         let r = self.trav_ssa(binary.r, fundef)?;
@@ -134,7 +124,7 @@ impl Rewriter for TypeInfer {
         Ok(Binary { l, r, op: binary.op })
     }
 
-    fn trav_unary(&mut self, unary: Unary<Self::InAst>, fundef: &mut Fundef<Self::InAst>) -> Result<Unary<Self::OutAst>, Self::Err> {
+    fn trav_unary(&mut self, unary: Unary, fundef: &mut Fundef<Self::InAst>) -> Result<Unary, Self::Err> {
         let r = self.trav_ssa(unary.r, fundef)?;
         let rty = self.found_ty.take().unwrap();
 

@@ -29,7 +29,7 @@ impl UndoSsa {
         }
     }
 
-    fn generate_assignment(&mut self, id: &ArgOrVar<TypedAst>, fundef: &ast::Fundef<TypedAst>) -> Stmt {
+    fn generate_assignment(&mut self, id: &ArgOrVar, fundef: &ast::Fundef<TypedAst>) -> Stmt {
         let lhs = fundef[id].name.clone();
 
         let expr = match id {
@@ -59,7 +59,7 @@ impl UndoSsa {
                     ast::Expr::U32(v) => Expr::U32(*v),
                 }
             },
-            ArgOrVar::IV(k) => {
+            ArgOrVar::Iv(k) => {
                 Expr::Identifier(fundef.vars[*k].name.clone())
             },
         };
@@ -67,7 +67,7 @@ impl UndoSsa {
         Stmt::Assign { lhs, expr }
     }
 
-    fn inline_expr(&mut self, id: &ArgOrVar<TypedAst>, fundef: &ast::Fundef<TypedAst>) -> Expr {
+    fn inline_expr(&mut self, id: &ArgOrVar, fundef: &ast::Fundef<TypedAst>) -> Expr {
         match id {
             ArgOrVar::Arg(i) => {
                 Expr::Identifier(fundef.args[*i].name.clone())
@@ -95,7 +95,7 @@ impl UndoSsa {
                     ast::Expr::U32(v) => Expr::U32(*v),
                 }
             },
-            ArgOrVar::IV(k) => {
+            ArgOrVar::Iv(k) => {
                 Expr::Identifier(fundef.vars[*k].name.clone())
             },
         }

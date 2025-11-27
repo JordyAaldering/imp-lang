@@ -1,22 +1,14 @@
-use std::ops::Deref;
+use crate::arena::Key;
 
-use super::{ArgOrVar, AstConfig};
-
-#[derive(Clone, Debug)]
-pub struct Tensor<Ast: AstConfig> {
-    pub iv: IndexVector<Ast>,
-    pub expr: ArgOrVar<Ast>,
-    pub lb: ArgOrVar<Ast>,
-    pub ub: ArgOrVar<Ast>,
-}
+use super::ArgOrVar;
 
 #[derive(Clone, Debug)]
-pub struct IndexVector<Ast: AstConfig>(pub Ast::VarKey);
-
-impl<Ast: AstConfig> Deref for IndexVector<Ast> {
-    type Target = Ast::VarKey;
-
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
+pub struct Tensor {
+    pub iv: IndexVector,
+    pub expr: ArgOrVar,
+    pub lb: ArgOrVar,
+    pub ub: ArgOrVar,
 }
+
+#[derive(Clone, Copy, Debug)]
+pub struct IndexVector(pub Key);

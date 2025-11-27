@@ -22,9 +22,9 @@ pub trait Rewriter {
 
     fn trav_fundef(&mut self, fundef: Fundef<Self::InAst>) -> Result<Fundef<Self::OutAst>, Self::Err>;
 
-    fn trav_ssa(&mut self, id: ArgOrVar<Self::InAst>, _fundef: &mut Fundef<Self::InAst>) -> Result<ArgOrVar<Self::OutAst>, Self::Err>;
+    fn trav_ssa(&mut self, id: ArgOrVar, _fundef: &mut Fundef<Self::InAst>) -> Result<ArgOrVar, Self::Err>;
 
-    fn trav_expr(&mut self, expr: Expr<Self::InAst>, fundef: &mut Fundef<Self::InAst>) -> Result<Expr<Self::OutAst>, Self::Err> {
+    fn trav_expr(&mut self, expr: Expr, fundef: &mut Fundef<Self::InAst>) -> Result<Expr, Self::Err> {
         use Expr::*;
         match expr {
             Tensor(n) => self.trav_tensor(n, fundef).map(Tensor),
@@ -35,7 +35,7 @@ pub trait Rewriter {
         }
     }
 
-    fn trav_tensor(&mut self, tensor: Tensor<Self::InAst>, fundef: &mut Fundef<Self::InAst>) -> Result<Tensor<Self::OutAst>, Self::Err> {
+    fn trav_tensor(&mut self, tensor: Tensor, fundef: &mut Fundef<Self::InAst>) -> Result<Tensor, Self::Err> {
         let iv = self.trav_iv(tensor.iv, fundef)?;
         let expr = self.trav_ssa(tensor.expr, fundef)?;
         let lb = self.trav_ssa(tensor.lb, fundef)?;
@@ -43,15 +43,15 @@ pub trait Rewriter {
         Ok(Tensor { iv, expr, lb, ub })
     }
 
-    fn trav_iv(&mut self, iv: IndexVector<Self::InAst>, fundef: &mut Fundef<Self::InAst>) -> Result<IndexVector<Self::OutAst>, Self::Err>;
+    fn trav_iv(&mut self, iv: IndexVector, fundef: &mut Fundef<Self::InAst>) -> Result<IndexVector, Self::Err>;
 
-    fn trav_binary(&mut self, binary: Binary<Self::InAst>, fundef: &mut Fundef<Self::InAst>) -> Result<Binary<Self::OutAst>, Self::Err> {
+    fn trav_binary(&mut self, binary: Binary, fundef: &mut Fundef<Self::InAst>) -> Result<Binary, Self::Err> {
         let l = self.trav_ssa(binary.l, fundef)?;
         let r = self.trav_ssa(binary.r, fundef)?;
         Ok(Binary { l, r, op: binary.op })
     }
 
-    fn trav_unary(&mut self, unary: Unary<Self::InAst>, fundef: &mut Fundef<Self::InAst>) -> Result<Unary<Self::OutAst>, Self::Err> {
+    fn trav_unary(&mut self, unary: Unary, fundef: &mut Fundef<Self::InAst>) -> Result<Unary, Self::Err> {
         let r = self.trav_ssa(unary.r, fundef)?;
         Ok(Unary { r, op: unary.op })
     }
@@ -98,11 +98,11 @@ pub trait Traversal<Ast: AstConfig> {
         Ok(farg)
     }
 
-    fn trav_ssa(&mut self, id: ArgOrVar<Ast>, _fundef: &Fundef<Ast>) -> Result<ArgOrVar<Ast>, Self::Err> {
+    fn trav_ssa(&mut self, id: ArgOrVar, _fundef: &Fundef<Ast>) -> Result<ArgOrVar, Self::Err> {
         Ok(id)
     }
 
-    fn trav_expr(&mut self, expr: Expr<Ast>, fundef: &Fundef<Ast>) -> Result<Expr<Ast>, Self::Err> {
+    fn trav_expr(&mut self, expr: Expr, fundef: &Fundef<Ast>) -> Result<Expr, Self::Err> {
         use Expr::*;
         match expr {
             Tensor(n) => self.trav_tensor(n, fundef).map(Tensor),
@@ -113,18 +113,18 @@ pub trait Traversal<Ast: AstConfig> {
         }
     }
 
-    fn trav_tensor(&mut self, mut tensor: Tensor<Ast>, fundef: &Fundef<Ast>) -> Result<Tensor<Ast>, Self::Err> {
+    fn trav_tensor(&mut self, mut tensor: Tensor, fundef: &Fundef<Ast>) -> Result<Tensor, Self::Err> {
         tensor.expr = self.trav_ssa(tensor.expr, fundef)?;
         Ok(tensor)
     }
 
-    fn trav_binary(&mut self, mut binary: Binary<Ast>, fundef: &Fundef<Ast>) -> Result<Binary<Ast>, Self::Err> {
+    fn trav_binary(&mut self, mut binary: Binary, fundef: &Fundef<Ast>) -> Result<Binary, Self::Err> {
         binary.l = self.trav_ssa(binary.l, fundef)?;
         binary.r = self.trav_ssa(binary.r, fundef)?;
         Ok(binary)
     }
 
-    fn trav_unary(&mut self, mut unary: Unary<Ast>, fundef: &Fundef<Ast>) -> Result<Unary<Ast>, Self::Err> {
+    fn trav_unary(&mut self, mut unary: Unary, fundef: &Fundef<Ast>) -> Result<Unary, Self::Err> {
         unary.r = self.trav_ssa(unary.r, fundef)?;
         Ok(unary)
     }

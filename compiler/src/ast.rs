@@ -12,11 +12,9 @@ pub use typ::{Type, BaseType, Shape};
 
 use std::{fmt, ops::{Index, IndexMut}};
 
-use slotmap::*;
+use crate::arena::{Arena, Key, SecondaryArena};
 
 pub trait AstConfig: Clone + fmt::Debug {
-    type VarKey: Key;
-
     type ValueType: Clone + fmt::Debug;
 }
 
@@ -24,8 +22,6 @@ pub trait AstConfig: Clone + fmt::Debug {
 pub struct UntypedAst;
 
 impl AstConfig for UntypedAst {
-    type VarKey = UntypedKey;
-
     type ValueType = Option<Type>;
 }
 
@@ -33,36 +29,30 @@ impl AstConfig for UntypedAst {
 pub struct TypedAst;
 
 impl AstConfig for TypedAst {
-    type VarKey = TypedKey;
-
     type ValueType = Type;
 }
-
-new_key_type! { pub struct TypedKey; }
-new_key_type! { pub struct UntypedKey; }
-new_key_type! { pub struct ExprKey; }
 
 #[derive(Clone, Debug)]
 pub struct Avis<Ast: AstConfig> {
     pub name: String,
     pub ty: Ast::ValueType,
-    pub _key: ArgOrVar<Ast>,
+    pub _key: ArgOrVar,
 }
 
 impl<Ast: AstConfig> Avis<Ast> {
-    pub fn new(key: ArgOrVar<Ast>, name: &str, ty: Ast::ValueType) -> Self {
+    pub fn new(key: ArgOrVar, name: &str, ty: Ast::ValueType) -> Self {
         Self { _key: key, name: name.to_owned(), ty }
     }
 }
 
 #[derive(Clone, Copy, Debug)]
-pub enum ArgOrVar<Ast: AstConfig> {
+pub enum ArgOrVar {
     /// Function argument
     Arg(usize),
     /// Local variable
-    Var(Ast::VarKey),
+    Var(Key),
     /// Index vector
-    IV(Ast::VarKey),
+    Iv(Key),
 }
 
 #[derive(Clone, Debug)]
@@ -82,52 +72,46 @@ impl<Ast: AstConfig> Program<Ast> {
 pub struct Fundef<Ast: AstConfig> {
     pub name: String,
     pub args: Vec<Avis<Ast>>,
-    pub vars: SlotMap<Ast::VarKey, Avis<Ast>>,
+    pub vars: Arena<Avis<Ast>>,
     /// arena containing a mapping of variable keys to their ssa assignment expressions
     /// two options for multi-return:
     ///  1) also keep track of return index here
     ///  2) add tuple types, and insert extraction functions, then there is always only one lhs
     /// I am leaning towards option 1
-    pub ssa: SecondaryMap<Ast::VarKey, Expr<Ast>>,
-    pub ret: ArgOrVar<Ast>,
+    pub ssa: SecondaryArena<Expr>,
+    pub ret: ArgOrVar,
 }
 
-impl<Ast: AstConfig> Index<&ArgOrVar<Ast>> for Fundef<Ast> {
+impl<Ast: AstConfig> Index<&ArgOrVar> for Fundef<Ast> {
     type Output = Avis<Ast>;
 
-    fn index(&self, x: &ArgOrVar<Ast>) -> &Self::Output {
+    fn index(&self, x: &ArgOrVar) -> &Self::Output {
         match x {
             ArgOrVar::Arg(i) => &self.args[*i],
             ArgOrVar::Var(k) => &self.vars[*k],
-            ArgOrVar::IV(k) => &self.vars[*k],
+            ArgOrVar::Iv(k) => &self.vars[*k],
         }
     }
 }
 
-impl<Ast: AstConfig> Index<ArgOrVar<Ast>> for Fundef<Ast> {
+impl<Ast: AstConfig> Index<ArgOrVar> for Fundef<Ast> {
     type Output = Avis<Ast>;
 
-    fn index(&self, x: ArgOrVar<Ast>) -> &Self::Output {
+    fn index(&self, x: ArgOrVar) -> &Self::Output {
         match x {
             ArgOrVar::Arg(i) => &self.args[i],
             ArgOrVar::Var(k) => &self.vars[k],
-            ArgOrVar::IV(k) => &self.vars[k],
+            ArgOrVar::Iv(k) => &self.vars[k],
         }
     }
 }
 
-impl<Ast: AstConfig> IndexMut<ArgOrVar<Ast>> for Fundef<Ast> {
-    fn index_mut(&mut self, x: ArgOrVar<Ast>) -> &mut Self::Output {
+impl<Ast: AstConfig> IndexMut<ArgOrVar> for Fundef<Ast> {
+    fn index_mut(&mut self, x: ArgOrVar) -> &mut Self::Output {
         match x {
             ArgOrVar::Arg(i) => &mut self.args[i],
             ArgOrVar::Var(k) => &mut self.vars[k],
-            ArgOrVar::IV(k) => &mut self.vars[k],
+            ArgOrVar::Iv(k) => &mut self.vars[k],
         }
-    }
-}
-
-impl<Ast: AstConfig> Fundef<Ast> {
-    pub fn insert_var(&mut self, id: &str, ty: Ast::ValueType) -> Ast::VarKey {
-        self.vars.insert_with_key(|key| Avis::new(ArgOrVar::Var(key), id, ty))
     }
 }

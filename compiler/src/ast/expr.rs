@@ -1,10 +1,10 @@
-use super::{AstConfig, Tensor, Binary, Unary};
+use super::{Tensor, Binary, Unary};
 
 #[derive(Clone, Debug)]
-pub enum Expr<Ast: AstConfig> {
-    Tensor(Tensor<Ast>),
-    Binary(Binary<Ast>),
-    Unary(Unary<Ast>),
+pub enum Expr {
+    Tensor(Tensor),
+    Binary(Binary),
+    Unary(Unary),
     // I don't think var is actually needed. During parsing we do still need such a construct because we lack context
     // (A slotmap does not even exist yet, everything is just identifiers that may or may not exist)
     // But afterwards it is redundant
