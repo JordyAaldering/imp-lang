@@ -4,7 +4,7 @@ mod binary;
 mod unary;
 
 pub use expr::Expr;
-pub use tensor::Tensor;
+pub use tensor::{Tensor, IndexVector};
 pub use binary::{Binary, Bop};
 pub use unary::{Unary, Uop};
 

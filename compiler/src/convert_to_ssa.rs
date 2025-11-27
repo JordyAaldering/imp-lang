@@ -94,7 +94,15 @@ impl ConvertToSsa {
                 // We can probably make this nicer though
                 let e = match expr {
                     parse_ast::Expr::Tensor { expr, iv, lb, ub } => {
+                        let key = self.vars.as_mut().unwrap().insert_with_key(|key| {
+                            Avis::new(ArgOrVar::Var(key), &iv.0, None)
+                        });
+                        self.name_to_key.insert(iv.0.clone(), ArgOrVar::Var(key));
+                        let iv = IndexVector(key);
+
                         let expr = self.convert_expr(*expr)?;
+                        let lb = self.convert_expr(*lb)?;
+                        let ub = self.convert_expr(*ub)?;
                         Expr::Tensor(Tensor { expr, iv, lb, ub })
                     },
                     parse_ast::Expr::Binary { l, r, op } => {
@@ -107,6 +115,7 @@ impl ConvertToSsa {
                         Expr::Unary(Unary { r: r_key, op })
                     },
                     parse_ast::Expr::Identifier(id) => {
+                        println!("Searching for {}", id);
                         return Ok(Some(self.name_to_key[&id].clone()));
                     },
                     parse_ast::Expr::Bool(v) => {
@@ -138,7 +147,15 @@ impl ConvertToSsa {
     pub fn convert_expr(&mut self, expr: parse_ast::Expr) -> SsaResult<ArgOrVar<UntypedAst>> {
         let e = match expr {
             parse_ast::Expr::Tensor { expr, iv, lb, ub } => {
+                let key = self.vars.as_mut().unwrap().insert_with_key(|key| {
+                    Avis::new(ArgOrVar::Var(key), &iv.0, None)
+                });
+                self.name_to_key.insert(iv.0.clone(), ArgOrVar::Var(key));
+                let iv = IndexVector(key);
+
                 let expr = self.convert_expr(*expr)?;
+                let lb = self.convert_expr(*lb)?;
+                let ub = self.convert_expr(*ub)?;
                 Expr::Tensor(Tensor { expr, iv, lb, ub })
             },
             parse_ast::Expr::Binary { l, r, op } => {
@@ -157,6 +174,7 @@ impl ConvertToSsa {
                 Expr::U32(v)
             },
             parse_ast::Expr::Identifier(id) => {
+                println!("Searching for {}", id);
                 return Ok(self.name_to_key[&id].clone())
             },
         };

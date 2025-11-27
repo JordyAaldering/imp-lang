@@ -64,13 +64,44 @@ impl CodegenContext {
         let mut c_code = String::new();
 
         match expr {
-            Expr::Tensor(_) => {
-                todo!()
+            Expr::Tensor(Tensor { iv, expr, lb, ub }) => {
+                let mut forloop = String::new();
+
+                let ty = to_ctype(fundef[expr.clone()].ty);
+                let iv_name = fundef.vars[**iv].name.clone();
+                let lb_name = fundef[lb.clone()].name.clone();
+                let ub_name = fundef[ub.clone()].name.clone();
+
+                forloop.push_str(&format!("for (size_t {} = {}; {} < {}; {} += 1) {{\n", iv_name, lb_name, iv_name, ub_name, iv_name));
+
+                if let ArgOrVar::Var(k) = expr {
+                    let expr_code = self.compile_expr(fundef, &fundef.ssa[*k]);
+                    forloop.push_str(&format!("        res[{}] = {};\n", iv_name, expr_code));
+                }
+
+                forloop.push_str("    }");
+                self.stmts.push(forloop);
+
+                self.stmts.push(format!("{} *res = ({} *)malloc({} * sizeof({}));", ty, ty, ub_name, ty));
+
+                if let ArgOrVar::Var(k) = ub {
+                    let l_code = self.compile_expr(fundef, &fundef.ssa[*k]);
+                    self.stmts.push(format!("{} {} = {};", to_ctype(fundef.vars[*k].ty), fundef.vars[*k].name, l_code));
+                }
+
+                if let ArgOrVar::Var(k) = lb {
+                    let l_code = self.compile_expr(fundef, &fundef.ssa[*k]);
+                    self.stmts.push(format!("{} {} = {};", to_ctype(fundef.vars[*k].ty), fundef.vars[*k].name, l_code));
+                }
+
+                c_code.push_str("res");
             }
             Expr::Binary(Binary { l, r, op }) => {
                 if let ArgOrVar::Var(k) = l {
+                    if fundef.ssa.contains_key(*k) {
                     let l_code = self.compile_expr(fundef, &fundef.ssa[*k]);
                     self.stmts.push(format!("{} {} = {};", to_ctype(fundef.vars[*k].ty), fundef.vars[*k].name, l_code));
+                    }
                 }
 
                 c_code.push_str(&format!("{} {} {}", fundef[l.clone()].name, op, fundef[r.clone()].name));

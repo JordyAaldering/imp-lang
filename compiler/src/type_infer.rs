@@ -62,19 +62,39 @@ impl Rewriter for TypeInfer {
                 ArgOrVar::Arg(i)
             },
             ArgOrVar::Var(old_key) => {
-                let new_expr = self.trav_expr(fundef.ssa[old_key].clone(), fundef)?;
+                // Var may be an index vector, which does not have a single static assignment.
+                // TODO: add another option to ArgOrVar for index vectors, and point to the partition (lb, ub, step, width) that defines it
+                // For now, just do nothing if no expr was found
+                if let Some(old_expr) = fundef.ssa.get(old_key) {
+                    let new_expr = self.trav_expr(old_expr.clone(), fundef)?;
 
-                let old_avis = &fundef.vars[old_key];
-                let new_key = self.new_vars.insert_with_key(|new_key| {
-                    Avis { name: old_avis.name.to_owned(), ty: self.found_ty.unwrap(), _key: ArgOrVar::Var(new_key) }
-                });
-                println!("replaced {:?} by {:?} = {:?}", old_key, new_key, new_expr);
-                self.new_ssa.insert(new_key, new_expr);
-                ArgOrVar::Var(new_key)
+                    let old_avis = &fundef.vars[old_key];
+                    let new_key = self.new_vars.insert_with_key(|new_key| {
+                        Avis { name: old_avis.name.to_owned(), ty: self.found_ty.unwrap(), _key: ArgOrVar::Var(new_key) }
+                    });
+                    println!("replaced {:?} by {:?} = {:?}", old_key, new_key, new_expr);
+                    self.new_ssa.insert(new_key, new_expr);
+                    ArgOrVar::Var(new_key)
+                } else {
+                    let old_avis = &fundef.vars[old_key];
+                    let new_key = self.new_vars.insert_with_key(|new_key| {
+                        Avis { name: old_avis.name.to_owned(), ty: self.found_ty.unwrap(), _key: ArgOrVar::Var(new_key) }
+                    });
+                    println!("replaced index vector {:?} by {:?}", old_key, new_key);
+                    ArgOrVar::Var(new_key)
+                }
             },
         };
 
         Ok(id)
+    }
+
+    fn trav_iv(&mut self, iv: IndexVector<Self::InAst>, fundef: &mut Fundef<Self::InAst>) -> Result<IndexVector<Self::OutAst>, Self::Err> {
+        let old_avis = &fundef.vars[iv.0];
+        let new_key = self.new_vars.insert_with_key(|new_key| {
+            Avis { name: old_avis.name.to_owned(), ty: Type::U32, _key: ArgOrVar::Var(new_key) }
+        });
+        Ok(IndexVector(new_key))
     }
 
     fn trav_binary(&mut self, binary: Binary<Self::InAst>, fundef: &mut Fundef<Self::InAst>) -> Result<Binary<Self::OutAst>, Self::Err> {

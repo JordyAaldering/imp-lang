@@ -155,12 +155,7 @@ impl<'src> Parser<'src> {
 
         self.expect(Token::Bar)?;
 
-        let (token, span) = self.next()?;
-        let lb = if let Token::U32Value(v) = token {
-            v as usize
-        } else {
-            return Err(ParseError::UnexpectedToken("lower bound expected".to_owned(), token, span));
-        };
+        let lb = self.parse_expr(None::<Bop>)?;
 
         self.expect(Token::Le)?;
 
@@ -168,16 +163,11 @@ impl<'src> Parser<'src> {
 
         self.expect(Token::Lt)?;
 
-        let (token, span) = self.next()?;
-        let ub = if let Token::U32Value(v) = token {
-            v as usize
-        } else {
-            return Err(ParseError::UnexpectedToken("upper bound expected".to_owned(), token, span));
-        };
+        let ub = self.parse_expr(None::<Bop>)?;
 
         self.expect(Token::RBrace)?;
 
-        Ok(Expr::Tensor { expr: Box::new(expr), iv, lb, ub })
+        Ok(Expr::Tensor { iv: IndexVector(iv), expr: Box::new(expr), lb: Box::new(lb), ub: Box::new(ub) })
     }
 
     /// Uses Pratt parsing to handle associativity and operator precedence.

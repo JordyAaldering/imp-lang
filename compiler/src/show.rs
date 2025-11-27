@@ -34,7 +34,7 @@ impl<Ast: AstConfig> Show<Ast> {
         for (k, expr) in fundef.ssa.iter() {
             match expr {
                 Expr::Tensor(Tensor { expr, iv, lb, ub }) => {
-                    println!("    {} = {{ {} | {} {} {} }};", fundef.vars[k].name, fundef[expr.clone()].name, lb, iv, ub);
+                    println!("    {} = {{ {} | {} <= {} < {} }};", fundef.vars[k].name, fundef[expr.clone()].name, fundef[lb.clone()].name, fundef.vars[**iv].name, fundef[ub.clone()].name);
                 }
                 Expr::Binary(Binary { l, r, op }) => {
                     println!("    {} = {} {} {};", fundef.vars[k].name, fundef[l.clone()].name, op, fundef[r.clone()].name);

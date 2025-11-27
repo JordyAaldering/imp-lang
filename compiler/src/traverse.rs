@@ -36,9 +36,14 @@ pub trait Rewriter {
     }
 
     fn trav_tensor(&mut self, tensor: Tensor<Self::InAst>, fundef: &mut Fundef<Self::InAst>) -> Result<Tensor<Self::OutAst>, Self::Err> {
+        let iv = self.trav_iv(tensor.iv, fundef)?;
         let expr = self.trav_ssa(tensor.expr, fundef)?;
-        Ok(Tensor { expr, iv: tensor.iv, lb: tensor.lb, ub: tensor.ub })
+        let lb = self.trav_ssa(tensor.lb, fundef)?;
+        let ub = self.trav_ssa(tensor.ub, fundef)?;
+        Ok(Tensor { iv, expr, lb, ub })
     }
+
+    fn trav_iv(&mut self, iv: IndexVector<Self::InAst>, fundef: &mut Fundef<Self::InAst>) -> Result<IndexVector<Self::OutAst>, Self::Err>;
 
     fn trav_binary(&mut self, binary: Binary<Self::InAst>, fundef: &mut Fundef<Self::InAst>) -> Result<Binary<Self::OutAst>, Self::Err> {
         let l = self.trav_ssa(binary.l, fundef)?;
