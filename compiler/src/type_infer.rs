@@ -1,4 +1,4 @@
-use std::mem;
+use std::{collections::HashMap, mem};
 
 use slotmap::{Key, SecondaryMap, SlotMap};
 
@@ -7,6 +7,7 @@ use crate::{ast::*, traverse::Rewriter};
 pub struct TypeInfer {
     new_vars: SlotMap<TypedKey, Avis<TypedAst>>,
     new_ssa: SecondaryMap<TypedKey, Expr<TypedAst>>,
+    iv_rename: HashMap<UntypedKey, TypedKey>,
     found_ty: Option<Type>,
 }
 
@@ -18,6 +19,7 @@ impl TypeInfer {
         Self {
             new_vars: SlotMap::with_key(),
             new_ssa: SecondaryMap::new(),
+            iv_rename: HashMap::new(),
             found_ty: None,
         }
     }
@@ -31,6 +33,8 @@ impl Rewriter for TypeInfer {
     type Err = InferenceError;
 
     fn trav_fundef(&mut self, mut fundef: Fundef<Self::InAst>) -> Result<Fundef<Self::OutAst>, Self::Err> {
+        self.iv_rename.clear();
+
         let mut new_fundef = Fundef {
             name: fundef.name.to_owned(),
             args: Vec::new(),
@@ -62,27 +66,20 @@ impl Rewriter for TypeInfer {
                 ArgOrVar::Arg(i)
             },
             ArgOrVar::Var(old_key) => {
-                // Var may be an index vector, which does not have a single static assignment.
-                // TODO: add another option to ArgOrVar for index vectors, and point to the partition (lb, ub, step, width) that defines it
-                // For now, just do nothing if no expr was found
-                if let Some(old_expr) = fundef.ssa.get(old_key) {
-                    let new_expr = self.trav_expr(old_expr.clone(), fundef)?;
+                let new_expr = self.trav_expr(fundef.ssa[old_key].clone(), fundef)?;
 
-                    let old_avis = &fundef.vars[old_key];
-                    let new_key = self.new_vars.insert_with_key(|new_key| {
-                        Avis { name: old_avis.name.to_owned(), ty: self.found_ty.clone().unwrap(), _key: ArgOrVar::Var(new_key) }
-                    });
-                    println!("replaced {:?} by {:?} = {:?}", old_key, new_key, new_expr);
-                    self.new_ssa.insert(new_key, new_expr);
-                    ArgOrVar::Var(new_key)
-                } else {
-                    let old_avis = &fundef.vars[old_key];
-                    let new_key = self.new_vars.insert_with_key(|new_key| {
-                        Avis { name: old_avis.name.to_owned(), ty: self.found_ty.clone().unwrap(), _key: ArgOrVar::Var(new_key) }
-                    });
-                    println!("replaced index vector {:?} by {:?}", old_key, new_key);
-                    ArgOrVar::Var(new_key)
-                }
+                let old_avis = &fundef.vars[old_key];
+                let new_key = self.new_vars.insert_with_key(|new_key| {
+                    Avis { name: old_avis.name.to_owned(), ty: self.found_ty.clone().unwrap(), _key: ArgOrVar::Var(new_key) }
+                });
+                println!("replaced {:?} by {:?} = {:?}", old_key, new_key, new_expr);
+                self.new_ssa.insert(new_key, new_expr);
+                ArgOrVar::Var(new_key)
+            },
+            ArgOrVar::IV(old_key) => {
+                let new_key = self.iv_rename[&old_key];
+                println!("renamed index vector {:?} by {:?}", old_key, new_key);
+                ArgOrVar::IV(new_key)
             },
         };
 
@@ -91,10 +88,12 @@ impl Rewriter for TypeInfer {
 
     fn trav_tensor(&mut self, tensor: Tensor<Self::InAst>, fundef: &mut Fundef<Self::InAst>) -> Result<Tensor<Self::OutAst>, Self::Err> {
         let iv = self.trav_iv(tensor.iv, fundef)?;
-        let expr = self.trav_ssa(tensor.expr, fundef)?;
-        let ety = self.found_ty.take().unwrap();
         let lb = self.trav_ssa(tensor.lb, fundef)?;
         let ub = self.trav_ssa(tensor.ub, fundef)?;
+
+        let expr = self.trav_ssa(tensor.expr, fundef)?;
+        let ety = self.found_ty.take().unwrap();
+
         self.found_ty = Some(Type { basetype: ety.basetype, shp: Shape::Vector((if let Shape::Scalar = ety.shp { "." } else { "*" }).to_owned()) });
         Ok(Tensor { iv, expr, lb, ub })
     }
@@ -102,8 +101,10 @@ impl Rewriter for TypeInfer {
     fn trav_iv(&mut self, iv: IndexVector<Self::InAst>, fundef: &mut Fundef<Self::InAst>) -> Result<IndexVector<Self::OutAst>, Self::Err> {
         let old_avis = &fundef.vars[iv.0];
         let new_key = self.new_vars.insert_with_key(|new_key| {
-            Avis { name: old_avis.name.to_owned(), ty: Type { basetype: BaseType::U32, shp: Shape::Scalar }, _key: ArgOrVar::Var(new_key) }
+            Avis { name: old_avis.name.to_owned(), ty: Type { basetype: BaseType::U32, shp: Shape::Scalar }, _key: ArgOrVar::IV(new_key) }
         });
+        self.iv_rename.insert(iv.0, new_key);
+        println!("replaced index vector {:?} by {:?}", iv.0, new_key);
         Ok(IndexVector(new_key))
     }
 

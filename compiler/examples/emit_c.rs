@@ -10,6 +10,9 @@ fn main() {
     show::Show::new().show_program(&ast);
     let ast = type_infer::TypeInfer::new().trav_program(ast).unwrap();
     show::Show::new().show_program(&ast);
-    let c_code = codegen_c::CodegenContext::new().compile_program(&ast);
+    let c_code = compile::codegen_c::CodegenContext::new().compile_program(&ast);
     print!("{}", c_code);
+
+    let undo_ssa = undo_ssa::UndoSsa::new().trav_program(&ast);
+    println!("{:#?}", undo_ssa);
 }

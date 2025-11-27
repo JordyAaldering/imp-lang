@@ -25,22 +25,22 @@ impl<Ast: AstConfig> Show<Ast> {
             println!("    {:?}", avis);
         }
 
-        println!("  locals:");
-        for (k, _) in &fundef.ssa {
-            println!("    {:?}", fundef.vars[k]);
+        println!("  vars:");
+        for (_, v) in &fundef.vars {
+            println!("    {:?}", v);
         }
 
         println!("  ssa:");
         for (k, expr) in fundef.ssa.iter() {
             match expr {
                 Expr::Tensor(Tensor { expr, iv, lb, ub }) => {
-                    println!("    {} = {{ {} | {} <= {} < {} }};", fundef.vars[k].name, fundef[expr.clone()].name, fundef[lb.clone()].name, fundef.vars[**iv].name, fundef[ub.clone()].name);
+                    println!("    {} = {{ {} | {} <= {} < {} }};", fundef.vars[k].name, fundef[expr].name, fundef[lb].name, fundef.vars[**iv].name, fundef[ub].name);
                 }
                 Expr::Binary(Binary { l, r, op }) => {
-                    println!("    {} = {} {} {};", fundef.vars[k].name, fundef[l.clone()].name, op, fundef[r.clone()].name);
+                    println!("    {} = {} {} {};", fundef.vars[k].name, fundef[l].name, op, fundef[r].name);
                 },
                 Expr::Unary(Unary { r, op }) => {
-                    println!("    {} = {} {};", fundef.vars[k].name, op, fundef[r.clone()].name);
+                    println!("    {} = {} {};", fundef.vars[k].name, op, fundef[r].name);
                 },
                 Expr::Bool(v) => println!("    {} = {};", fundef.vars[k].name, v),
                 Expr::U32(v) => println!("    {} = {};", fundef.vars[k].name, v),

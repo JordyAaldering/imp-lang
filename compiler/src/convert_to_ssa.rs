@@ -95,9 +95,9 @@ impl ConvertToSsa {
                 let e = match expr {
                     parse_ast::Expr::Tensor { expr, iv, lb, ub } => {
                         let key = self.vars.as_mut().unwrap().insert_with_key(|key| {
-                            Avis::new(ArgOrVar::Var(key), &iv.0, None)
+                            Avis::new(ArgOrVar::IV(key), &iv.0, None)
                         });
-                        self.name_to_key.insert(iv.0.clone(), ArgOrVar::Var(key));
+                        self.name_to_key.insert(iv.0.clone(), ArgOrVar::IV(key));
                         let iv = IndexVector(key);
 
                         let expr = self.convert_expr(*expr)?;
@@ -148,9 +148,9 @@ impl ConvertToSsa {
         let e = match expr {
             parse_ast::Expr::Tensor { expr, iv, lb, ub } => {
                 let key = self.vars.as_mut().unwrap().insert_with_key(|key| {
-                    Avis::new(ArgOrVar::Var(key), &iv.0, None)
+                    Avis::new(ArgOrVar::IV(key), &iv.0, None)
                 });
-                self.name_to_key.insert(iv.0.clone(), ArgOrVar::Var(key));
+                self.name_to_key.insert(iv.0.clone(), ArgOrVar::IV(key));
                 let iv = IndexVector(key);
 
                 let expr = self.convert_expr(*expr)?;

@@ -57,8 +57,12 @@ impl<Ast: AstConfig> Avis<Ast> {
 
 #[derive(Clone, Copy, Debug)]
 pub enum ArgOrVar<Ast: AstConfig> {
+    /// Function argument
     Arg(usize),
+    /// Local variable
     Var(Ast::VarKey),
+    /// Index vector
+    IV(Ast::VarKey),
 }
 
 #[derive(Clone, Debug)]
@@ -88,6 +92,18 @@ pub struct Fundef<Ast: AstConfig> {
     pub ret: ArgOrVar<Ast>,
 }
 
+impl<Ast: AstConfig> Index<&ArgOrVar<Ast>> for Fundef<Ast> {
+    type Output = Avis<Ast>;
+
+    fn index(&self, x: &ArgOrVar<Ast>) -> &Self::Output {
+        match x {
+            ArgOrVar::Arg(i) => &self.args[*i],
+            ArgOrVar::Var(k) => &self.vars[*k],
+            ArgOrVar::IV(k) => &self.vars[*k],
+        }
+    }
+}
+
 impl<Ast: AstConfig> Index<ArgOrVar<Ast>> for Fundef<Ast> {
     type Output = Avis<Ast>;
 
@@ -95,6 +111,7 @@ impl<Ast: AstConfig> Index<ArgOrVar<Ast>> for Fundef<Ast> {
         match x {
             ArgOrVar::Arg(i) => &self.args[i],
             ArgOrVar::Var(k) => &self.vars[k],
+            ArgOrVar::IV(k) => &self.vars[k],
         }
     }
 }
@@ -104,6 +121,7 @@ impl<Ast: AstConfig> IndexMut<ArgOrVar<Ast>> for Fundef<Ast> {
         match x {
             ArgOrVar::Arg(i) => &mut self.args[i],
             ArgOrVar::Var(k) => &mut self.vars[k],
+            ArgOrVar::IV(k) => &mut self.vars[k],
         }
     }
 }

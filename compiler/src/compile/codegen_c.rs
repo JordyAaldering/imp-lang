@@ -46,6 +46,7 @@ impl CodegenContext {
         let ret_code = match fundef.ret {
             ArgOrVar::Arg(i) => fundef.args[i].name.to_owned(),
             ArgOrVar::Var(k) => self.compile_expr(fundef, &fundef.ssa[k]),
+            ArgOrVar::IV(_) => unreachable!(),
         };
 
         let mut stmts = Vec::new();
