@@ -1,4 +1,4 @@
-use compiler::{traverse::Traversal, *};
+use compiler::{traverse::Rewriter, *};
 
 use std::{env, fs};
 
@@ -11,5 +11,5 @@ fn main() {
     let ast = type_infer::TypeInfer::new().trav_program(ast).unwrap();
     show::Show::new().show_program(&ast);
     let c_code = codegen_c::CodegenContext::new().compile_program(&ast);
-    println!("{}", c_code);
+    print!("{}", c_code);
 }

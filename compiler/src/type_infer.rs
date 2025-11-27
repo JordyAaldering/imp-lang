@@ -2,7 +2,7 @@ use std::mem;
 
 use slotmap::{Key, SecondaryMap, SlotMap};
 
-use crate::{ast::*, traverse::Traversal};
+use crate::{ast::*, traverse::Rewriter};
 
 pub struct TypeInfer {
     new_vars: SlotMap<TypedKey, Avis<TypedAst>>,
@@ -23,7 +23,7 @@ impl TypeInfer {
     }
 }
 
-impl Traversal for TypeInfer {
+impl Rewriter for TypeInfer {
     type InAst = UntypedAst;
 
     type OutAst = TypedAst;

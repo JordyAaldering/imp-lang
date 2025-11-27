@@ -12,7 +12,7 @@ use std::{ffi::CString, ptr};
 
 use llvm_sys::core::LLVMPrintModuleToFile;
 
-use crate::{ast::*, traverse::Traversal};
+use crate::{ast::*, traverse::Rewriter};
 
 pub fn compile(src: &str) -> Program<TypedAst> {
     let ast = scanparse::scanparse(&src).unwrap();
