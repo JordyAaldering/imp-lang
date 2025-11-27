@@ -36,20 +36,6 @@ impl Traversal for TypeInfer {
             ArgOrVar::Var(k) => {
                 fundef.ssa[k] = self.trav_expr(fundef.ssa[k].clone(), fundef)?;
                 fundef.vars[k].ty = self.found_ty;
-                // match expr {
-                //     Expr::Binary(n) => {
-                //         *n = self.trav_binary(*n, fundef)?;
-                //     },
-                //     Expr::Unary(n) => {
-                //         *n = self.trav_unary(*n, fundef)?;
-                //     },
-                //     Expr::Bool(_) => {
-                //         self.found_ty = Some(Type::Bool);
-                //     },
-                //     Expr::U32(_) => {
-                //         self.found_ty = Some(Type::U32);
-                //     },
-                // };
             },
         };
 
