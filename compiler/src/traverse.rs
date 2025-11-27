@@ -32,9 +32,16 @@ pub trait Rewriter {
         }
     }
 
-    fn trav_binary(&mut self, binary: Binary<Self::InAst>, fundef: &mut Fundef<Self::InAst>) -> Result<Binary<Self::OutAst>, Self::Err>;
+    fn trav_binary(&mut self, binary: Binary<Self::InAst>, fundef: &mut Fundef<Self::InAst>) -> Result<Binary<Self::OutAst>, Self::Err> {
+        let l = self.trav_identifier(binary.l, fundef)?;
+        let r = self.trav_identifier(binary.r, fundef)?;
+        Ok(Binary { l, r, op: binary.op })
+    }
 
-    fn trav_unary(&mut self, unary: Unary<Self::InAst>, fundef: &mut Fundef<Self::InAst>) -> Result<Unary<Self::OutAst>, Self::Err>;
+    fn trav_unary(&mut self, unary: Unary<Self::InAst>, fundef: &mut Fundef<Self::InAst>) -> Result<Unary<Self::OutAst>, Self::Err> {
+        let r = self.trav_identifier(unary.r, fundef)?;
+        Ok(Unary { r, op: unary.op })
+    }
 
     fn trav_bool(&mut self, value: bool, _fundef: &mut Fundef<Self::InAst>) -> Result<bool, Self::Err> {
         Ok(value)
