@@ -138,9 +138,9 @@ impl CodegenContext {
     }
 
     fn llvm_type(&self, t: &Type) -> LLVMTypeRef {
-        match t {
-            Type::U32 => self.u32_type(),
-            Type::Bool => self.bool_type(),
+        match t.basetype {
+            BaseType::U32 => self.u32_type(),
+            BaseType::Bool => self.bool_type(),
         }
     }
 

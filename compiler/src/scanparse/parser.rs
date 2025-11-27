@@ -1,6 +1,6 @@
 use std::iter::Peekable;
 
-use crate::ast::{Bop, Type, Uop};
+use crate::ast::{BaseType, Bop, Shape, Type, Uop};
 
 use super::{lexer::{Lexer, Token}, operator::{self, Operator}, parse_ast::*, span::Span};
 
@@ -73,12 +73,7 @@ impl<'src> Parser<'src> {
     /// <farg> := <type> <id>
     /// ```
     fn parse_farg(&mut self) -> ParseResult<(Type, String)> {
-        let (token, span) = self.next()?;
-        let ty = match token {
-            Token::U32Type => Type::U32,
-            Token::BoolType => Type::Bool,
-            _ => return Err(ParseError::UnexpectedToken("type".to_owned(), token, span)),
-        };
+        let (ty, _) = self.parse_type()?;
 
         let (id, _) = self.parse_id()?;
 
@@ -242,13 +237,34 @@ impl<'src> Parser<'src> {
         Ok(None)
     }
 
+    /// ```bnf
+    /// <type> := <basetype>
+    ///         | <basetype> "[" "." "]"
+    /// ```
     fn parse_type(&mut self) -> ParseResult<(Type, Span)> {
         let (token, span) = self.next()?;
-        match token {
-            Token::U32Type => Ok((Type::U32, span)),
-            Token::BoolType => Ok((Type::Bool, span)),
-            _ => Err(ParseError::UnexpectedToken("type".to_owned(), token, span)),
-        }
+        let basetype = match token {
+            Token::U32Type => BaseType::U32,
+            Token::BoolType => BaseType::Bool,
+            _ => return Err(ParseError::UnexpectedToken("type".to_owned(), token, span)),
+        };
+
+        let ty = if self.matches(Token::LSquare).is_some() {
+            let (id, _) = self.parse_id()?;
+
+            self.expect(Token::RSquare)?;
+
+            Type {
+                basetype,
+                shp: Shape::Vector(id)
+            }
+        } else {
+            Type {
+                basetype,
+                shp: Shape::Scalar,
+            }
+        };
+        Ok((ty, span))
     }
 
     fn parse_id(&mut self) -> ParseResult<(String, Span)> {

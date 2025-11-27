@@ -3,16 +3,10 @@ use crate::ast::*;
 pub fn compile_header(fundef: &Fundef<TypedAst>) -> String {
     let mut s = String::new();
 
-    let ret_type = match fundef[fundef.ret.clone()].ty {
-        Type::U32 => "u32",
-        Type::Bool => "bool",
-    };
+    let ret_type = to_rusttype(&fundef[fundef.ret.clone()].ty);
 
     let args: Vec<String> = fundef.args.iter().map(|avis| {
-        let ty_str = match avis.ty {
-            Type::U32 => "u32",
-            Type::Bool => "bool",
-        };
+        let ty_str = to_rusttype(&avis.ty);
         format!("{}: {}", avis.name, ty_str)
     }).collect();
 
@@ -26,4 +20,16 @@ pub fn compile_header(fundef: &Fundef<TypedAst>) -> String {
     s.push_str("}\n");
 
     s
+}
+
+fn to_rusttype(ty: &Type) -> String {
+    let base = match ty.basetype {
+        BaseType::U32 => "u32",
+        BaseType::Bool => "bool",
+    };
+
+    match ty.shp {
+        Shape::Scalar => base.to_owned(),
+        Shape::Vector(_) => format!("Vec<{}>", base),
+    }
 }

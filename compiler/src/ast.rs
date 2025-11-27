@@ -2,11 +2,13 @@ mod expr;
 mod tensor;
 mod binary;
 mod unary;
+mod typ;
 
 pub use expr::Expr;
 pub use tensor::{Tensor, IndexVector};
 pub use binary::{Binary, Bop};
 pub use unary::{Unary, Uop};
+pub use typ::{Type, BaseType, Shape};
 
 use std::{fmt, ops::{Index, IndexMut}};
 
@@ -110,10 +112,4 @@ impl<Ast: AstConfig> Fundef<Ast> {
     pub fn insert_var(&mut self, id: &str, ty: Ast::ValueType) -> Ast::VarKey {
         self.vars.insert_with_key(|key| Avis::new(ArgOrVar::Var(key), id, ty))
     }
-}
-
-#[derive(Copy, Clone, Debug)]
-pub enum Type {
-    U32,
-    Bool,
 }

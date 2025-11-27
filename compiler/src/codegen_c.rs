@@ -33,10 +33,10 @@ impl CodegenContext {
         let mut c_code = String::new();
 
         // Function signature
-        let ret_type = to_ctype(fundef[fundef.ret.clone()].ty);
+        let ret_type = to_ctype(&fundef[fundef.ret.clone()].ty);
 
         let args: Vec<String> = fundef.args.iter().map(|avis| {
-            let ty_str = to_ctype(avis.ty);
+            let ty_str = to_ctype(&avis.ty);
             format!("{} {}", ty_str, avis.name)
         }).collect();
 
@@ -67,7 +67,7 @@ impl CodegenContext {
             Expr::Tensor(Tensor { iv, expr, lb, ub }) => {
                 let mut forloop = String::new();
 
-                let ty = to_ctype(fundef[expr.clone()].ty);
+                let ty = to_ctype(&fundef[expr.clone()].ty);
                 let iv_name = fundef.vars[**iv].name.clone();
                 let lb_name = fundef[lb.clone()].name.clone();
                 let ub_name = fundef[ub.clone()].name.clone();
@@ -86,12 +86,12 @@ impl CodegenContext {
 
                 if let ArgOrVar::Var(k) = ub {
                     let l_code = self.compile_expr(fundef, &fundef.ssa[*k]);
-                    self.stmts.push(format!("{} {} = {};", to_ctype(fundef.vars[*k].ty), fundef.vars[*k].name, l_code));
+                    self.stmts.push(format!("{} {} = {};", to_ctype(&fundef.vars[*k].ty), fundef.vars[*k].name, l_code));
                 }
 
                 if let ArgOrVar::Var(k) = lb {
                     let l_code = self.compile_expr(fundef, &fundef.ssa[*k]);
-                    self.stmts.push(format!("{} {} = {};", to_ctype(fundef.vars[*k].ty), fundef.vars[*k].name, l_code));
+                    self.stmts.push(format!("{} {} = {};", to_ctype(&fundef.vars[*k].ty), fundef.vars[*k].name, l_code));
                 }
 
                 c_code.push_str("res");
@@ -100,7 +100,7 @@ impl CodegenContext {
                 if let ArgOrVar::Var(k) = l {
                     if fundef.ssa.contains_key(*k) {
                     let l_code = self.compile_expr(fundef, &fundef.ssa[*k]);
-                    self.stmts.push(format!("{} {} = {};", to_ctype(fundef.vars[*k].ty), fundef.vars[*k].name, l_code));
+                    self.stmts.push(format!("{} {} = {};", to_ctype(&fundef.vars[*k].ty), fundef.vars[*k].name, l_code));
                     }
                 }
 
@@ -109,7 +109,7 @@ impl CodegenContext {
             Expr::Unary(Unary { r, op }) => {
                 if let ArgOrVar::Var(k) = r {
                     let r_code = self.compile_expr(fundef, &fundef.ssa[*k]);
-                    self.stmts.push(format!("{} {} = {};", to_ctype(fundef.vars[*k].ty), fundef.vars[*k].name, r_code));
+                    self.stmts.push(format!("{} {} = {};", to_ctype(&fundef.vars[*k].ty), fundef.vars[*k].name, r_code));
                 }
 
                 c_code.push_str(&format!("{} {}", op, fundef[r.clone()].name));
@@ -126,9 +126,16 @@ impl CodegenContext {
     }
 }
 
-fn to_ctype(ty: Type) -> &'static str {
-    match ty {
-        Type::U32 => "uint32_t",
-        Type::Bool => "bool",
-    }
+fn to_ctype(ty: &Type) -> String {
+    let base = match ty.basetype {
+        BaseType::U32 => "uint32_t",
+        BaseType::Bool => "bool",
+    };
+
+    let shp = match ty.shp {
+        Shape::Scalar => "",
+        Shape::Vector(_) => "*",
+    };
+
+    format!("{}{}", base, shp)
 }

@@ -41,7 +41,7 @@ impl Rewriter for TypeInfer {
 
         for (i, arg) in fundef.args.iter().enumerate() {
             let k = ArgOrVar::Arg(i);
-            new_fundef.args.push(Avis::new(k, &arg.name, arg.ty.unwrap()));
+            new_fundef.args.push(Avis::new(k, &arg.name, arg.ty.clone().unwrap()));
         }
 
         let old_key = fundef.ret.clone();
@@ -57,7 +57,7 @@ impl Rewriter for TypeInfer {
     fn trav_ssa(&mut self, id: ArgOrVar<UntypedAst>, fundef: &mut Fundef<Self::InAst>) -> Result<ArgOrVar<TypedAst>, Self::Err> {
         let id = match id {
             ArgOrVar::Arg(i) => {
-                let ty = fundef.args[i].ty.expect("function argument cannot be untyped");
+                let ty = fundef.args[i].ty.clone().expect("function argument cannot be untyped");
                 self.found_ty = Some(ty);
                 ArgOrVar::Arg(i)
             },
@@ -70,7 +70,7 @@ impl Rewriter for TypeInfer {
 
                     let old_avis = &fundef.vars[old_key];
                     let new_key = self.new_vars.insert_with_key(|new_key| {
-                        Avis { name: old_avis.name.to_owned(), ty: self.found_ty.unwrap(), _key: ArgOrVar::Var(new_key) }
+                        Avis { name: old_avis.name.to_owned(), ty: self.found_ty.clone().unwrap(), _key: ArgOrVar::Var(new_key) }
                     });
                     println!("replaced {:?} by {:?} = {:?}", old_key, new_key, new_expr);
                     self.new_ssa.insert(new_key, new_expr);
@@ -78,7 +78,7 @@ impl Rewriter for TypeInfer {
                 } else {
                     let old_avis = &fundef.vars[old_key];
                     let new_key = self.new_vars.insert_with_key(|new_key| {
-                        Avis { name: old_avis.name.to_owned(), ty: self.found_ty.unwrap(), _key: ArgOrVar::Var(new_key) }
+                        Avis { name: old_avis.name.to_owned(), ty: self.found_ty.clone().unwrap(), _key: ArgOrVar::Var(new_key) }
                     });
                     println!("replaced index vector {:?} by {:?}", old_key, new_key);
                     ArgOrVar::Var(new_key)
@@ -92,14 +92,16 @@ impl Rewriter for TypeInfer {
     fn trav_iv(&mut self, iv: IndexVector<Self::InAst>, fundef: &mut Fundef<Self::InAst>) -> Result<IndexVector<Self::OutAst>, Self::Err> {
         let old_avis = &fundef.vars[iv.0];
         let new_key = self.new_vars.insert_with_key(|new_key| {
-            Avis { name: old_avis.name.to_owned(), ty: Type::U32, _key: ArgOrVar::Var(new_key) }
+            Avis { name: old_avis.name.to_owned(), ty: Type { basetype: BaseType::U32, shp: Shape::Scalar }, _key: ArgOrVar::Var(new_key) }
         });
         Ok(IndexVector(new_key))
     }
 
     fn trav_binary(&mut self, binary: Binary<Self::InAst>, fundef: &mut Fundef<Self::InAst>) -> Result<Binary<Self::OutAst>, Self::Err> {
         let l = self.trav_ssa(binary.l, fundef)?;
+        let _lty = self.found_ty.take().unwrap();
         let r = self.trav_ssa(binary.r, fundef)?;
+        let rty = self.found_ty.take().unwrap();
 
         // TODO: check if lty and rty unify
 
@@ -107,14 +109,14 @@ impl Rewriter for TypeInfer {
         self.found_ty = Some(match binary.op {
             Add | Sub | Mul | Div => {
                 // TODO: check if unifies with num
-                Type::U32
+                Type { basetype: BaseType::U32, shp: rty.shp }
             },
             Eq | Ne => {
-                Type::Bool
+                Type { basetype: BaseType::Bool, shp: rty.shp }
             },
             Lt | Le | Gt | Ge => {
                 // TODO: check if unifies with num
-                Type::Bool
+                Type { basetype: BaseType::Bool, shp: rty.shp }
             },
         });
 
@@ -123,16 +125,17 @@ impl Rewriter for TypeInfer {
 
     fn trav_unary(&mut self, unary: Unary<Self::InAst>, fundef: &mut Fundef<Self::InAst>) -> Result<Unary<Self::OutAst>, Self::Err> {
         let r = self.trav_ssa(unary.r, fundef)?;
+        let rty = self.found_ty.take().unwrap();
 
         use Uop::*;
         self.found_ty = Some(match unary.op {
             Neg => {
                 // TODO: check if r_ty unifies with signed num
-                Type::U32
+                Type { basetype: BaseType::U32, shp: rty.shp }
             },
             Not => {
                 // TODO: check if r_ty unifies with bool
-                Type::Bool
+                Type { basetype: BaseType::Bool, shp: rty.shp }
             },
         });
 
@@ -140,12 +143,12 @@ impl Rewriter for TypeInfer {
     }
 
     fn trav_bool(&mut self, value: bool, _fundef: &mut Fundef<Self::InAst>) -> Result<bool, Self::Err> {
-        self.found_ty = Some(Type::Bool);
+        self.found_ty = Some(Type { basetype: BaseType::Bool, shp: Shape::Scalar });
         Ok(value)
     }
 
     fn trav_u32(&mut self, value: u32, _fundef: &mut Fundef<Self::InAst>) -> Result<u32, Self::Err> {
-        self.found_ty = Some(Type::U32);
+        self.found_ty = Some(Type { basetype: BaseType::U32, shp: Shape::Scalar });
         Ok(value)
     }
 }
