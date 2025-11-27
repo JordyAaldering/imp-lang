@@ -68,7 +68,7 @@ impl ConvertToSsa {
             args,
             vars: self.vars.take().unwrap(),
             ssa: self.ssa.take().unwrap(),
-            ret_id: ret_value,
+            ret: ret_value,
         })
     }
 

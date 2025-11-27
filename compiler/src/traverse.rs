@@ -22,6 +22,8 @@ pub trait Rewriter {
 
     fn trav_fundef(&mut self, fundef: Fundef<Self::InAst>) -> Result<Fundef<Self::OutAst>, Self::Err>;
 
+    fn trav_identifier(&mut self, id: ArgOrVar<Self::InAst>, _fundef: &mut Fundef<Self::InAst>) -> Result<ArgOrVar<Self::OutAst>, Self::Err>;
+
     fn trav_expr(&mut self, expr: Expr<Self::InAst>, fundef: &mut Fundef<Self::InAst>) -> Result<Expr<Self::OutAst>, Self::Err> {
         use Expr::*;
         match expr {
@@ -50,8 +52,6 @@ pub trait Rewriter {
     fn trav_u32(&mut self, value: u32, _fundef: &mut Fundef<Self::InAst>) -> Result<u32, Self::Err> {
         Ok(value)
     }
-
-    fn trav_identifier(&mut self, id: ArgOrVar<Self::InAst>, _fundef: &mut Fundef<Self::InAst>) -> Result<ArgOrVar<Self::OutAst>, Self::Err>;
 }
 
 
@@ -77,14 +77,18 @@ pub trait Traversal<Ast: AstConfig> {
             fundef.args.push(farg);
         }
 
-        let old_ret = fundef.ret_id.clone();
-        fundef.ret_id = self.trav_identifier(old_ret, &fundef)?;
+        let old_ret = fundef.ret.clone();
+        fundef.ret = self.trav_ssa(old_ret, &fundef)?;
 
         Ok(fundef)
     }
 
     fn trav_farg(&mut self, farg: Avis<Ast>, _fundef: &Fundef<Ast>) -> Result<Avis<Ast>, Self::Err> {
         Ok(farg)
+    }
+
+    fn trav_ssa(&mut self, id: ArgOrVar<Ast>, _fundef: &Fundef<Ast>) -> Result<ArgOrVar<Ast>, Self::Err> {
+        Ok(id)
     }
 
     fn trav_expr(&mut self, expr: Expr<Ast>, fundef: &Fundef<Ast>) -> Result<Expr<Ast>, Self::Err> {
@@ -98,13 +102,13 @@ pub trait Traversal<Ast: AstConfig> {
     }
 
     fn trav_binary(&mut self, mut binary: Binary<Ast>, fundef: &Fundef<Ast>) -> Result<Binary<Ast>, Self::Err> {
-        binary.l = self.trav_identifier(binary.l, fundef)?;
-        binary.r = self.trav_identifier(binary.r, fundef)?;
+        binary.l = self.trav_ssa(binary.l, fundef)?;
+        binary.r = self.trav_ssa(binary.r, fundef)?;
         Ok(binary)
     }
 
     fn trav_unary(&mut self, mut unary: Unary<Ast>, fundef: &Fundef<Ast>) -> Result<Unary<Ast>, Self::Err> {
-        unary.r = self.trav_identifier(unary.r, fundef)?;
+        unary.r = self.trav_ssa(unary.r, fundef)?;
         Ok(unary)
     }
 
@@ -114,9 +118,5 @@ pub trait Traversal<Ast: AstConfig> {
 
     fn trav_u32(&mut self, value: u32, _fundef: &Fundef<Ast>) -> Result<u32, Self::Err> {
         Ok(value)
-    }
-
-    fn trav_identifier(&mut self, id: ArgOrVar<Ast>, _fundef: &Fundef<Ast>) -> Result<ArgOrVar<Ast>, Self::Err> {
-        Ok(id)
     }
 }

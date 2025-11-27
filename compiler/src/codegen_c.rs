@@ -33,7 +33,7 @@ impl CodegenContext {
         let mut c_code = String::new();
 
         // Function signature
-        let ret_type = to_ctype(fundef[fundef.ret_id.clone()].ty);
+        let ret_type = to_ctype(fundef[fundef.ret.clone()].ty);
 
         let args: Vec<String> = fundef.args.iter().map(|avis| {
             let ty_str = to_ctype(avis.ty);
@@ -42,7 +42,7 @@ impl CodegenContext {
 
         c_code.push_str(&format!("{} DSL_{}({}) {{\n", ret_type, fundef.name, args.join(", ")));
 
-        let ret_code = match fundef.ret_id {
+        let ret_code = match fundef.ret {
             ArgOrVar::Arg(i) => fundef.args[i].name.to_owned(),
             ArgOrVar::Var(k) => self.compile_expr(fundef, &fundef.ssa[k]),
         };

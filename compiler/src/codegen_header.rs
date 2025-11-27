@@ -3,7 +3,7 @@ use crate::ast::*;
 pub fn compile_header(fundef: &Fundef<TypedAst>) -> String {
     let mut s = String::new();
 
-    let ret_type = match fundef[fundef.ret_id.clone()].ty {
+    let ret_type = match fundef[fundef.ret.clone()].ty {
         Type::U32 => "u32",
         Type::Bool => "bool",
     };

@@ -33,7 +33,7 @@ impl CodegenContext {
             }).collect();
 
             let fn_type = LLVMFunctionType(
-                self.llvm_type(&f[f.ret_id.clone()].ty),
+                self.llvm_type(&f[f.ret.clone()].ty),
                 arg_types.as_ptr() as *mut _,
                 arg_types.len() as u32,
                 0,
@@ -58,7 +58,7 @@ impl CodegenContext {
                 fargs.push(LLVMGetParam(function, i as u32));
             }
 
-            let ret_val = match f.ret_id {
+            let ret_val = match f.ret {
                 ArgOrVar::Arg(i) => fargs[i],
                 ArgOrVar::Var(k) => self.compile_expr(&f.ssa[k], &fargs, f),
             };

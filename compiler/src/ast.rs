@@ -79,7 +79,7 @@ pub struct Fundef<Ast: AstConfig> {
     ///  2) add tuple types, and insert extraction functions, then there is always only one lhs
     /// I am leaning towards option 1
     pub ssa: SecondaryMap<Ast::VarKey, Expr<Ast>>,
-    pub ret_id: ArgOrVar<Ast>,
+    pub ret: ArgOrVar<Ast>,
 }
 
 impl<Ast: AstConfig> Index<ArgOrVar<Ast>> for Fundef<Ast> {

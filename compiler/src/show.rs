@@ -44,6 +44,6 @@ impl<Ast: AstConfig> Show<Ast> {
             }
         }
 
-        println!("  return {}", fundef[fundef.ret_id.clone()].name);
+        println!("  return {}", fundef[fundef.ret.clone()].name);
     }
 }

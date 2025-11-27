@@ -36,7 +36,7 @@ impl Rewriter for TypeInfer {
             args: Vec::new(),
             vars: SlotMap::with_key(),
             ssa: SecondaryMap::new(),
-            ret_id: ArgOrVar::Var(TypedKey::null()),
+            ret: ArgOrVar::Var(TypedKey::null()),
         };
 
         for (i, arg) in fundef.args.iter().enumerate() {
@@ -44,8 +44,8 @@ impl Rewriter for TypeInfer {
             new_fundef.args.push(Avis::new(k, &arg.name, arg.ty.unwrap()));
         }
 
-        let old_key = fundef.ret_id.clone();
-        new_fundef.ret_id = self.trav_identifier(old_key, &mut fundef)?;
+        let old_key = fundef.ret.clone();
+        new_fundef.ret = self.trav_identifier(old_key, &mut fundef)?;
 
         mem::swap(&mut self.new_vars, &mut new_fundef.vars);
 
