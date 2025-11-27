@@ -18,6 +18,7 @@ impl CodegenContext {
     pub fn compile_program(&mut self, program: &Program<TypedAst>) -> String {
         let mut c_code = String::new();
 
+        c_code.push_str("#include <stdlib.h>\n");
         c_code.push_str("#include <stdbool.h>\n");
         c_code.push_str("#include <stdint.h>\n");
 
@@ -80,7 +81,7 @@ impl CodegenContext {
                 }
 
                 forloop.push_str("    }");
-                self.stmts.push(forloop);
+                self.stmts.insert(0, forloop);
 
                 self.stmts.push(format!("{} *res = ({} *)malloc({} * sizeof({}));", ty, ty, ub_name, ty));
 
@@ -101,6 +102,13 @@ impl CodegenContext {
                     if fundef.ssa.contains_key(*k) {
                     let l_code = self.compile_expr(fundef, &fundef.ssa[*k]);
                     self.stmts.push(format!("{} {} = {};", to_ctype(&fundef.vars[*k].ty), fundef.vars[*k].name, l_code));
+                    }
+                }
+
+                if let ArgOrVar::Var(k) = r {
+                    if fundef.ssa.contains_key(*k) {
+                    let r_code = self.compile_expr(fundef, &fundef.ssa[*k]);
+                    self.stmts.push(format!("{} {} = {};", to_ctype(&fundef.vars[*k].ty), fundef.vars[*k].name, r_code));
                     }
                 }
 
