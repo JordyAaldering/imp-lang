@@ -1,11 +1,10 @@
-use std::{collections::HashMap, mem};
+use std::mem;
 
 use slotmap::{Key, SecondaryMap, SlotMap};
 
 use crate::{ast::*, traverse::Traversal};
 
 pub struct TypeInfer {
-    key_rename: HashMap<UntypedKey, TypedKey>,
     new_vars: SlotMap<TypedKey, Avis<TypedAst>>,
     new_ssa: SecondaryMap<TypedKey, Expr<TypedAst>>,
     found_ty: Option<Type>,
@@ -17,7 +16,6 @@ pub enum InferenceError {}
 impl TypeInfer {
     pub fn new() -> Self {
         Self {
-            key_rename: HashMap::new(),
             new_vars: SlotMap::with_key(),
             new_ssa: SecondaryMap::new(),
             found_ty: None,
@@ -33,8 +31,6 @@ impl Traversal for TypeInfer {
     type Err = InferenceError;
 
     fn trav_fundef(&mut self, mut fundef: Fundef<Self::InAst>) -> Result<Fundef<Self::OutAst>, Self::Err> {
-        debug_assert!(self.key_rename.is_empty());
-
         let mut new_fundef = Fundef {
             name: fundef.name.to_owned(),
             args: Vec::new(),
@@ -55,8 +51,6 @@ impl Traversal for TypeInfer {
 
         mem::swap(&mut self.new_ssa, &mut new_fundef.ssa);
 
-        self.key_rename.clear();
-
         Ok(new_fundef)
     }
 
@@ -76,7 +70,6 @@ impl Traversal for TypeInfer {
                 });
                 println!("replaced {:?} by {:?} = {:?}", old_key, new_key, new_expr);
                 self.new_ssa.insert(new_key, new_expr);
-                self.key_rename.insert(old_key, new_key);
                 ArgOrVar::Var(new_key)
             },
         };
