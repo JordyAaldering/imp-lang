@@ -1,6 +1,10 @@
+mod expr;
+mod tensor;
 mod binary;
 mod unary;
 
+pub use expr::Expr;
+pub use tensor::Tensor;
 pub use binary::{Binary, Bop};
 pub use unary::{Unary, Uop};
 
@@ -106,21 +110,6 @@ impl<Ast: AstConfig> Fundef<Ast> {
     pub fn insert_var(&mut self, id: &str, ty: Ast::ValueType) -> Ast::VarKey {
         self.vars.insert_with_key(|key| Avis::new(ArgOrVar::Var(key), id, ty))
     }
-}
-
-#[derive(Clone, Debug)]
-pub enum Expr<Ast: AstConfig> {
-    Binary(Binary<Ast>),
-    Unary(Unary<Ast>),
-    // I don't think var is actually needed. During parsing we do still need such a construct because we lack context
-    // (A slotmap does not even exist yet, everything is just identifiers that may or may not exist)
-    // But afterwards it is redundant
-    //Var(VarKey),
-    // We might even be able to do the same thing for constants, if we include this in the type information instead
-    // - maybe not actually, as a varkey should come with an ssa as well. But maybe a type is the field of Const does work
-    // - or alternatively, a map of constants alongside the ssa map
-    Bool(bool),
-    U32(u32),
 }
 
 #[derive(Copy, Clone, Debug)]

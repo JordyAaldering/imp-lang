@@ -64,6 +64,9 @@ impl CodegenContext {
         let mut c_code = String::new();
 
         match expr {
+            Expr::Tensor(_) => {
+                todo!()
+            }
             Expr::Binary(Binary { l, r, op }) => {
                 if let ArgOrVar::Var(k) = l {
                     let l_code = self.compile_expr(fundef, &fundef.ssa[*k]);

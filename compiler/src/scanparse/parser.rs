@@ -131,13 +131,53 @@ impl<'src> Parser<'src> {
     }
 
     /// ```bnf
-    /// <expr> := "(" <expr> ")"
+    /// <expr> := <tensor>
     ///         | <binary>
     ///         | <unary>
     ///         | <literal>
+    ///         | "(" <expr> ")"
     /// ```
     fn parse_expr(&mut self, prev_op: Option<impl Operator>) -> ParseResult<Expr> {
-        self.parse_binary(prev_op)
+        if let Some((Token::LBrace, _)) = self.lexer.peek() {
+            self.parse_tensor()
+        } else {
+            self.parse_binary(prev_op)
+        }
+    }
+
+    /// ```bnf
+    /// <tensor> := "{" <expr> "|" <shp> "<=" <id> "<" <shp> "}"
+    /// ```
+    fn parse_tensor(&mut self) -> ParseResult<Expr> {
+        self.expect(Token::LBrace)?;
+
+        let expr = self.parse_expr(None::<Bop>)?;
+
+        self.expect(Token::Bar)?;
+
+        let (token, span) = self.next()?;
+        let lb = if let Token::U32Value(v) = token {
+            v as usize
+        } else {
+            return Err(ParseError::UnexpectedToken("lower bound expected".to_owned(), token, span));
+        };
+
+        self.expect(Token::Le)?;
+
+        let (iv, _) = self.parse_id()?;
+
+        self.expect(Token::Lt)?;
+
+        let (token, span) = self.next()?;
+        let ub = if let Token::U32Value(v) = token {
+            v as usize
+        } else {
+            return Err(ParseError::UnexpectedToken("upper bound expected".to_owned(), token, span));
+        };
+
+        self.expect(Token::RBrace)?;
+
+        Ok(Expr::Tensor { expr: Box::new(expr), iv, lb, ub })
     }
 
     /// Uses Pratt parsing to handle associativity and operator precedence.

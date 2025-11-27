@@ -45,7 +45,7 @@ impl Rewriter for TypeInfer {
         }
 
         let old_key = fundef.ret.clone();
-        new_fundef.ret = self.trav_identifier(old_key, &mut fundef)?;
+        new_fundef.ret = self.trav_ssa(old_key, &mut fundef)?;
 
         mem::swap(&mut self.new_vars, &mut new_fundef.vars);
 
@@ -54,7 +54,7 @@ impl Rewriter for TypeInfer {
         Ok(new_fundef)
     }
 
-    fn trav_identifier(&mut self, id: ArgOrVar<UntypedAst>, fundef: &mut Fundef<Self::InAst>) -> Result<ArgOrVar<TypedAst>, Self::Err> {
+    fn trav_ssa(&mut self, id: ArgOrVar<UntypedAst>, fundef: &mut Fundef<Self::InAst>) -> Result<ArgOrVar<TypedAst>, Self::Err> {
         let id = match id {
             ArgOrVar::Arg(i) => {
                 let ty = fundef.args[i].ty.expect("function argument cannot be untyped");
@@ -78,8 +78,8 @@ impl Rewriter for TypeInfer {
     }
 
     fn trav_binary(&mut self, binary: Binary<Self::InAst>, fundef: &mut Fundef<Self::InAst>) -> Result<Binary<Self::OutAst>, Self::Err> {
-        let l = self.trav_identifier(binary.l, fundef)?;
-        let r = self.trav_identifier(binary.r, fundef)?;
+        let l = self.trav_ssa(binary.l, fundef)?;
+        let r = self.trav_ssa(binary.r, fundef)?;
 
         // TODO: check if lty and rty unify
 
@@ -102,7 +102,7 @@ impl Rewriter for TypeInfer {
     }
 
     fn trav_unary(&mut self, unary: Unary<Self::InAst>, fundef: &mut Fundef<Self::InAst>) -> Result<Unary<Self::OutAst>, Self::Err> {
-        let r = self.trav_identifier(unary.r, fundef)?;
+        let r = self.trav_ssa(unary.r, fundef)?;
 
         use Uop::*;
         self.found_ty = Some(match unary.op {

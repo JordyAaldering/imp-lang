@@ -76,8 +76,9 @@ impl CodegenContext {
         fundef: &Fundef<TypedAst>,
     ) -> LLVMValueRef {
         match expr {
-            Expr::U32(v) => self.build_u32(*v),
-            Expr::Bool(v) => self.build_bool(*v),
+            Expr::Tensor(_) => {
+                todo!()
+            },
             Expr::Binary(Binary { l, r, op }) => {
                 let l = match l {
                     ArgOrVar::Arg(i) => fargs[*i],
@@ -119,6 +120,8 @@ impl CodegenContext {
                     }
                 }
             },
+            Expr::U32(v) => self.build_u32(*v),
+            Expr::Bool(v) => self.build_bool(*v),
         }
     }
 

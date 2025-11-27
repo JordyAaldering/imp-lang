@@ -26,6 +26,12 @@ pub enum Stmt {
 
 #[derive(Debug)]
 pub enum Expr {
+    Tensor {
+        expr: Box<Expr>,
+        iv: String,
+        lb: usize,
+        ub: usize,
+    },
     Binary {
         l: Box<Expr>,
         r: Box<Expr>,

@@ -93,6 +93,10 @@ impl ConvertToSsa {
                 // We need explicit handling of the outermost expression, which is why we don't call convert_expr immediately
                 // We can probably make this nicer though
                 let e = match expr {
+                    parse_ast::Expr::Tensor { expr, iv, lb, ub } => {
+                        let expr = self.convert_expr(*expr)?;
+                        Expr::Tensor(Tensor { expr, iv, lb, ub })
+                    },
                     parse_ast::Expr::Binary { l, r, op } => {
                         let l_key = self.convert_expr(*l)?;
                         let r_key = self.convert_expr(*r)?;
@@ -133,6 +137,10 @@ impl ConvertToSsa {
 
     pub fn convert_expr(&mut self, expr: parse_ast::Expr) -> SsaResult<ArgOrVar<UntypedAst>> {
         let e = match expr {
+            parse_ast::Expr::Tensor { expr, iv, lb, ub } => {
+                let expr = self.convert_expr(*expr)?;
+                Expr::Tensor(Tensor { expr, iv, lb, ub })
+            },
             parse_ast::Expr::Binary { l, r, op } => {
                 let l_key = self.convert_expr(*l)?;
                 let r_key = self.convert_expr(*r)?;
