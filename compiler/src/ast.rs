@@ -4,7 +4,7 @@ mod unary;
 pub use binary::{Binary, Bop};
 pub use unary::{Unary, Uop};
 
-use std::ops::Index;
+use std::ops::{Index, IndexMut};
 
 use slotmap::*;
 
@@ -61,6 +61,15 @@ impl Index<ArgOrVar> for Fundef {
         match x {
             ArgOrVar::Arg(i) => &self.args[i],
             ArgOrVar::Var(k) => &self.vars[k],
+        }
+    }
+}
+
+impl IndexMut<ArgOrVar> for Fundef {
+    fn index_mut(&mut self, x: ArgOrVar) -> &mut Self::Output {
+        match x {
+            ArgOrVar::Arg(i) => &mut self.args[i],
+            ArgOrVar::Var(k) => &mut self.vars[k],
         }
     }
 }

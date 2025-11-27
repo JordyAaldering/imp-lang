@@ -1,89 +1,114 @@
-use crate::ast::*;
+use crate::{ast::*, traverse::Traversal};
 
-pub struct TypeInfer;
+pub struct TypeInfer {
+    found_ty: Option<Type>,
+}
 
 #[derive(Debug)]
 pub enum InferenceError {}
 
-type InferenceResult<T> = Result<T, InferenceError>;
-
 impl TypeInfer {
     pub fn new() -> Self {
-        Self
+        Self {
+            found_ty: None
+        }
     }
+}
 
-    pub fn infer_program(&mut self, program: Program) -> InferenceResult<Program> {
-        let mut fundefs = Vec::new();
-        for f in program.fundefs {
-            fundefs.push(self.infer_fundef(f)?);
+impl Traversal for TypeInfer {
+    type Err = InferenceError;
+
+    fn trav_fundef(&mut self, mut fundef: Fundef) -> Result<Fundef, Self::Err> {
+        fundef.ret_id = self.trav_identifier(fundef.ret_id, &mut fundef)?;
+        if let ArgOrVar::Var(k) = fundef.ret_id {
+            fundef.vars[k].ty = self.found_ty;
         }
 
-        Ok(Program { fundefs })
+        Ok(fundef)
     }
 
-    pub fn infer_fundef(&mut self, fundef: Fundef) -> InferenceResult<Fundef> {
-        let mut new_fundef = fundef.clone();
-
-        // Go bottom-up using the return value to infer all types
-        let _ret_value = self.infer_type(&mut new_fundef, fundef.ret_id);
-        // todo: check if matches user given return type
-
-        Ok(new_fundef)
-    }
-
-    pub fn infer_type(&mut self, scope: &mut Fundef, aov: ArgOrVar) -> Type {
-        match aov {
+    fn trav_identifier(&mut self, id: ArgOrVar, fundef: &mut Fundef) -> Result<ArgOrVar, Self::Err> {
+        match id {
             ArgOrVar::Arg(i) => {
-                scope.args[i].ty.unwrap()
+                let ty = fundef.args[i].ty.expect("function argument cannot be untyped");
+                self.found_ty = Some(ty);
             },
             ArgOrVar::Var(k) => {
-                let ty = match scope.ssa[k] {
-                    Expr::Binary(Binary { l, r, op }) => {
-                        let _l_ty = self.infer_type(scope, l);
-                        let _r_ty = self.infer_type(scope, r);
-                        // TODO: check if l_ty and r_ty unify
+                fundef.ssa[k] = self.trav_expr(fundef.ssa[k].clone(), fundef)?;
+                fundef.vars[k].ty = self.found_ty;
+                // match expr {
+                //     Expr::Binary(n) => {
+                //         *n = self.trav_binary(*n, fundef)?;
+                //     },
+                //     Expr::Unary(n) => {
+                //         *n = self.trav_unary(*n, fundef)?;
+                //     },
+                //     Expr::Bool(_) => {
+                //         self.found_ty = Some(Type::Bool);
+                //     },
+                //     Expr::U32(_) => {
+                //         self.found_ty = Some(Type::U32);
+                //     },
+                // };
+            },
+        };
 
-                        use Bop::*;
-                        match op {
-                            Add | Sub | Mul | Div => {
-                                // TODO: check if unifies with num
-                                Type::U32
-                            },
-                            Eq | Ne => {
-                                Type::Bool
-                            },
-                            Lt | Le | Gt | Ge => {
-                                // TODO: check if unifies with num
-                                Type::Bool
-                            },
-                        }
-                    },
-                    Expr::Unary(Unary { r, op }) => {
-                        let _r_ty = self.infer_type(scope, r);
+        Ok(id)
+    }
 
-                        use Uop::*;
-                        match op {
-                            Neg => {
-                                // TODO: check if r_ty unifies with num
-                                Type::U32
-                            },
-                            Not => {
-                                // TODO: check if r_ty unifies with bool
-                                Type::Bool
-                            },
-                        }
-                    },
-                    Expr::Bool(_) => {
-                        Type::Bool
-                    },
-                    Expr::U32(_) => {
-                        Type::U32
-                    },
-                };
+    fn trav_binary(&mut self, mut binary: Binary, fundef: &mut Fundef) -> Result<Binary, Self::Err> {
+        binary.l = self.trav_identifier(binary.l, fundef)?;
+        fundef[binary.l].ty = self.found_ty;
 
-                scope.vars[k].ty = Some(ty);
-                ty
-            }
-        }
+        binary.r = self.trav_identifier(binary.r, fundef)?;
+        fundef[binary.r].ty = self.found_ty;
+
+        // TODO: check if lty and rty unify
+
+        use Bop::*;
+        self.found_ty = Some(match binary.op {
+            Add | Sub | Mul | Div => {
+                // TODO: check if unifies with num
+                Type::U32
+            },
+            Eq | Ne => {
+                Type::Bool
+            },
+            Lt | Le | Gt | Ge => {
+                // TODO: check if unifies with num
+                Type::Bool
+            },
+        });
+
+        Ok(binary)
+    }
+
+    fn trav_unary(&mut self, mut unary: Unary, fundef: &mut Fundef) -> Result<Unary, Self::Err> {
+        unary.r = self.trav_identifier(unary.r, fundef)?;
+        fundef[unary.r].ty = self.found_ty;
+
+        use Uop::*;
+        self.found_ty = Some(match unary.op {
+            Neg => {
+                // TODO: check if r_ty unifies with signed num
+                Type::U32
+            },
+            Not => {
+                // TODO: check if r_ty unifies with bool
+                Type::Bool
+            },
+        });
+
+        Ok(unary)
+    }
+
+    fn trav_bool(&mut self, value: bool, _fundef: &mut Fundef) -> Result<bool, Self::Err> {
+        self.found_ty = Some(Type::Bool);
+        Ok(value)
+    }
+
+    fn trav_u32(&mut self, value: u32, _fundef: &mut Fundef) -> Result<u32, Self::Err> {
+        self.found_ty = Some(Type::U32);
+        Ok(value)
     }
 }

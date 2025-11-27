@@ -1,4 +1,4 @@
-use compiler::*;
+use compiler::{traverse::Traversal, *};
 
 use std::{env, fs};
 
@@ -8,7 +8,7 @@ fn main() {
     let ast = scanparse::scanparse(&src).unwrap();
     let ast = convert_to_ssa::ConvertToSsa::new().convert_program(ast).unwrap();
     show::Show::new().show_program(&ast);
-    let ast = type_infer::TypeInfer::new().infer_program(ast).unwrap();
+    let ast = type_infer::TypeInfer::new().trav_program(ast).unwrap();
     show::Show::new().show_program(&ast);
     let c_code = codegen_c::CodegenContext::new().compile_program(&ast);
     println!("{}", c_code);

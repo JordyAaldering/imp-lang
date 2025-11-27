@@ -5,19 +5,19 @@ pub mod codegen_llvm;
 pub mod convert_to_ssa;
 pub mod scanparse;
 pub mod show;
+pub mod traverse;
 pub mod type_infer;
-mod traverse;
 
 use std::{ffi::CString, ptr};
 
 use llvm_sys::core::LLVMPrintModuleToFile;
 
-use ast::*;
+use crate::{ast::*, traverse::Traversal};
 
 pub fn compile(src: &str) -> Program {
     let ast = scanparse::scanparse(&src).unwrap();
     let ast = convert_to_ssa::ConvertToSsa::new().convert_program(ast).unwrap();
-    let ast = type_infer::TypeInfer::new().infer_program(ast).unwrap();
+    let ast = type_infer::TypeInfer::new().trav_program(ast).unwrap();
     ast
 }
 
