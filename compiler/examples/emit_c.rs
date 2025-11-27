@@ -14,5 +14,5 @@ fn main() {
     print!("{}", c_code);
 
     let undo_ssa = undo_ssa::UndoSsa::new().trav_program(&ast);
-    println!("{:#?}", undo_ssa);
+    println!("{:?}", undo_ssa);
 }

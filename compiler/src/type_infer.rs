@@ -63,7 +63,7 @@ impl Rewriter for TypeInfer {
 
                 let old_avis = &fundef.vars[old_key];
                 let new_key = self.new_vars.insert_with(|new_key| {
-                    Avis { name: old_avis.name.to_owned(), ty: self.found_ty.clone().unwrap(), _key: ArgOrVar::Var(new_key) }
+                    Avis { name: old_avis.name.to_owned(), ty: self.found_ty.clone().unwrap(), key: ArgOrVar::Var(new_key) }
                 });
                 println!("replaced {:?} by {:?} = {:?}", old_key, new_key, new_expr);
                 self.new_ssa.insert(new_key, new_expr);
@@ -92,7 +92,7 @@ impl Rewriter for TypeInfer {
     fn trav_iv(&mut self, iv: IndexVector, fundef: &mut Fundef<Self::InAst>) -> Result<IndexVector, Self::Err> {
         let old_avis = &fundef.vars[iv.0];
         let new_key = self.new_vars.insert_with(|new_key| {
-            Avis { name: old_avis.name.to_owned(), ty: Type { basetype: BaseType::U32, shp: Shape::Scalar }, _key: ArgOrVar::Iv(new_key) }
+            Avis { name: old_avis.name.to_owned(), ty: Type { basetype: BaseType::U32, shp: Shape::Scalar }, key: ArgOrVar::Iv(new_key) }
         });
         println!("replaced index vector {:?} by {:?}", iv.0, new_key);
         Ok(IndexVector(new_key))

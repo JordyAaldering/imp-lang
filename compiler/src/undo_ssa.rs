@@ -19,26 +19,28 @@ impl UndoSsa {
             (a.ty.clone(), a.name.clone())
         }).collect();
 
-        let body = self.generate_assignment(&fundef.ret, fundef);
+        let mut body = Vec::new();
+        body.push(self.generate_assignment(fundef.ret, fundef));
+        body.push(Stmt::Return { expr: Expr::Identifier(fundef[fundef.ret].name.to_owned()) });
 
         Fundef {
-            name: fundef.name.clone(),
-            ret_type: fundef[fundef.ret.clone()].ty.clone(),
+            name: fundef.name.to_owned(),
+            ret_type: fundef[fundef.ret].ty.to_owned(),
             args,
-            body: vec![body],
+            body,
         }
     }
 
-    fn generate_assignment(&mut self, id: &ArgOrVar, fundef: &ast::Fundef<TypedAst>) -> Stmt {
+    fn generate_assignment(&mut self, id: ArgOrVar, fundef: &ast::Fundef<TypedAst>) -> Stmt {
         let lhs = fundef[id].name.clone();
 
         let expr = match id {
             ArgOrVar::Arg(i) => {
-                Expr::Identifier(fundef.args[*i].name.clone())
+                Expr::Identifier(fundef.args[i].name.clone())
             },
             ArgOrVar::Var(k) => {
                 // TODO: if an ssa key is used in multiple places, pull the computation out. otherwise inline it
-                match &fundef.ssa[*k] {
+                match fundef.ssa[k] {
                     ast::Expr::Tensor(ast::Tensor { iv, expr, lb, ub }) => {
                         let iv = IndexVector(fundef.vars[iv.0].name.clone());
                         let expr = self.inline_expr(expr, fundef);
@@ -55,26 +57,26 @@ impl UndoSsa {
                         let r = self.inline_expr(r, fundef);
                         Expr::Unary { r: Box::new(r), op: op.clone() }
                     },
-                    ast::Expr::Bool(v) => Expr::Bool(*v),
-                    ast::Expr::U32(v) => Expr::U32(*v),
+                    ast::Expr::Bool(v) => Expr::Bool(v),
+                    ast::Expr::U32(v) => Expr::U32(v),
                 }
             },
             ArgOrVar::Iv(k) => {
-                Expr::Identifier(fundef.vars[*k].name.clone())
+                Expr::Identifier(fundef.vars[k].name.clone())
             },
         };
 
         Stmt::Assign { lhs, expr }
     }
 
-    fn inline_expr(&mut self, id: &ArgOrVar, fundef: &ast::Fundef<TypedAst>) -> Expr {
+    fn inline_expr(&mut self, id: ArgOrVar, fundef: &ast::Fundef<TypedAst>) -> Expr {
         match id {
             ArgOrVar::Arg(i) => {
-                Expr::Identifier(fundef.args[*i].name.clone())
+                Expr::Identifier(fundef.args[i].name.clone())
             },
             ArgOrVar::Var(k) => {
-                println!("looking for {}", fundef.vars[*k].name);
-                match &fundef.ssa[*k] {
+                println!("looking for {}", fundef.vars[k].name);
+                match fundef.ssa[k] {
                     ast::Expr::Tensor(ast::Tensor { iv, expr, lb, ub }) => {
                         let iv = IndexVector(fundef.vars[iv.0].name.clone());
                         let expr = self.inline_expr(expr, fundef);
@@ -91,12 +93,12 @@ impl UndoSsa {
                         let r = self.inline_expr(r, fundef);
                         Expr::Unary { r: Box::new(r), op: op.clone() }
                     },
-                    ast::Expr::Bool(v) => Expr::Bool(*v),
-                    ast::Expr::U32(v) => Expr::U32(*v),
+                    ast::Expr::Bool(v) => Expr::Bool(v),
+                    ast::Expr::U32(v) => Expr::U32(v),
                 }
             },
             ArgOrVar::Iv(k) => {
-                Expr::Identifier(fundef.vars[*k].name.clone())
+                Expr::Identifier(fundef.vars[k].name.clone())
             },
         }
     }
