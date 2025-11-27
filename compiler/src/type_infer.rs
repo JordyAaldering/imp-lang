@@ -89,6 +89,16 @@ impl Rewriter for TypeInfer {
         Ok(id)
     }
 
+    fn trav_tensor(&mut self, tensor: Tensor<Self::InAst>, fundef: &mut Fundef<Self::InAst>) -> Result<Tensor<Self::OutAst>, Self::Err> {
+        let iv = self.trav_iv(tensor.iv, fundef)?;
+        let expr = self.trav_ssa(tensor.expr, fundef)?;
+        let ety = self.found_ty.take().unwrap();
+        let lb = self.trav_ssa(tensor.lb, fundef)?;
+        let ub = self.trav_ssa(tensor.ub, fundef)?;
+        self.found_ty = Some(Type { basetype: ety.basetype, shp: Shape::Vector((if let Shape::Scalar = ety.shp { "." } else { "*" }).to_owned()) });
+        Ok(Tensor { iv, expr, lb, ub })
+    }
+
     fn trav_iv(&mut self, iv: IndexVector<Self::InAst>, fundef: &mut Fundef<Self::InAst>) -> Result<IndexVector<Self::OutAst>, Self::Err> {
         let old_avis = &fundef.vars[iv.0];
         let new_key = self.new_vars.insert_with_key(|new_key| {
