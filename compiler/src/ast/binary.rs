@@ -1,11 +1,11 @@
 use std::fmt;
 
-use super::ArgOrVar;
+use super::{ArgOrVar, AstConfig};
 
 #[derive(Clone, Debug)]
-pub struct Binary {
-    pub l: ArgOrVar,
-    pub r: ArgOrVar,
+pub struct Binary<Ast: AstConfig> {
+    pub l: ArgOrVar<Ast>,
+    pub r: ArgOrVar<Ast>,
     pub op: Bop,
 }
 

@@ -6,9 +6,9 @@ use crate::{ast::*, scanparse::parse_ast};
 
 pub struct ConvertToSsa {
     uid: usize,
-    vars: Option<SlotMap<VarKey, Avis>>,
-    ssa: Option<SecondaryMap<VarKey, Expr>>,
-    parse_name_to_key: HashMap<String, ArgOrVar>,
+    vars: Option<SlotMap<UntypedKey, Avis<UntypedAst>>>,
+    ssa: Option<SecondaryMap<UntypedKey, Expr<UntypedAst>>>,
+    name_to_key: HashMap<String, ArgOrVar<UntypedAst>>,
 }
 
 #[derive(Debug)]
@@ -24,7 +24,7 @@ impl ConvertToSsa {
             uid: 0,
             vars: None,
             ssa: None,
-            parse_name_to_key: HashMap::new(),
+            name_to_key: HashMap::new(),
         }
     }
 
@@ -36,7 +36,7 @@ impl ConvertToSsa {
         s
     }
 
-    pub fn convert_program(&mut self, program: parse_ast::Program) -> SsaResult<Program> {
+    pub fn convert_program(&mut self, program: parse_ast::Program) -> SsaResult<Program<UntypedAst>> {
         let mut fundefs = Vec::new();
         for f in program.fundefs {
             fundefs.push(self.convert_fundef(f)?);
@@ -45,22 +45,22 @@ impl ConvertToSsa {
         Ok(Program { fundefs })
     }
 
-    pub fn convert_fundef(&mut self, fundef: parse_ast::Fundef) -> SsaResult<Fundef> {
+    pub fn convert_fundef(&mut self, fundef: parse_ast::Fundef) -> SsaResult<Fundef<UntypedAst>> {
         // Reset self
         self.uid = 0;
         self.vars = Some(SlotMap::with_key());
         self.ssa = Some(SecondaryMap::new());
-        self.parse_name_to_key.clear();
+        self.name_to_key.clear();
 
         let mut args = Vec::new();
         for (i, (ty, id)) in fundef.args.into_iter().enumerate() {
             args.push(Avis::new(ArgOrVar::Arg(i), &id, Some(ty)));
-            self.parse_name_to_key.insert(id, ArgOrVar::Arg(i));
+            self.name_to_key.insert(id, ArgOrVar::Arg(i));
         }
 
         let ret_value = self.convert_body(fundef.body)?;
         if let ArgOrVar::Var(k) = ret_value {
-            self.vars.as_mut().unwrap()[k].set_type(fundef.ret_type);
+            self.vars.as_mut().unwrap()[k].ty = Some(fundef.ret_type);
         }
 
         Ok(Fundef {
@@ -72,7 +72,7 @@ impl ConvertToSsa {
         })
     }
 
-    pub fn convert_body(&mut self, body: Vec<parse_ast::Stmt>) -> SsaResult<ArgOrVar> {
+    pub fn convert_body(&mut self, body: Vec<parse_ast::Stmt>) -> SsaResult<ArgOrVar<UntypedAst>> {
         for stmt in body {
             if let Some(ret_value_key) = self.convert_stmt(stmt)? {
                 // A return statement was encountered, we can stop now
@@ -87,7 +87,7 @@ impl ConvertToSsa {
         Err(SsaError::MissingReturnStatement)
     }
 
-    pub fn convert_stmt(&mut self, stmt: parse_ast::Stmt) -> SsaResult<Option<ArgOrVar>> {
+    pub fn convert_stmt(&mut self, stmt: parse_ast::Stmt) -> SsaResult<Option<ArgOrVar<UntypedAst>>> {
         match stmt {
             parse_ast::Stmt::Assign { lhs, expr } => {
                 // We need explicit handling of the outermost expression, which is why we don't call convert_expr immediately
@@ -103,7 +103,7 @@ impl ConvertToSsa {
                         Expr::Unary(Unary { r: r_key, op })
                     },
                     parse_ast::Expr::Identifier(id) => {
-                        return Ok(Some(self.parse_name_to_key[&id]));
+                        return Ok(Some(self.name_to_key[&id].clone()));
                     },
                     parse_ast::Expr::Bool(v) => {
                         Expr::Bool(v)
@@ -120,7 +120,7 @@ impl ConvertToSsa {
 
                 self.ssa.as_mut().unwrap().insert(key, e);
 
-                self.parse_name_to_key.insert(lhs, ArgOrVar::Var(key));
+                self.name_to_key.insert(lhs, ArgOrVar::Var(key));
 
                 Ok(None)
             },
@@ -131,7 +131,7 @@ impl ConvertToSsa {
         }
     }
 
-    pub fn convert_expr(&mut self, expr: parse_ast::Expr) -> SsaResult<ArgOrVar> {
+    pub fn convert_expr(&mut self, expr: parse_ast::Expr) -> SsaResult<ArgOrVar<UntypedAst>> {
         let e = match expr {
             parse_ast::Expr::Binary { l, r, op } => {
                 let l_key = self.convert_expr(*l)?;
@@ -149,7 +149,7 @@ impl ConvertToSsa {
                 Expr::U32(v)
             },
             parse_ast::Expr::Identifier(id) => {
-                return Ok(self.parse_name_to_key[&id])
+                return Ok(self.name_to_key[&id].clone())
             },
         };
 

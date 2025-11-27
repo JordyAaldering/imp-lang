@@ -15,7 +15,7 @@ impl CodegenContext {
         }
     }
 
-    pub fn compile_program(&mut self, program: &Program) -> String {
+    pub fn compile_program(&mut self, program: &Program<TypedAst>) -> String {
         let mut c_code = String::new();
 
         c_code.push_str("#include <stdbool.h>\n");
@@ -29,11 +29,11 @@ impl CodegenContext {
         c_code
     }
 
-    fn compile_fundef(&mut self, fundef: &Fundef) -> String {
+    fn compile_fundef(&mut self, fundef: &Fundef<TypedAst>) -> String {
         let mut c_code = String::new();
 
         // Function signature
-        let ret_type = to_ctype(fundef[fundef.ret_id].ty);
+        let ret_type = to_ctype(fundef[fundef.ret_id.clone()].ty);
 
         let args: Vec<String> = fundef.args.iter().map(|avis| {
             let ty_str = to_ctype(avis.ty);
@@ -60,25 +60,25 @@ impl CodegenContext {
         c_code
     }
 
-    fn compile_expr(&mut self, fundef: &Fundef, expr: &Expr) -> String {
+    fn compile_expr(&mut self, fundef: &Fundef<TypedAst>, expr: &Expr<TypedAst>) -> String {
         let mut c_code = String::new();
 
         match expr {
             Expr::Binary(Binary { l, r, op }) => {
                 if let ArgOrVar::Var(k) = l {
                     let l_code = self.compile_expr(fundef, &fundef.ssa[*k]);
-                    self.stmts.push(format!("{} {} = {};", to_ctype(fundef[*k].ty), fundef[*k].name, l_code));
+                    self.stmts.push(format!("{} {} = {};", to_ctype(fundef.vars[*k].ty), fundef.vars[*k].name, l_code));
                 }
 
-                c_code.push_str(&format!("{} {} {}", fundef[*l].name, op, fundef[*r].name));
+                c_code.push_str(&format!("{} {} {}", fundef[l.clone()].name, op, fundef[r.clone()].name));
             },
             Expr::Unary(Unary { r, op }) => {
                 if let ArgOrVar::Var(k) = r {
                     let r_code = self.compile_expr(fundef, &fundef.ssa[*k]);
-                    self.stmts.push(format!("{} {} = {};", to_ctype(fundef[*k].ty), fundef[*k].name, r_code));
+                    self.stmts.push(format!("{} {} = {};", to_ctype(fundef.vars[*k].ty), fundef.vars[*k].name, r_code));
                 }
 
-                c_code.push_str(&format!("{} {}", op, fundef[*r].name));
+                c_code.push_str(&format!("{} {}", op, fundef[r.clone()].name));
             },
             Expr::Bool(v) => {
                 c_code.push_str(if *v { "true" } else { "false" });
@@ -92,8 +92,8 @@ impl CodegenContext {
     }
 }
 
-fn to_ctype(ty: Option<Type>) -> &'static str {
-    match ty.unwrap() {
+fn to_ctype(ty: Type) -> &'static str {
+    match ty {
         Type::U32 => "uint32_t",
         Type::Bool => "bool",
     }

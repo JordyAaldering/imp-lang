@@ -1,15 +1,15 @@
 use crate::ast::*;
 
-pub fn compile_header(fundef: &Fundef) -> String {
+pub fn compile_header(fundef: &Fundef<TypedAst>) -> String {
     let mut s = String::new();
 
-    let ret_type = match fundef[fundef.ret_id].ty.unwrap() {
+    let ret_type = match fundef[fundef.ret_id.clone()].ty {
         Type::U32 => "u32",
         Type::Bool => "bool",
     };
 
     let args: Vec<String> = fundef.args.iter().map(|avis| {
-        let ty_str = match avis.ty.unwrap() {
+        let ty_str = match avis.ty {
             Type::U32 => "u32",
             Type::Bool => "bool",
         };

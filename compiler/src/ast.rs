@@ -4,60 +4,88 @@ mod unary;
 pub use binary::{Binary, Bop};
 pub use unary::{Unary, Uop};
 
-use std::ops::{Index, IndexMut};
+use std::{fmt, ops::{Index, IndexMut}};
 
 use slotmap::*;
 
-new_key_type! { pub struct VarKey; }
+pub trait AstConfig: Clone + fmt::Debug {
+    type VarKey: Key;
+
+    type ValueType: Clone + fmt::Debug;
+}
+
+#[derive(Clone, Debug)]
+pub struct UntypedAst;
+
+impl AstConfig for UntypedAst {
+    type VarKey = UntypedKey;
+
+    type ValueType = Option<Type>;
+}
+
+#[derive(Clone, Debug)]
+pub struct TypedAst;
+
+impl AstConfig for TypedAst {
+    type VarKey = TypedKey;
+
+    type ValueType = Type;
+}
+
+new_key_type! { pub struct TypedKey; }
+new_key_type! { pub struct UntypedKey; }
 new_key_type! { pub struct ExprKey; }
 
 #[derive(Clone, Debug)]
-pub struct Avis {
-    pub _key: ArgOrVar,
+pub struct Avis<Ast: AstConfig> {
     pub name: String,
-    pub ty: Option<Type>,
+    pub ty: Ast::ValueType,
+    pub _key: ArgOrVar<Ast>,
 }
 
-impl Avis {
-    pub fn new(key: ArgOrVar, name: &str, ty: Option<Type>) -> Self {
+impl<Ast: AstConfig> Avis<Ast> {
+    pub fn new(key: ArgOrVar<Ast>, name: &str, ty: Ast::ValueType) -> Self {
         Self { _key: key, name: name.to_owned(), ty }
-    }
-
-    pub fn set_type(&mut self, ty: Type) {
-        assert!(self.ty.is_none());
-        self.ty = Some(ty)
     }
 }
 
 #[derive(Clone, Copy, Debug)]
-pub enum ArgOrVar {
+pub enum ArgOrVar<Ast: AstConfig> {
     Arg(usize),
-    Var(VarKey),
+    Var(Ast::VarKey),
 }
 
 #[derive(Clone, Debug)]
-pub struct Program {
-    pub fundefs: Vec<Fundef>,
+pub struct Program<Ast: AstConfig> {
+    pub fundefs: Vec<Fundef<Ast>>,
+}
+
+impl<Ast: AstConfig> Program<Ast> {
+    pub fn new() -> Self {
+        Self {
+            fundefs: Vec::new(),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
-pub struct Fundef {
+pub struct Fundef<Ast: AstConfig> {
     pub name: String,
-    pub args: Vec<Avis>,
-    pub vars: SlotMap<VarKey, Avis>,
+    pub args: Vec<Avis<Ast>>,
+    pub vars: SlotMap<Ast::VarKey, Avis<Ast>>,
     /// arena containing a mapping of variable keys to their ssa assignment expressions
     /// two options for multi-return:
     ///  1) also keep track of return index here
     ///  2) add tuple types, and insert extraction functions, then there is always only one lhs
     /// I am leaning towards option 1
-    pub ssa: SecondaryMap<VarKey, Expr>,
-    pub ret_id: ArgOrVar,
+    pub ssa: SecondaryMap<Ast::VarKey, Expr<Ast>>,
+    pub ret_id: ArgOrVar<Ast>,
 }
 
-impl Index<ArgOrVar> for Fundef {
-    type Output = Avis;
+impl<Ast: AstConfig> Index<ArgOrVar<Ast>> for Fundef<Ast> {
+    type Output = Avis<Ast>;
 
-    fn index(&self, x: ArgOrVar) -> &Self::Output {
+    fn index(&self, x: ArgOrVar<Ast>) -> &Self::Output {
         match x {
             ArgOrVar::Arg(i) => &self.args[i],
             ArgOrVar::Var(k) => &self.vars[k],
@@ -65,8 +93,8 @@ impl Index<ArgOrVar> for Fundef {
     }
 }
 
-impl IndexMut<ArgOrVar> for Fundef {
-    fn index_mut(&mut self, x: ArgOrVar) -> &mut Self::Output {
+impl<Ast: AstConfig> IndexMut<ArgOrVar<Ast>> for Fundef<Ast> {
+    fn index_mut(&mut self, x: ArgOrVar<Ast>) -> &mut Self::Output {
         match x {
             ArgOrVar::Arg(i) => &mut self.args[i],
             ArgOrVar::Var(k) => &mut self.vars[k],
@@ -74,32 +102,16 @@ impl IndexMut<ArgOrVar> for Fundef {
     }
 }
 
-impl Index<VarKey> for Fundef {
-    type Output = Avis;
-
-    fn index(&self, k: VarKey) -> &Self::Output {
-        &self.vars[k]
-    }
-}
-
-impl Fundef {
-    pub fn nameof(&self, key: VarKey) -> &String {
-        &self.vars[key].name
-    }
-
-    pub fn typof(&self, key: VarKey) -> &Option<Type> {
-        &self.vars[key].ty
-    }
-
-    pub fn insert_var(&mut self, id: &str, ty: Option<Type>) -> VarKey {
+impl<Ast: AstConfig> Fundef<Ast> {
+    pub fn insert_var(&mut self, id: &str, ty: Ast::ValueType) -> Ast::VarKey {
         self.vars.insert_with_key(|key| Avis::new(ArgOrVar::Var(key), id, ty))
     }
 }
 
 #[derive(Clone, Debug)]
-pub enum Expr {
-    Binary(Binary),
-    Unary(Unary),
+pub enum Expr<Ast: AstConfig> {
+    Binary(Binary<Ast>),
+    Unary(Unary<Ast>),
     // I don't think var is actually needed. During parsing we do still need such a construct because we lack context
     // (A slotmap does not even exist yet, everything is just identifiers that may or may not exist)
     // But afterwards it is redundant

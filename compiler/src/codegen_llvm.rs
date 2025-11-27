@@ -26,14 +26,14 @@ impl CodegenContext {
         }
     }
 
-    pub fn compile_fundef(&self, f: &Fundef) -> LLVMValueRef {
+    pub fn compile_fundef(&self, f: &Fundef<TypedAst>) -> LLVMValueRef {
         unsafe {
             let arg_types: Vec<LLVMTypeRef> = f.args.iter().map(|avis| {
-                self.llvm_type(&avis.ty.unwrap())
+                self.llvm_type(&avis.ty)
             }).collect();
 
             let fn_type = LLVMFunctionType(
-                self.llvm_type(&f[f.ret_id].ty.unwrap()),
+                self.llvm_type(&f[f.ret_id.clone()].ty),
                 arg_types.as_ptr() as *mut _,
                 arg_types.len() as u32,
                 0,
@@ -71,9 +71,9 @@ impl CodegenContext {
 
     pub fn compile_expr(
         &self,
-        expr: &Expr,
+        expr: &Expr<TypedAst>,
         fargs: &Vec<LLVMValueRef>,
-        fundef: &Fundef,
+        fundef: &Fundef<TypedAst>,
     ) -> LLVMValueRef {
         match expr {
             Expr::U32(v) => self.build_u32(*v),

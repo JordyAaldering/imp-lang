@@ -1,10 +1,10 @@
 use std::fmt;
 
-use super::ArgOrVar;
+use super::{ArgOrVar, AstConfig};
 
 #[derive(Clone, Debug)]
-pub struct Unary {
-    pub r: ArgOrVar,
+pub struct Unary<Ast: AstConfig> {
+    pub r: ArgOrVar<Ast>,
     pub op: Uop,
 }
 
