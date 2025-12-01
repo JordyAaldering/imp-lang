@@ -11,15 +11,13 @@ pub struct Fundef {
     pub args: Vec<(Type, String)>,
     pub ret_type: Type,
     pub body: Vec<Stmt>,
+    pub ret_expr: Expr,
 }
 
 #[derive(Debug)]
 pub enum Stmt {
     Assign {
         lhs: String,
-        expr: Expr,
-    },
-    Return {
         expr: Expr,
     },
 }

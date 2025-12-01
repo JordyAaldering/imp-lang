@@ -11,7 +11,7 @@ pub struct Parser<'src> {
 #[derive(Debug)]
 pub enum ParseError {
     NonAssociative,
-    #[allow(unused)]
+    MissingReturn,
     UnexpectedToken(String, Token, Span),
     UnexpectedEof,
 }
@@ -39,7 +39,7 @@ impl<'src> Parser<'src> {
 
     /// ```bnf
     /// <fundef> := "fn" <id> "(" [<farg> ("," <farg>)*]? ")" "->" <type>
-    ///                 <block>
+    ///                 "{" <stmt>* <return> "}"
     /// ```
     fn parse_fundef(&mut self) -> ParseResult<Fundef> {
         let (_, _span_start) = self.expect(Token::Fn)?;
@@ -64,9 +64,29 @@ impl<'src> Parser<'src> {
 
         let (ret_type, _) = self.parse_type()?;
 
-        let body = self.parse_block()?;
+        self.expect(Token::LBrace)?;
 
-        Ok(Fundef { id, args, ret_type, body })
+        let mut body = Vec::new();
+        let ret_expr;
+
+        loop {
+            match self.peek()?.0 {
+                Token::RBrace => {
+                    return Err(ParseError::MissingReturn);
+                }
+                Token::Return => {
+                    ret_expr = self.parse_return()?;
+                    break;
+                },
+                _ => {
+                    body.push(self.parse_stmt()?);
+                }
+            }
+        }
+
+        self.expect(Token::RBrace)?;
+
+        Ok(Fundef { id, args, ret_type, body, ret_expr })
     }
 
     /// ```bnf
@@ -81,20 +101,6 @@ impl<'src> Parser<'src> {
     }
 
     /// ```bnf
-    /// <block> := "{" <stmt>* "}"
-    /// ```
-    fn parse_block(&mut self) -> ParseResult<Vec<Stmt>> {
-        self.expect(Token::LBrace)?;
-
-        let mut stmts = Vec::new();
-        while self.matches(Token::RBrace).is_none() {
-            stmts.push(self.parse_stmt()?);
-        }
-
-        Ok(stmts)
-    }
-
-    /// ```bnf
     /// <stmt> := <assign>
     ///         | <return>
     ///
@@ -102,8 +108,6 @@ impl<'src> Parser<'src> {
     ///           | <type> <id> ";"
     ///
     /// <assign> := <id> "=" <expr> ";"
-    ///
-    /// <return> := "return" <expr> ";"
     /// ```
     fn parse_stmt(&mut self) -> ParseResult<Stmt> {
         let (token, span) = self.next()?;
@@ -114,15 +118,22 @@ impl<'src> Parser<'src> {
                 let expr = self.parse_expr(None::<Bop>)?;
                 Stmt::Assign { lhs, expr }
             },
-            Token::Return => {
-                Stmt::Return { expr: self.parse_expr(None::<Bop>)? }
-            },
             _ => return Err(ParseError::UnexpectedToken("statement".to_owned(), token, span)),
         };
 
         self.expect(Token::Semicolon)?;
 
         Ok(stmt)
+    }
+
+    /// ```bnf
+    /// <return> := "return" <expr> ";"
+    /// ```
+    fn parse_return(&mut self) -> ParseResult<Expr> {
+        self.expect(Token::Return)?;
+        let expr = self.parse_expr(None::<Bop>)?;
+        self.expect(Token::Semicolon)?;
+        Ok(expr)
     }
 
     /// ```bnf
@@ -286,6 +297,11 @@ impl<'src> Parser<'src> {
         } else {
             Err(ParseError::UnexpectedToken(format!("{:?}", expected), token, span))
         }
+    }
+
+    fn peek(&mut self) -> ParseResult<&(Token, Span)> {
+        self.lexer.peek()
+            .ok_or(ParseError::UnexpectedEof)
     }
 
     fn next(&mut self) -> ParseResult<(Token, Span)> {

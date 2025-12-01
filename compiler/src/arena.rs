@@ -4,6 +4,8 @@ use std::{collections::HashMap, ops};
 pub struct Key(usize);
 
 // simple arena type (using a hashmap probably) that allows me to reuse the same index even when the type changes
+// an improved version can use a vec instead, replacing removed elements by tombstones that point to the next free element,
+// or the start of the tail
 #[derive(Clone, Debug)]
 pub struct Arena<T> {
     arena: HashMap<usize, T>,
