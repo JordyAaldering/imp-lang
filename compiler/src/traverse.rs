@@ -28,6 +28,8 @@ pub trait Rewriter {
 
     fn trav_fundef(&mut self, fundef: Fundef<Self::InAst>) -> Result<Fundef<Self::OutAst>, Self::Err>;
 
+    fn trav_block(&mut self, block: Block<Self::InAst>, fundef: &mut Fundef<Self::InAst>) -> Result<Block<Self::OutAst>, Self::Err>;
+
     fn trav_ssa(&mut self, id: ArgOrVar, _fundef: &mut Fundef<Self::InAst>) -> Result<ArgOrVar, Self::Err>;
 
     fn trav_expr(&mut self, expr: Expr, fundef: &mut Fundef<Self::InAst>) -> Result<Expr, Self::Err> {
@@ -93,10 +95,16 @@ pub trait Traversal<Ast: AstConfig> {
             fundef.args.push(farg);
         }
 
-        let old_ret = fundef.ret.clone();
-        fundef.ret = self.trav_ssa(old_ret, &fundef)?;
+        fundef.block = self.trav_block(fundef.block.clone(), &fundef)?;
 
         Ok(fundef)
+    }
+
+    fn trav_block(&mut self, mut block: Block<Ast>, fundef: &Fundef<Ast>) -> Result<Block<Ast>, Self::Err> {
+        let old_ret = block.ret.clone();
+        block.ret = self.trav_ssa(old_ret, &fundef)?;
+
+        Ok(block)
     }
 
     fn trav_farg(&mut self, farg: Avis<Ast>, _fundef: &Fundef<Ast>) -> Result<Avis<Ast>, Self::Err> {

@@ -10,7 +10,12 @@ pub struct Fundef {
     pub name: String,
     pub args: Vec<(Type, String)>,
     pub ret_type: Type,
-    pub body: Vec<Stmt>,
+    pub block: Block,
+}
+
+#[derive(Debug)]
+pub struct Block {
+    pub stmts: Vec<Stmt>,
 }
 
 #[derive(Debug)]

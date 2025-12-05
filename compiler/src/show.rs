@@ -27,31 +27,31 @@ impl<Ast: AstConfig> Show<Ast> {
         for avis in &fundef.args {
             write!(self.w, "{:?} {}, ", avis.ty, avis.name)?;
         }
-        writeln!(self.w, ") -> {:?} {{", fundef.ret)?;
+        writeln!(self.w, ") -> {:?} {{", fundef.block.ret)?;
 
         println!("  vars:");
-        for (_, v) in fundef.vars.iter() {
+        for (_, v) in fundef.block.local_vars.iter() {
             println!("    {:?}", v);
         }
 
         println!("  ssa:");
-        for (k, expr) in fundef.ssa.iter() {
+        for (k, expr) in fundef.block.local_ssa.iter() {
             match expr {
                 Expr::Tensor(Tensor { expr, iv, lb, ub }) => {
-                    println!("    {} = {{ {} | {} <= {} < {} }};", fundef.vars[k].name, fundef[*expr].name, fundef[*lb].name, fundef.vars[iv.0].name, fundef[*ub].name);
+                    println!("    {} = {{ {} | {} <= {} < {} }};", fundef.block.local_vars[k].name, fundef[*expr].name, fundef[*lb].name, fundef.block.local_vars[iv.0].name, fundef[*ub].name);
                 }
                 Expr::Binary(Binary { l, r, op }) => {
-                    println!("    {} = {} {} {};", fundef.vars[k].name, fundef[*l].name, op, fundef[*r].name);
+                    println!("    {} = {} {} {};", fundef.block.local_vars[k].name, fundef[*l].name, op, fundef[*r].name);
                 },
                 Expr::Unary(Unary { r, op }) => {
-                    println!("    {} = {} {};", fundef.vars[k].name, op, fundef[*r].name);
+                    println!("    {} = {} {};", fundef.block.local_vars[k].name, op, fundef[*r].name);
                 },
-                Expr::Bool(v) => println!("    {} = {};", fundef.vars[k].name, v),
-                Expr::U32(v) => println!("    {} = {};", fundef.vars[k].name, v),
+                Expr::Bool(v) => println!("    {} = {};", fundef.block.local_vars[k].name, v),
+                Expr::U32(v) => println!("    {} = {};", fundef.block.local_vars[k].name, v),
             }
         }
 
-        println!("  return {}", fundef[fundef.ret.clone()].name);
+        println!("  return {}", fundef[fundef.block.ret.clone()].name);
 
         Ok(())
     }

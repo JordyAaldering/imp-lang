@@ -56,12 +56,16 @@ impl ConvertToSsa {
         self.name_to_key.clear();
         self.uid = 0;
 
+        let block = Block {
+            local_vars: vars,
+            local_ssa: ssa,
+            ret: ret_value,
+        };
+
         Fundef {
             name: fundef.id,
             args,
-            vars,
-            ssa,
-            ret: ret_value,
+            block,
         }
     }
 

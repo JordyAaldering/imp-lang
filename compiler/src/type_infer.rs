@@ -35,19 +35,28 @@ impl Rewriter for TypeInfer {
             args.push(Avis::new(k, &arg.name, arg.ty.clone().unwrap()));
         }
 
-        self.trav_ssa(fundef.ret, &mut fundef)?;
+        let old_block = fundef.block.clone();
+        let block = self.trav_block(old_block, &mut fundef)?;
+
+        Ok(Fundef {
+            name: fundef.name,
+            args,
+            block,
+        })
+    }
+
+    fn trav_block(&mut self, block: Block<Self::InAst>, fundef: &mut Fundef<Self::InAst>) -> Result<Block<Self::OutAst>, Self::Err> {
+        self.trav_ssa(block.ret, fundef)?;
 
         let mut vars = Arena::new();
         mem::swap(&mut self.new_vars, &mut vars);
         let mut ssa = SecondaryArena::new();
         mem::swap(&mut self.new_ssa, &mut ssa);
 
-        Ok(Fundef {
-            name: fundef.name,
-            args,
-            vars,
-            ssa,
-            ret: fundef.ret,
+        Ok(Block {
+            local_vars: vars,
+            local_ssa: ssa,
+            ret: block.ret,
         })
     }
 
@@ -59,9 +68,9 @@ impl Rewriter for TypeInfer {
                 ArgOrVar::Arg(i)
             },
             ArgOrVar::Var(old_key) => {
-                let new_expr = self.trav_expr(fundef.ssa[old_key].clone(), fundef)?;
+                let new_expr = self.trav_expr(fundef.block.local_ssa[old_key].clone(), fundef)?;
 
-                let old_avis = &fundef.vars[old_key];
+                let old_avis = &fundef.block.local_vars[old_key];
                 let new_key = self.new_vars.insert_with(|new_key| {
                     Avis { name: old_avis.name.to_owned(), ty: self.found_ty.clone().unwrap(), key: ArgOrVar::Var(new_key) }
                 });
@@ -90,7 +99,7 @@ impl Rewriter for TypeInfer {
     }
 
     fn trav_iv(&mut self, iv: IndexVector, fundef: &mut Fundef<Self::InAst>) -> Result<IndexVector, Self::Err> {
-        let old_avis = &fundef.vars[iv.0];
+        let old_avis = &fundef.block.local_vars[iv.0];
         let new_key = self.new_vars.insert_with(|new_key| {
             Avis { name: old_avis.name.to_owned(), ty: Type { basetype: BaseType::U32, shp: Shape::Scalar }, key: ArgOrVar::Iv(new_key) }
         });

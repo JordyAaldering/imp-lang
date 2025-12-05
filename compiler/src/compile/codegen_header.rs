@@ -14,7 +14,7 @@ impl Traversal<TypedAst> for CompileHeader {
     type Err = ();
 
     fn trav_fundef(&mut self, fundef: Fundef<TypedAst>) -> Result<Fundef<TypedAst>, Self::Err> {
-        let ret_type = to_rusttype(&fundef[fundef.ret.clone()].ty);
+        let ret_type = to_rusttype(&fundef[fundef.block.ret.clone()].ty);
 
         let args: Vec<String> = fundef.args.iter().map(|avis| {
             let ty_str = to_rusttype(&avis.ty);

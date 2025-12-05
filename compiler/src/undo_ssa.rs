@@ -20,14 +20,14 @@ impl UndoSsa {
         }).collect();
 
         let mut body = Vec::new();
-        body.push(self.generate_assignment(fundef.ret, fundef));
-        body.push(Stmt::Return { expr: Expr::Identifier(fundef[fundef.ret].name.to_owned()) });
+        body.push(self.generate_assignment(fundef.block.ret, fundef));
+        body.push(Stmt::Return { expr: Expr::Identifier(fundef[fundef.block.ret].name.to_owned()) });
 
         Fundef {
             name: fundef.name.to_owned(),
-            ret_type: fundef[fundef.ret].ty.to_owned(),
+            ret_type: fundef[fundef.block.ret].ty.to_owned(),
             args,
-            body,
+            block: Block { stmts: body },
         }
     }
 
@@ -40,9 +40,9 @@ impl UndoSsa {
             },
             ArgOrVar::Var(k) => {
                 // TODO: if an ssa key is used in multiple places, pull the computation out. otherwise inline it
-                match fundef.ssa[k] {
+                match fundef.block.local_ssa[k] {
                     ast::Expr::Tensor(ast::Tensor { iv, expr, lb, ub }) => {
-                        let iv = IndexVector(fundef.vars[iv.0].name.clone());
+                        let iv = IndexVector(fundef.block.local_vars[iv.0].name.clone());
                         let expr = self.inline_expr(expr, fundef);
                         let lb = self.inline_expr(lb, fundef);
                         let ub = self.inline_expr(ub, fundef);
@@ -62,7 +62,7 @@ impl UndoSsa {
                 }
             },
             ArgOrVar::Iv(k) => {
-                Expr::Identifier(fundef.vars[k].name.clone())
+                Expr::Identifier(fundef.block.local_vars[k].name.clone())
             },
         };
 
@@ -75,10 +75,10 @@ impl UndoSsa {
                 Expr::Identifier(fundef.args[i].name.clone())
             },
             ArgOrVar::Var(k) => {
-                println!("looking for {}", fundef.vars[k].name);
-                match fundef.ssa[k] {
+                println!("looking for {}", fundef.block.local_vars[k].name);
+                match fundef.block.local_ssa[k] {
                     ast::Expr::Tensor(ast::Tensor { iv, expr, lb, ub }) => {
-                        let iv = IndexVector(fundef.vars[iv.0].name.clone());
+                        let iv = IndexVector(fundef.block.local_vars[iv.0].name.clone());
                         let expr = self.inline_expr(expr, fundef);
                         let lb = self.inline_expr(lb, fundef);
                         let ub = self.inline_expr(ub, fundef);
@@ -98,7 +98,7 @@ impl UndoSsa {
                 }
             },
             ArgOrVar::Iv(k) => {
-                Expr::Identifier(fundef.vars[k].name.clone())
+                Expr::Identifier(fundef.block.local_vars[k].name.clone())
             },
         }
     }
