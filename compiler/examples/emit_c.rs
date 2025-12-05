@@ -1,15 +1,15 @@
 use compiler::{traverse::Rewriter, *};
 
-use std::{env, fs};
+use std::{env, fs, io};
 
 fn main() {
     let file = env::args().nth(1).unwrap();
     let src = fs::read_to_string(&file).unwrap();
     let ast = scanparse::scanparse(&src).unwrap();
     let ast = convert_to_ssa::ConvertToSsa::new().convert_program(ast);
-    show::Show::new().show_program(&ast);
+    show::Show::new(Box::new(io::stdout())).show_program(&ast).unwrap();
     let ast = type_infer::TypeInfer::new().trav_program(ast).unwrap();
-    show::Show::new().show_program(&ast);
+    show::Show::new(Box::new(io::stdout())).show_program(&ast).unwrap();
     let c_code = compile::codegen_c::CodegenContext::new().compile_program(&ast);
     print!("{}", c_code);
 

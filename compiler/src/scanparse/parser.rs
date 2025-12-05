@@ -9,6 +9,7 @@ pub struct Parser<'src> {
 }
 
 #[derive(Debug)]
+#[allow(unused)]
 pub enum ParseError {
     NonAssociative,
     MissingReturn,

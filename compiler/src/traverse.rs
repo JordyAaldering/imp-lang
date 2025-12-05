@@ -2,6 +2,12 @@ use std::mem;
 
 use crate::ast::*;
 
+pub trait Visit<In> {
+    type Out;
+
+    fn visit(&mut self, node: In) -> Self::Out;
+}
+
 pub trait Rewriter {
     type InAst: AstConfig;
 
@@ -64,7 +70,6 @@ pub trait Rewriter {
         Ok(value)
     }
 }
-
 
 pub trait Traversal<Ast: AstConfig> {
     type Err;
