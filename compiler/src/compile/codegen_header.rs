@@ -1,39 +1,46 @@
 use crate::{ast::*, traverse::Traversal};
 
-pub struct CompileHeader {
-    pub header: String,
-}
+pub struct CompileHeader;
 
 impl CompileHeader {
     pub fn new() -> Self {
-        Self { header: String::new() }
+        Self
     }
 }
 
 impl Traversal<TypedAst> for CompileHeader {
+    type Ok = String;
+
     type Err = ();
 
-    fn trav_fundef(&mut self, fundef: Fundef<TypedAst>) -> Result<Fundef<TypedAst>, Self::Err> {
+    const DEFAULT: Result<Self::Ok, Self::Err> = Err(());
+
+    fn trav_fundef(&mut self, fundef: &mut Fundef<TypedAst>) -> Result<Self::Ok, Self::Err> {
+        let mut res = String::new();
+
         let ret_type = to_rusttype(&fundef[fundef.block.ret.clone()].ty);
 
-        let args: Vec<String> = fundef.args.iter().map(|avis| {
-            let ty_str = to_rusttype(&avis.ty);
-            format!("{}: {}", avis.name, ty_str)
-        }).collect();
+        let args = fundef.args.iter_mut().map(|arg| {
+            self.trav_farg(arg).unwrap()
+        }).collect::<Vec<_>>().join(", ");
 
-        self.header.push_str("unsafe extern \"C\" {\n");
-        self.header.push_str(&format!("    fn DSL_{}({}) -> {};\n", fundef.name, args.join(", "), ret_type));
-        self.header.push_str("}\n\n");
+        res.push_str("unsafe extern \"C\" {\n");
+        res.push_str(&format!("    fn DSL_{}({}) -> {};\n", fundef.name, args, ret_type));
+        res.push_str("}\n\n");
 
         // Here we have the opportunity to add checks, dispatch to different implementations, etc.
-        self.header.push_str(&format!("fn {}({}) -> {} {{\n", fundef.name, args.join(", "), ret_type));
-        self.header.push_str(&format!("    unsafe {{ DSL_{}({}) }}\n",
+        res.push_str(&format!("fn {}({}) -> {} {{\n", fundef.name, args, ret_type));
+        res.push_str(&format!("    unsafe {{ DSL_{}({}) }}\n",
                                 fundef.name,
                                 fundef.args.iter().map(|avis| avis.name.to_owned())
                             .collect::<Vec<_>>().join(", ")));
-        self.header.push_str("}\n");
+        res.push_str("}\n");
 
-        Ok(fundef)
+        Ok(res)
+    }
+
+    fn trav_farg(&mut self, arg: &mut Avis<TypedAst>) -> Result<Self::Ok, Self::Err> {
+        Ok(format!("{}: {}", arg.name, to_rusttype(&arg.ty)))
     }
 }
 

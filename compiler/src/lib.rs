@@ -21,10 +21,9 @@ pub fn compile(src: &str) -> Program<TypedAst> {
     ast
 }
 
-pub fn emit_header(ast: &Program<TypedAst>, outfile: &str) {
-    let mut writer = compile::codegen_header::CompileHeader::new();
-    writer.trav_program(ast.clone()).unwrap();
-    std::fs::write(outfile, writer.header).unwrap();
+pub fn emit_header(ast: &mut Program<TypedAst>, outfile: &str) {
+    let res = compile::codegen_header::CompileHeader.trav_program(ast).unwrap();
+    std::fs::write(outfile, res).unwrap();
 }
 
 // pub fn emit_llvm(ast: &Program<TypedAst>, outfile: &str) {

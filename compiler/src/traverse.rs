@@ -1,5 +1,3 @@
-use std::mem;
-
 use crate::ast::*;
 
 pub trait Visit<In> {
@@ -74,79 +72,73 @@ pub trait Rewriter {
 }
 
 pub trait Traversal<Ast: AstConfig> {
+    type Ok;
+
     type Err;
 
-    fn trav_program(&mut self, mut program: Program<Ast>) -> Result<Program<Ast>, Self::Err> {
-        let mut old_fundefs = Vec::new();
-        mem::swap(&mut program.fundefs, &mut old_fundefs);
-        for fundef in old_fundefs {
-            let fundef = self.trav_fundef(fundef)?;
-            program.fundefs.push(fundef);
+    const DEFAULT: Result<Self::Ok, Self::Err>;
+
+    fn trav_program(&mut self, program: &mut Program<Ast>) -> Result<Self::Ok, Self::Err> {
+        for fundef in &mut program.fundefs {
+            self.trav_fundef(fundef)?;
         }
-
-        Ok(program)
+        Self::DEFAULT
     }
 
-    fn trav_fundef(&mut self, mut fundef: Fundef<Ast>) -> Result<Fundef<Ast>, Self::Err> {
-        let mut old_args = Vec::new();
-        mem::swap(&mut fundef.args, &mut old_args);
-        for farg in old_args {
-            let farg = self.trav_farg(farg, &fundef)?;
-            fundef.args.push(farg);
+    fn trav_fundef(&mut self, fundef: &mut Fundef<Ast>) -> Result<Self::Ok, Self::Err> {
+        for arg in &mut fundef.args {
+            self.trav_farg(arg)?;
         }
-
-        fundef.block = self.trav_block(fundef.block.clone(), &fundef)?;
-
-        Ok(fundef)
+        self.trav_block(&mut fundef.block)?;
+        Self::DEFAULT
     }
 
-    fn trav_block(&mut self, mut block: Block<Ast>, fundef: &Fundef<Ast>) -> Result<Block<Ast>, Self::Err> {
-        let old_ret = block.ret.clone();
-        block.ret = self.trav_ssa(old_ret, &fundef)?;
-
-        Ok(block)
+    fn trav_block(&mut self, block: &mut Block<Ast>) -> Result<Self::Ok, Self::Err> {
+        self.trav_ssa(&mut block.ret)?;
+        Self::DEFAULT
     }
 
-    fn trav_farg(&mut self, farg: Avis<Ast>, _fundef: &Fundef<Ast>) -> Result<Avis<Ast>, Self::Err> {
-        Ok(farg)
+    fn trav_farg(&mut self, _: &mut Avis<Ast>) -> Result<Self::Ok, Self::Err> {
+        Self::DEFAULT
     }
 
-    fn trav_ssa(&mut self, id: ArgOrVar, _fundef: &Fundef<Ast>) -> Result<ArgOrVar, Self::Err> {
-        Ok(id)
+    fn trav_ssa(&mut self, _: &mut ArgOrVar) -> Result<Self::Ok, Self::Err> {
+        Self::DEFAULT
     }
 
-    fn trav_expr(&mut self, expr: Expr<Ast>, fundef: &Fundef<Ast>) -> Result<Expr<Ast>, Self::Err> {
+    fn trav_expr(&mut self, expr: &mut Expr<Ast>) -> Result<Self::Ok, Self::Err> {
         use Expr::*;
         match expr {
-            Tensor(n) => self.trav_tensor(n, fundef).map(Tensor),
-            Binary(n) => self.trav_binary(n, fundef).map(Binary),
-            Unary(n) => self.trav_unary(n, fundef).map(Unary),
-            Bool(n) => self.trav_bool(n, fundef).map(Bool),
-            U32(n) => self.trav_u32(n, fundef).map(U32),
-        }
+            Tensor(n) => self.trav_tensor(n)?,
+            Binary(n) => self.trav_binary(n)?,
+            Unary(n) => self.trav_unary(n)?,
+            Bool(n) => self.trav_bool(n)?,
+            U32(n) => self.trav_u32(n)?,
+        };
+        Self::DEFAULT
     }
 
-    fn trav_tensor(&mut self, mut tensor: Tensor<Ast>, fundef: &Fundef<Ast>) -> Result<Tensor<Ast>, Self::Err> {
-        tensor.body = self.trav_block(tensor.body, fundef)?;
-        Ok(tensor)
+    fn trav_tensor(&mut self, tensor: &mut Tensor<Ast>) -> Result<Self::Ok, Self::Err> {
+        self.trav_block(&mut tensor.body)?;
+        Self::DEFAULT
     }
 
-    fn trav_binary(&mut self, mut binary: Binary, fundef: &Fundef<Ast>) -> Result<Binary, Self::Err> {
-        binary.l = self.trav_ssa(binary.l, fundef)?;
-        binary.r = self.trav_ssa(binary.r, fundef)?;
-        Ok(binary)
+    fn trav_binary(&mut self, binary: &mut Binary) -> Result<Self::Ok, Self::Err> {
+        self.trav_ssa(&mut binary.l)?;
+        self.trav_ssa(&mut binary.r)?;
+        Self::DEFAULT
     }
 
-    fn trav_unary(&mut self, mut unary: Unary, fundef: &Fundef<Ast>) -> Result<Unary, Self::Err> {
-        unary.r = self.trav_ssa(unary.r, fundef)?;
-        Ok(unary)
+    fn trav_unary(&mut self, unary: &mut Unary) -> Result<Self::Ok, Self::Err> {
+        self.trav_ssa(&mut unary.r)?;
+        Self::DEFAULT
     }
 
-    fn trav_bool(&mut self, value: bool, _fundef: &Fundef<Ast>) -> Result<bool, Self::Err> {
-        Ok(value)
+    fn trav_bool(&mut self, _: &mut bool) -> Result<Self::Ok, Self::Err> {
+        Self::DEFAULT
     }
 
-    fn trav_u32(&mut self, value: u32, _fundef: &Fundef<Ast>) -> Result<u32, Self::Err> {
-        Ok(value)
+    fn trav_u32(&mut self, _: &mut u32) -> Result<Self::Ok, Self::Err> {
+        Self::DEFAULT
     }
 }
