@@ -4,7 +4,7 @@ use crate::{arena::{Arena, SecondaryArena}, ast::*, traverse::Rewriter};
 
 pub struct TypeInfer {
     new_vars: Arena<Avis<TypedAst>>,
-    new_ssa: SecondaryArena<Expr>,
+    new_ssa: SecondaryArena<Expr<TypedAst>>,
     found_ty: Option<Type>,
 }
 
@@ -86,16 +86,16 @@ impl Rewriter for TypeInfer {
         Ok(id)
     }
 
-    fn trav_tensor(&mut self, tensor: Tensor, fundef: &mut Fundef<Self::InAst>) -> Result<Tensor, Self::Err> {
+    fn trav_tensor(&mut self, tensor: Tensor<Self::InAst>, fundef: &mut Fundef<Self::InAst>) -> Result<Tensor<Self::OutAst>, Self::Err> {
         let iv = self.trav_iv(tensor.iv, fundef)?;
         let lb = self.trav_ssa(tensor.lb, fundef)?;
         let ub = self.trav_ssa(tensor.ub, fundef)?;
 
-        let expr = self.trav_ssa(tensor.expr, fundef)?;
+        let body = self.trav_block(tensor.body, fundef)?;
         let ety = self.found_ty.take().unwrap();
 
         self.found_ty = Some(Type { basetype: ety.basetype, shp: Shape::Vector((if let Shape::Scalar = ety.shp { "." } else { "*" }).to_owned()) });
-        Ok(Tensor { iv, expr, lb, ub })
+        Ok(Tensor { iv, body, lb, ub })
     }
 
     fn trav_iv(&mut self, iv: IndexVector, fundef: &mut Fundef<Self::InAst>) -> Result<IndexVector, Self::Err> {

@@ -37,8 +37,8 @@ impl<Ast: AstConfig> Show<Ast> {
         println!("  ssa:");
         for (k, expr) in fundef.block.local_ssa.iter() {
             match expr {
-                Expr::Tensor(Tensor { expr, iv, lb, ub }) => {
-                    println!("    {} = {{ {} | {} <= {} < {} }};", fundef.block.local_vars[k].name, fundef[*expr].name, fundef[*lb].name, fundef.block.local_vars[iv.0].name, fundef[*ub].name);
+                Expr::Tensor(Tensor { body: expr, iv, lb, ub }) => {
+                    println!("    {} = {{ {} | {} <= {} < {} }};", fundef.block.local_vars[k].name, fundef[expr.ret].name, fundef[*lb].name, fundef.block.local_vars[iv.0].name, fundef[*ub].name);
                 }
                 Expr::Binary(Binary { l, r, op }) => {
                     println!("    {} = {} {} {};", fundef.block.local_vars[k].name, fundef[*l].name, op, fundef[*r].name);

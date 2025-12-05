@@ -5,7 +5,7 @@ use crate::{arena::{Arena, SecondaryArena}, ast::*, scanparse::parse_ast};
 pub struct ConvertToSsa {
     uid: usize,
     vars: Arena<Avis<UntypedAst>>,
-    ssa: SecondaryArena<Expr>,
+    ssa: SecondaryArena<Expr<UntypedAst>>,
     name_to_key: HashMap<String, ArgOrVar>,
 }
 
@@ -87,11 +87,13 @@ impl ConvertToSsa {
                 self.name_to_key.insert(iv.0.clone(), ArgOrVar::Iv(key));
                 let iv = IndexVector(key);
 
-
                 let expr = self.convert_expr(*expr);
+                // For now, assume that we have just the return expr and no local statements
+                // todo: this means we should not update the local vars and ssa, but this local one
+                let expr = Block { local_vars: Arena::new(), local_ssa: SecondaryArena::new(), ret: expr };
                 let lb = self.convert_expr(*lb);
                 let ub = self.convert_expr(*ub);
-                Expr::Tensor(Tensor { expr, iv, lb, ub })
+                Expr::Tensor(Tensor { body: expr, iv, lb, ub })
             },
             parse_ast::Expr::Binary { l, r, op } => {
                 let l_key = self.convert_expr(*l);

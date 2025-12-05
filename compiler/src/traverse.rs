@@ -32,7 +32,7 @@ pub trait Rewriter {
 
     fn trav_ssa(&mut self, id: ArgOrVar, _fundef: &mut Fundef<Self::InAst>) -> Result<ArgOrVar, Self::Err>;
 
-    fn trav_expr(&mut self, expr: Expr, fundef: &mut Fundef<Self::InAst>) -> Result<Expr, Self::Err> {
+    fn trav_expr(&mut self, expr: Expr<Self::InAst>, fundef: &mut Fundef<Self::InAst>) -> Result<Expr<Self::OutAst>, Self::Err> {
         use Expr::*;
         match expr {
             Tensor(n) => self.trav_tensor(n, fundef).map(Tensor),
@@ -43,12 +43,12 @@ pub trait Rewriter {
         }
     }
 
-    fn trav_tensor(&mut self, tensor: Tensor, fundef: &mut Fundef<Self::InAst>) -> Result<Tensor, Self::Err> {
+    fn trav_tensor(&mut self, tensor: Tensor<Self::InAst>, fundef: &mut Fundef<Self::InAst>) -> Result<Tensor<Self::OutAst>, Self::Err> {
+        let expr = self.trav_block(tensor.body, fundef)?;
         let iv = self.trav_iv(tensor.iv, fundef)?;
-        let expr = self.trav_ssa(tensor.expr, fundef)?;
         let lb = self.trav_ssa(tensor.lb, fundef)?;
         let ub = self.trav_ssa(tensor.ub, fundef)?;
-        Ok(Tensor { iv, expr, lb, ub })
+        Ok(Tensor { iv, body: expr, lb, ub })
     }
 
     fn trav_iv(&mut self, iv: IndexVector, fundef: &mut Fundef<Self::InAst>) -> Result<IndexVector, Self::Err>;
@@ -115,7 +115,7 @@ pub trait Traversal<Ast: AstConfig> {
         Ok(id)
     }
 
-    fn trav_expr(&mut self, expr: Expr, fundef: &Fundef<Ast>) -> Result<Expr, Self::Err> {
+    fn trav_expr(&mut self, expr: Expr<Ast>, fundef: &Fundef<Ast>) -> Result<Expr<Ast>, Self::Err> {
         use Expr::*;
         match expr {
             Tensor(n) => self.trav_tensor(n, fundef).map(Tensor),
@@ -126,8 +126,8 @@ pub trait Traversal<Ast: AstConfig> {
         }
     }
 
-    fn trav_tensor(&mut self, mut tensor: Tensor, fundef: &Fundef<Ast>) -> Result<Tensor, Self::Err> {
-        tensor.expr = self.trav_ssa(tensor.expr, fundef)?;
+    fn trav_tensor(&mut self, mut tensor: Tensor<Ast>, fundef: &Fundef<Ast>) -> Result<Tensor<Ast>, Self::Err> {
+        tensor.body = self.trav_block(tensor.body, fundef)?;
         Ok(tensor)
     }
 

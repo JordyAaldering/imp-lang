@@ -40,25 +40,25 @@ impl UndoSsa {
             },
             ArgOrVar::Var(k) => {
                 // TODO: if an ssa key is used in multiple places, pull the computation out. otherwise inline it
-                match fundef.block.local_ssa[k] {
-                    ast::Expr::Tensor(ast::Tensor { iv, expr, lb, ub }) => {
+                match &fundef.block.local_ssa[k] {
+                    ast::Expr::Tensor(ast::Tensor { iv, body, lb, ub }) => {
                         let iv = IndexVector(fundef.block.local_vars[iv.0].name.clone());
-                        let expr = self.inline_expr(expr, fundef);
-                        let lb = self.inline_expr(lb, fundef);
-                        let ub = self.inline_expr(ub, fundef);
+                        let expr = self.inline_expr(body.ret, fundef);
+                        let lb = self.inline_expr(*lb, fundef);
+                        let ub = self.inline_expr(*ub, fundef);
                         Expr::Tensor { iv, expr: Box::new(expr), lb: Box::new(lb), ub: Box::new(ub) }
                     },
                     ast::Expr::Binary(ast::Binary { l, r, op }) => {
-                        let l = self.inline_expr(l, fundef);
-                        let r = self.inline_expr(r, fundef);
+                        let l = self.inline_expr(*l, fundef);
+                        let r = self.inline_expr(*r, fundef);
                         Expr::Binary { l: Box::new(l), r: Box::new(r), op: op.clone() }
                     },
                     ast::Expr::Unary(ast::Unary { r, op }) => {
-                        let r = self.inline_expr(r, fundef);
+                        let r = self.inline_expr(*r, fundef);
                         Expr::Unary { r: Box::new(r), op: op.clone() }
                     },
-                    ast::Expr::Bool(v) => Expr::Bool(v),
-                    ast::Expr::U32(v) => Expr::U32(v),
+                    ast::Expr::Bool(v) => Expr::Bool(*v),
+                    ast::Expr::U32(v) => Expr::U32(*v),
                 }
             },
             ArgOrVar::Iv(k) => {
@@ -76,25 +76,25 @@ impl UndoSsa {
             },
             ArgOrVar::Var(k) => {
                 println!("looking for {}", fundef.block.local_vars[k].name);
-                match fundef.block.local_ssa[k] {
-                    ast::Expr::Tensor(ast::Tensor { iv, expr, lb, ub }) => {
+                match &fundef.block.local_ssa[k] {
+                    ast::Expr::Tensor(ast::Tensor { iv, body: expr, lb, ub }) => {
                         let iv = IndexVector(fundef.block.local_vars[iv.0].name.clone());
-                        let expr = self.inline_expr(expr, fundef);
-                        let lb = self.inline_expr(lb, fundef);
-                        let ub = self.inline_expr(ub, fundef);
+                        let expr = self.inline_expr(expr.ret, fundef);
+                        let lb = self.inline_expr(*lb, fundef);
+                        let ub = self.inline_expr(*ub, fundef);
                         Expr::Tensor { iv, expr: Box::new(expr), lb: Box::new(lb), ub: Box::new(ub) }
                     },
                     ast::Expr::Binary(ast::Binary { l, r, op }) => {
-                        let l = self.inline_expr(l, fundef);
-                        let r = self.inline_expr(r, fundef);
+                        let l = self.inline_expr(*l, fundef);
+                        let r = self.inline_expr(*r, fundef);
                         Expr::Binary { l: Box::new(l), r: Box::new(r), op: op.clone() }
                     },
                     ast::Expr::Unary(ast::Unary { r, op }) => {
-                        let r = self.inline_expr(r, fundef);
+                        let r = self.inline_expr(*r, fundef);
                         Expr::Unary { r: Box::new(r), op: op.clone() }
                     },
-                    ast::Expr::Bool(v) => Expr::Bool(v),
-                    ast::Expr::U32(v) => Expr::U32(v),
+                    ast::Expr::Bool(v) => Expr::Bool(*v),
+                    ast::Expr::U32(v) => Expr::U32(*v),
                 }
             },
             ArgOrVar::Iv(k) => {

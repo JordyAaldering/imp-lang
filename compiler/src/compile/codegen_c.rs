@@ -62,22 +62,22 @@ impl CodegenContext {
         c_code
     }
 
-    fn compile_expr(&mut self, fundef: &Fundef<TypedAst>, expr: &Expr) -> String {
+    fn compile_expr(&mut self, fundef: &Fundef<TypedAst>, expr: &Expr<TypedAst>) -> String {
         let mut c_code = String::new();
 
         match expr {
-            Expr::Tensor(Tensor { iv, expr, lb, ub }) => {
+            Expr::Tensor(Tensor { iv, body: expr, lb, ub }) => {
                 let mut forloop = String::new();
 
-                let ty = to_ctype(&fundef[expr.clone()].ty);
+                let ty = to_ctype(&fundef[expr.ret.clone()].ty);
                 let iv_name = fundef.block.local_vars[iv.0].name.clone();
                 let lb_name = fundef[lb.clone()].name.clone();
                 let ub_name = fundef[ub.clone()].name.clone();
 
                 forloop.push_str(&format!("for (size_t {} = {}; {} < {}; {} += 1) {{\n", iv_name, lb_name, iv_name, ub_name, iv_name));
 
-                if let ArgOrVar::Var(k) = expr {
-                    let expr_code = self.compile_expr(fundef, &fundef.block.local_ssa[*k]);
+                if let ArgOrVar::Var(k) = expr.ret {
+                    let expr_code = self.compile_expr(fundef, &fundef.block.local_ssa[k]);
                     forloop.push_str(&format!("        res[{}] = {};\n", iv_name, expr_code));
                 }
 
