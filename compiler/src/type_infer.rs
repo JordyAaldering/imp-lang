@@ -3,9 +3,14 @@ use std::mem;
 use crate::{arena::{Arena, SecondaryArena}, ast::*, traverse::Rewriter};
 
 pub struct TypeInfer {
+    args: Vec<Avis<TypedAst>>,
+    // todo: this should be a vec of arenas, one for each scoping level
     new_vars: Arena<Avis<TypedAst>>,
     new_ssa: SecondaryArena<Expr<TypedAst>>,
+    // todo: this should be included in the return type, probably we should
+    // return Result<(Self::OK, Node), Self::Err> instead
     found_ty: Option<Type>,
+    scope: Option<Fundef<UntypedAst>>,
 }
 
 #[derive(Debug)]
@@ -14,9 +19,11 @@ pub enum InferenceError {}
 impl TypeInfer {
     pub fn new() -> Self {
         Self {
+            args: Vec::new(),
             new_vars: Arena::new(),
             new_ssa: SecondaryArena::new(),
             found_ty: None,
+            scope: None,
         }
     }
 }
@@ -28,15 +35,21 @@ impl Rewriter for TypeInfer {
 
     type Err = InferenceError;
 
-    fn trav_fundef(&mut self, mut fundef: Fundef<Self::InAst>) -> Result<Fundef<Self::OutAst>, Self::Err> {
-        let mut args = Vec::new();
-        for (i, arg) in fundef.args.iter().enumerate() {
-            let k = ArgOrVar::Arg(i);
-            args.push(Avis::new(k, &arg.name, arg.ty.clone().unwrap()));
+    fn trav_fundef(&mut self, fundef: Fundef<Self::InAst>) -> Result<Fundef<Self::OutAst>, Self::Err> {
+        self.scope = Some(fundef.clone());
+
+        self.args = Vec::new();
+        for arg in fundef.args {
+            let ty = arg.ty.clone().expect("function argument cannot be untyped");
+            self.args.push(Avis::new(arg.key, &arg.name, ty));
         }
 
-        let old_block = fundef.block.clone();
-        let block = self.trav_block(old_block, &mut fundef)?;
+        let block = self.trav_block(fundef.block)?;
+
+        let mut args = Vec::new();
+        mem::swap(&mut args, &mut self.args);
+
+        self.scope = None;
 
         Ok(Fundef {
             name: fundef.name,
@@ -45,8 +58,8 @@ impl Rewriter for TypeInfer {
         })
     }
 
-    fn trav_block(&mut self, block: Block<Self::InAst>, fundef: &mut Fundef<Self::InAst>) -> Result<Block<Self::OutAst>, Self::Err> {
-        self.trav_ssa(block.ret, fundef)?;
+    fn trav_block(&mut self, block: Block<Self::InAst>) -> Result<Block<Self::OutAst>, Self::Err> {
+        let ret = self.trav_ssa(block.ret)?;
 
         let mut vars = Arena::new();
         mem::swap(&mut self.new_vars, &mut vars);
@@ -56,21 +69,21 @@ impl Rewriter for TypeInfer {
         Ok(Block {
             local_vars: vars,
             local_ssa: ssa,
-            ret: block.ret,
+            ret,
         })
     }
 
-    fn trav_ssa(&mut self, id: ArgOrVar, fundef: &mut Fundef<Self::InAst>) -> Result<ArgOrVar, Self::Err> {
+    fn trav_ssa(&mut self, id: ArgOrVar) -> Result<ArgOrVar, Self::Err> {
         let id = match id {
             ArgOrVar::Arg(i) => {
-                let ty = fundef.args[i].ty.clone().expect("function argument cannot be untyped");
+                let ty = self.args[i].ty.clone();
                 self.found_ty = Some(ty);
                 ArgOrVar::Arg(i)
             },
             ArgOrVar::Var(old_key) => {
-                let new_expr = self.trav_expr(fundef.block.local_ssa[old_key].clone(), fundef)?;
+                let new_expr = self.trav_expr(self.scope.as_ref().unwrap().block.local_ssa[old_key].clone())?;
 
-                let old_avis = &fundef.block.local_vars[old_key];
+                let old_avis = &self.scope.as_ref().unwrap().block.local_vars[old_key];
                 let new_key = self.new_vars.insert_with(|new_key| {
                     Avis { name: old_avis.name.to_owned(), ty: self.found_ty.clone().unwrap(), key: ArgOrVar::Var(new_key) }
                 });
@@ -86,20 +99,20 @@ impl Rewriter for TypeInfer {
         Ok(id)
     }
 
-    fn trav_tensor(&mut self, tensor: Tensor<Self::InAst>, fundef: &mut Fundef<Self::InAst>) -> Result<Tensor<Self::OutAst>, Self::Err> {
-        let iv = self.trav_iv(tensor.iv, fundef)?;
-        let lb = self.trav_ssa(tensor.lb, fundef)?;
-        let ub = self.trav_ssa(tensor.ub, fundef)?;
+    fn trav_tensor(&mut self, tensor: Tensor<Self::InAst>) -> Result<Tensor<Self::OutAst>, Self::Err> {
+        let iv = self.trav_iv(tensor.iv)?;
+        let lb = self.trav_ssa(tensor.lb)?;
+        let ub = self.trav_ssa(tensor.ub)?;
 
-        let body = self.trav_block(tensor.body, fundef)?;
+        let body = self.trav_block(tensor.body)?;
         let ety = self.found_ty.take().unwrap();
 
         self.found_ty = Some(Type { basetype: ety.basetype, shp: Shape::Vector((if let Shape::Scalar = ety.shp { "." } else { "*" }).to_owned()) });
         Ok(Tensor { iv, body, lb, ub })
     }
 
-    fn trav_iv(&mut self, iv: IndexVector, fundef: &mut Fundef<Self::InAst>) -> Result<IndexVector, Self::Err> {
-        let old_avis = &fundef.block.local_vars[iv.0];
+    fn trav_iv(&mut self, iv: IndexVector) -> Result<IndexVector, Self::Err> {
+        let old_avis = &self.scope.as_ref().unwrap().block.local_vars[iv.0];
         let new_key = self.new_vars.insert_with(|new_key| {
             Avis { name: old_avis.name.to_owned(), ty: Type { basetype: BaseType::U32, shp: Shape::Scalar }, key: ArgOrVar::Iv(new_key) }
         });
@@ -107,10 +120,10 @@ impl Rewriter for TypeInfer {
         Ok(IndexVector(new_key))
     }
 
-    fn trav_binary(&mut self, binary: Binary, fundef: &mut Fundef<Self::InAst>) -> Result<Binary, Self::Err> {
-        let l = self.trav_ssa(binary.l, fundef)?;
+    fn trav_binary(&mut self, binary: Binary) -> Result<Binary, Self::Err> {
+        let l = self.trav_ssa(binary.l)?;
         let _lty = self.found_ty.take().unwrap();
-        let r = self.trav_ssa(binary.r, fundef)?;
+        let r = self.trav_ssa(binary.r)?;
         let rty = self.found_ty.take().unwrap();
 
         // TODO: check if lty and rty unify
@@ -133,8 +146,8 @@ impl Rewriter for TypeInfer {
         Ok(Binary { l, r, op: binary.op })
     }
 
-    fn trav_unary(&mut self, unary: Unary, fundef: &mut Fundef<Self::InAst>) -> Result<Unary, Self::Err> {
-        let r = self.trav_ssa(unary.r, fundef)?;
+    fn trav_unary(&mut self, unary: Unary) -> Result<Unary, Self::Err> {
+        let r = self.trav_ssa(unary.r)?;
         let rty = self.found_ty.take().unwrap();
 
         use Uop::*;
@@ -152,12 +165,12 @@ impl Rewriter for TypeInfer {
         Ok(Unary { r, op: unary.op })
     }
 
-    fn trav_bool(&mut self, value: bool, _fundef: &mut Fundef<Self::InAst>) -> Result<bool, Self::Err> {
+    fn trav_bool(&mut self, value: bool) -> Result<bool, Self::Err> {
         self.found_ty = Some(Type { basetype: BaseType::Bool, shp: Shape::Scalar });
         Ok(value)
     }
 
-    fn trav_u32(&mut self, value: u32, _fundef: &mut Fundef<Self::InAst>) -> Result<u32, Self::Err> {
+    fn trav_u32(&mut self, value: u32) -> Result<u32, Self::Err> {
         self.found_ty = Some(Type { basetype: BaseType::U32, shp: Shape::Scalar });
         Ok(value)
     }
