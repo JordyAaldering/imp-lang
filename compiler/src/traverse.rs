@@ -1,4 +1,4 @@
-use crate::ast::*;
+use crate::{arena::Key, ast::*};
 
 pub trait Visit<In> {
     type Out;
@@ -6,13 +6,24 @@ pub trait Visit<In> {
     fn visit(&mut self, node: In) -> Self::Out;
 }
 
-pub trait Rewriter {
+pub trait FundefTraversal<Ast: AstConfig> {
+    fn find_id(&self, key: Key) -> Option<&Avis<Ast>>;
+
+    fn find_ssa(&self, key: Key) -> Option<&Expr<Ast>>;
+
+    fn push_scope(&mut self, scope: &Block<Ast>);
+
+    fn pop_scope(&mut self);
+}
+
+pub trait Rewriter : FundefTraversal<Self::InAst> {
     type InAst: AstConfig;
 
     type OutAst: AstConfig;
 
     type Err;
 
+    // If we require setscope and getscope functions, we can automate the scoping and looking up somewhat
     fn trav_program(&mut self, program: Program<Self::InAst>) -> Result<Program<Self::OutAst>, Self::Err> {
         let mut new_program = Program::new();
 

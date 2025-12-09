@@ -22,6 +22,10 @@ impl<T> Arena<T> {
         Self { arena: HashMap::new(), uid: 0 }
     }
 
+    pub fn get(&self, key: Key) -> Option<&T> {
+        self.arena.get(&key.0)
+    }
+
     pub fn iter(&self) -> impl Iterator::<Item = (Key, &T)> {
         self.arena.iter().map(|(k, v)| (Key(*k), v))
     }
@@ -49,6 +53,10 @@ impl<T> Arena<T> {
 impl<T> SecondaryArena<T> {
     pub fn new() -> Self {
         Self { arena: HashMap::new() }
+    }
+
+    pub fn get(&self, key: Key) -> Option<&T> {
+        self.arena.get(&key.0)
     }
 
     pub fn iter(&self) -> impl Iterator::<Item = (Key, &T)> {

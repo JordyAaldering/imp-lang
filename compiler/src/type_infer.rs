@@ -1,16 +1,16 @@
 use std::mem;
 
-use crate::{arena::{Arena, SecondaryArena}, ast::*, traverse::Rewriter};
+use crate::{arena::{Arena, Key, SecondaryArena}, ast::*, traverse::{FundefTraversal, Rewriter}};
 
 pub struct TypeInfer {
-    args: Vec<Avis<TypedAst>>,
     // todo: this should be a vec of arenas, one for each scoping level
     new_vars: Arena<Avis<TypedAst>>,
     new_ssa: SecondaryArena<Expr<TypedAst>>,
     // todo: this should be included in the return type, probably we should
     // return Result<(Self::OK, Node), Self::Err> instead
     found_ty: Option<Type>,
-    scope: Option<Fundef<UntypedAst>>,
+    args: Vec<Avis<TypedAst>>,
+    scopes: Vec<Block<UntypedAst>>,
 }
 
 #[derive(Debug)]
@@ -19,12 +19,42 @@ pub enum InferenceError {}
 impl TypeInfer {
     pub fn new() -> Self {
         Self {
-            args: Vec::new(),
             new_vars: Arena::new(),
             new_ssa: SecondaryArena::new(),
             found_ty: None,
-            scope: None,
+            args: Vec::new(),
+            scopes: Vec::new(),
         }
+    }
+}
+
+impl FundefTraversal<UntypedAst> for TypeInfer {
+    fn find_id(&self, key: Key) -> Option<&Avis<UntypedAst>> {
+        for scope in self.scopes.iter().rev() {
+            if let Some(v) = scope.local_vars.get(key) {
+                return  Some(v);
+            }
+        }
+
+        None
+    }
+
+    fn find_ssa(&self, key: Key) -> Option<&Expr<UntypedAst>> {
+        for scope in self.scopes.iter().rev() {
+            if let Some(v) = scope.local_ssa.get(key) {
+                return  Some(v);
+            }
+        }
+
+        None
+    }
+
+    fn push_scope(&mut self, fundef: &Block<UntypedAst>) {
+        self.scopes.push(fundef.clone());
+    }
+
+    fn pop_scope(&mut self) {
+        self.scopes.pop().unwrap();
     }
 }
 
@@ -36,7 +66,7 @@ impl Rewriter for TypeInfer {
     type Err = InferenceError;
 
     fn trav_fundef(&mut self, fundef: Fundef<Self::InAst>) -> Result<Fundef<Self::OutAst>, Self::Err> {
-        self.scope = Some(fundef.clone());
+        self.push_scope(&fundef.block);
 
         self.args = Vec::new();
         for arg in fundef.args {
@@ -46,11 +76,10 @@ impl Rewriter for TypeInfer {
 
         let block = self.trav_block(fundef.block)?;
 
+        self.pop_scope();
+
         let mut args = Vec::new();
         mem::swap(&mut args, &mut self.args);
-
-        self.scope = None;
-
         Ok(Fundef {
             name: fundef.name,
             args,
@@ -81,9 +110,10 @@ impl Rewriter for TypeInfer {
                 ArgOrVar::Arg(i)
             },
             ArgOrVar::Var(old_key) => {
-                let new_expr = self.trav_expr(self.scope.as_ref().unwrap().block.local_ssa[old_key].clone())?;
+                let old_avis = self.find_id(old_key).unwrap().clone();
+                let old_expr = self.find_ssa(old_key).unwrap().clone();
+                let new_expr = self.trav_expr(old_expr)?;
 
-                let old_avis = &self.scope.as_ref().unwrap().block.local_vars[old_key];
                 let new_key = self.new_vars.insert_with(|new_key| {
                     Avis { name: old_avis.name.to_owned(), ty: self.found_ty.clone().unwrap(), key: ArgOrVar::Var(new_key) }
                 });
@@ -112,7 +142,7 @@ impl Rewriter for TypeInfer {
     }
 
     fn trav_iv(&mut self, iv: IndexVector) -> Result<IndexVector, Self::Err> {
-        let old_avis = &self.scope.as_ref().unwrap().block.local_vars[iv.0];
+        let old_avis = self.find_id(iv.0).unwrap().clone();
         let new_key = self.new_vars.insert_with(|new_key| {
             Avis { name: old_avis.name.to_owned(), ty: Type { basetype: BaseType::U32, shp: Shape::Scalar }, key: ArgOrVar::Iv(new_key) }
         });
