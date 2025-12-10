@@ -1,10 +1,28 @@
-use crate::{ast::*, traverse::Traversal};
+use crate::{arena::Key, ast::*, traverse::{Scoped, Traversal}};
 
 pub struct CompileHeader;
 
 impl CompileHeader {
     pub fn new() -> Self {
         Self
+    }
+}
+
+impl Scoped<TypedAst> for CompileHeader {
+    fn find_id(&self, _key: Key) -> Option<&Avis<TypedAst>> {
+        unreachable!()
+    }
+
+    fn find_ssa(&self, _key: Key) -> Option<&Expr<TypedAst>> {
+        unreachable!()
+    }
+
+    fn push_scope(&mut self, _fundef: Block<TypedAst>) {
+        unreachable!()
+    }
+
+    fn pop_scope(&mut self) -> Block<TypedAst> {
+        unreachable!()
     }
 }
 

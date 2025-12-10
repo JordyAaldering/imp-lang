@@ -6,17 +6,17 @@ pub trait Visit<In> {
     fn visit(&mut self, node: In) -> Self::Out;
 }
 
-pub trait FundefTraversal<Ast: AstConfig> {
+pub trait Scoped<Ast: AstConfig> {
     fn find_id(&self, key: Key) -> Option<&Avis<Ast>>;
 
     fn find_ssa(&self, key: Key) -> Option<&Expr<Ast>>;
 
-    fn push_scope(&mut self, scope: &Block<Ast>);
+    fn push_scope(&mut self, scope: Block<Ast>);
 
-    fn pop_scope(&mut self);
+    fn pop_scope(&mut self) -> Block<Ast>;
 }
 
-pub trait Rewriter : FundefTraversal<Self::InAst> {
+pub trait Rewriter: Scoped<Self::InAst> {
     type InAst: AstConfig;
 
     type OutAst: AstConfig;
@@ -28,8 +28,14 @@ pub trait Rewriter : FundefTraversal<Self::InAst> {
         let mut new_program = Program::new();
 
         for fundef in program.fundefs {
+            self.push_scope(fundef.block.clone());
+
             let fundef = self.trav_fundef(fundef)?;
             new_program.fundefs.push(fundef);
+
+            // Potential: here, we can compare the old (cloned) fundef against the updated one
+            // which for example allows us to only print changes when debugging
+            self.pop_scope();
         }
 
         Ok(new_program)
@@ -82,7 +88,7 @@ pub trait Rewriter : FundefTraversal<Self::InAst> {
     }
 }
 
-pub trait Traversal<Ast: AstConfig> {
+pub trait Traversal<Ast: AstConfig>: Scoped<Ast> {
     type Ok;
 
     type Err;
@@ -91,7 +97,13 @@ pub trait Traversal<Ast: AstConfig> {
 
     fn trav_program(&mut self, program: &mut Program<Ast>) -> Result<Self::Ok, Self::Err> {
         for fundef in &mut program.fundefs {
+            self.push_scope(fundef.block.clone());
+
             self.trav_fundef(fundef)?;
+
+            // Potential: here, we can compare the old (cloned) fundef against the updated one
+            // which for example allows us to only print changes when debugging
+            self.pop_scope();
         }
         Self::DEFAULT
     }

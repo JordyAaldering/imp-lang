@@ -1,6 +1,6 @@
 use std::mem;
 
-use crate::{arena::{Arena, Key, SecondaryArena}, ast::*, traverse::{FundefTraversal, Rewriter}};
+use crate::{arena::{Arena, Key, SecondaryArena}, ast::*, traverse::{Scoped, Rewriter}};
 
 pub struct TypeInfer {
     // todo: this should be a vec of arenas, one for each scoping level
@@ -28,7 +28,7 @@ impl TypeInfer {
     }
 }
 
-impl FundefTraversal<UntypedAst> for TypeInfer {
+impl Scoped<UntypedAst> for TypeInfer {
     fn find_id(&self, key: Key) -> Option<&Avis<UntypedAst>> {
         for scope in self.scopes.iter().rev() {
             if let Some(v) = scope.local_vars.get(key) {
@@ -49,12 +49,12 @@ impl FundefTraversal<UntypedAst> for TypeInfer {
         None
     }
 
-    fn push_scope(&mut self, fundef: &Block<UntypedAst>) {
-        self.scopes.push(fundef.clone());
+    fn push_scope(&mut self, fundef: Block<UntypedAst>) {
+        self.scopes.push(fundef);
     }
 
-    fn pop_scope(&mut self) {
-        self.scopes.pop().unwrap();
+    fn pop_scope(&mut self) -> Block<UntypedAst> {
+        self.scopes.pop().unwrap()
     }
 }
 
@@ -66,8 +66,6 @@ impl Rewriter for TypeInfer {
     type Err = InferenceError;
 
     fn trav_fundef(&mut self, fundef: Fundef<Self::InAst>) -> Result<Fundef<Self::OutAst>, Self::Err> {
-        self.push_scope(&fundef.block);
-
         self.args = Vec::new();
         for arg in fundef.args {
             let ty = arg.ty.clone().expect("function argument cannot be untyped");
@@ -75,8 +73,6 @@ impl Rewriter for TypeInfer {
         }
 
         let block = self.trav_block(fundef.block)?;
-
-        self.pop_scope();
 
         let mut args = Vec::new();
         mem::swap(&mut args, &mut self.args);
