@@ -30,24 +30,24 @@ impl<Ast: AstConfig> Show<Ast> {
         writeln!(self.w, ") -> {:?} {{", fundef.block.ret)?;
 
         println!("  vars:");
-        for (_, v) in fundef.block.local_vars.iter() {
+        for (_, v) in fundef.block.ids.iter() {
             println!("    {:?}", v);
         }
 
         println!("  ssa:");
-        for (k, expr) in fundef.block.local_ssa.iter() {
+        for (k, expr) in fundef.block.ssa.iter() {
             match expr {
                 Expr::Tensor(Tensor { body: expr, iv, lb, ub }) => {
-                    println!("    {} = {{ {} | {} <= {} < {} }};", fundef.block.local_vars[k].name, fundef[expr.ret].name, fundef[*lb].name, fundef.block.local_vars[iv.0].name, fundef[*ub].name);
+                    println!("    {} = {{ {} | {} <= {} < {} }};", fundef.block.ids[k].name, fundef[expr.ret].name, fundef[*lb].name, fundef.block.ids[iv.0].name, fundef[*ub].name);
                 }
                 Expr::Binary(Binary { l, r, op }) => {
-                    println!("    {} = {} {} {};", fundef.block.local_vars[k].name, fundef[*l].name, op, fundef[*r].name);
+                    println!("    {} = {} {} {};", fundef.block.ids[k].name, fundef[*l].name, op, fundef[*r].name);
                 },
                 Expr::Unary(Unary { r, op }) => {
-                    println!("    {} = {} {};", fundef.block.local_vars[k].name, op, fundef[*r].name);
+                    println!("    {} = {} {};", fundef.block.ids[k].name, op, fundef[*r].name);
                 },
-                Expr::Bool(v) => println!("    {} = {};", fundef.block.local_vars[k].name, v),
-                Expr::U32(v) => println!("    {} = {};", fundef.block.local_vars[k].name, v),
+                Expr::Bool(v) => println!("    {} = {};", fundef.block.ids[k].name, v),
+                Expr::U32(v) => println!("    {} = {};", fundef.block.ids[k].name, v),
             }
         }
 

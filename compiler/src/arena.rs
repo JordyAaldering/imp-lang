@@ -42,6 +42,11 @@ impl<T> Arena<T> {
         Key(self.uid)
     }
 
+    pub fn insert_with_key(&mut self, k: Key, v: T) {
+        let prev = self.arena.insert(k.0, v);
+        assert!(prev.is_none(), "key {} was already present", k.0);
+    }
+
     pub fn map<U>(self, f: impl Fn(T) -> U) -> Arena<U> {
         Arena {
             arena: self.arena.into_iter().map(|(k, v)| (k, f(v))).collect(),
@@ -64,7 +69,8 @@ impl<T> SecondaryArena<T> {
     }
 
     pub fn insert(&mut self, k: Key, v: T) {
-        self.arena.insert(k.0, v);
+        let prev = self.arena.insert(k.0, v);
+        assert!(prev.is_none(), "key {} was already present", k.0);
     }
 
     pub fn map<U>(self, f: impl Fn(T) -> U) -> SecondaryArena<U> {

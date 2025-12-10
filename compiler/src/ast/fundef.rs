@@ -17,8 +17,8 @@ impl<Ast: AstConfig> ops::Index<ArgOrVar> for Fundef<Ast> {
     fn index(&self, x: ArgOrVar) -> &Self::Output {
         match x {
             ArgOrVar::Arg(i) => &self.args[i],
-            ArgOrVar::Var(k) => &self.block.local_vars[k],
-            ArgOrVar::Iv(k) => &self.block.local_vars[k],
+            ArgOrVar::Var(k) => &self.block.ids[k],
+            ArgOrVar::Iv(k) => &self.block.ids[k],
         }
     }
 }

@@ -4,13 +4,13 @@ use super::{ArgOrVar, AstConfig, Avis, Expr};
 
 #[derive(Clone, Debug)]
 pub struct Block<Ast: AstConfig> {
-    pub local_vars: Arena<Avis<Ast>>,
+    pub ids: Arena<Avis<Ast>>,
     /// arena containing a mapping of variable keys to their ssa assignment expressions
     /// two options for multi-return:
     ///  1) also keep track of return index here
     ///  2) add tuple types, and insert extraction functions, then there is always only one lhs
     /// I am leaning towards option 1
-    pub local_ssa: SecondaryArena<Expr<Ast>>,
+    pub ssa: SecondaryArena<Expr<Ast>>,
     pub ret: ArgOrVar,
 }
 

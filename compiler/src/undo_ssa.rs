@@ -40,9 +40,9 @@ impl UndoSsa {
             },
             ArgOrVar::Var(k) => {
                 // TODO: if an ssa key is used in multiple places, pull the computation out. otherwise inline it
-                match &fundef.block.local_ssa[k] {
+                match &fundef.block.ssa[k] {
                     ast::Expr::Tensor(ast::Tensor { iv, body, lb, ub }) => {
-                        let iv = IndexVector(fundef.block.local_vars[iv.0].name.clone());
+                        let iv = IndexVector(fundef.block.ids[iv.0].name.clone());
                         let expr = self.inline_expr(body.ret, fundef);
                         let lb = self.inline_expr(*lb, fundef);
                         let ub = self.inline_expr(*ub, fundef);
@@ -62,7 +62,7 @@ impl UndoSsa {
                 }
             },
             ArgOrVar::Iv(k) => {
-                Expr::Identifier(fundef.block.local_vars[k].name.clone())
+                Expr::Identifier(fundef.block.ids[k].name.clone())
             },
         };
 
@@ -75,10 +75,10 @@ impl UndoSsa {
                 Expr::Identifier(fundef.args[i].name.clone())
             },
             ArgOrVar::Var(k) => {
-                println!("looking for {}", fundef.block.local_vars[k].name);
-                match &fundef.block.local_ssa[k] {
+                println!("looking for {}", fundef.block.ids[k].name);
+                match &fundef.block.ssa[k] {
                     ast::Expr::Tensor(ast::Tensor { iv, body: expr, lb, ub }) => {
-                        let iv = IndexVector(fundef.block.local_vars[iv.0].name.clone());
+                        let iv = IndexVector(fundef.block.ids[iv.0].name.clone());
                         let expr = self.inline_expr(expr.ret, fundef);
                         let lb = self.inline_expr(*lb, fundef);
                         let ub = self.inline_expr(*ub, fundef);
@@ -98,7 +98,7 @@ impl UndoSsa {
                 }
             },
             ArgOrVar::Iv(k) => {
-                Expr::Identifier(fundef.block.local_vars[k].name.clone())
+                Expr::Identifier(fundef.block.ids[k].name.clone())
             },
         }
     }

@@ -57,8 +57,8 @@ impl ConvertToSsa {
         self.uid = 0;
 
         let block = Block {
-            local_vars: vars,
-            local_ssa: ssa,
+            ids: vars,
+            ssa,
             ret: ret_value,
         };
 
@@ -90,7 +90,7 @@ impl ConvertToSsa {
                 let expr = self.convert_expr(*expr);
                 // For now, assume that we have just the return expr and no local statements
                 // todo: this means we should not update the local vars and ssa, but this local one
-                let expr = Block { local_vars: Arena::new(), local_ssa: SecondaryArena::new(), ret: expr };
+                let expr = Block { ids: Arena::new(), ssa: SecondaryArena::new(), ret: expr };
                 let lb = self.convert_expr(*lb);
                 let ub = self.convert_expr(*ub);
                 Expr::Tensor(Tensor { body: expr, iv, lb, ub })
