@@ -93,9 +93,9 @@ impl ConvertToSsa {
                 self.name_to_key.push(HashMap::new());
 
                 let key = self.ids.last_mut().unwrap().insert_with(|key| {
-                    Avis::new(ArgOrVar::Iv(key), &iv.0, None)
+                    Avis::new(ArgOrVar::Iv(key), &iv, None)
                 });
-                self.name_to_key.last_mut().unwrap().insert(iv.0.clone(), ArgOrVar::Iv(key));
+                self.name_to_key.last_mut().unwrap().insert(iv.clone(), ArgOrVar::Iv(key));
                 let iv = IndexVector(key);
 
                 let ret = self.convert_expr(*expr);

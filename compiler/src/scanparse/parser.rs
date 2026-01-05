@@ -174,7 +174,7 @@ impl<'src> Parser<'src> {
 
         self.expect(Token::RBrace)?;
 
-        Ok(Expr::Tensor { iv: IndexVector(iv), expr: Box::new(expr), lb: Box::new(lb), ub: Box::new(ub) })
+        Ok(Expr::Tensor { iv, expr: Box::new(expr), lb: Box::new(lb), ub: Box::new(ub) })
     }
 
     /// Uses Pratt parsing to handle associativity and operator precedence.
