@@ -42,7 +42,7 @@ impl UndoSsa {
                 // TODO: if an ssa key is used in multiple places, pull the computation out. otherwise inline it
                 match &fundef.ssa[k] {
                     ast::Expr::Tensor(ast::Tensor { iv, lb, ub, ret, .. }) => {
-                        let iv = IndexVector(fundef.ids[iv.0].name.clone());
+                        let iv = IndexVector(fundef.ids[*iv].name.clone());
                         let expr = self.inline_expr(*ret, fundef);
                         let lb = self.inline_expr(*lb, fundef);
                         let ub = self.inline_expr(*ub, fundef);
@@ -78,7 +78,7 @@ impl UndoSsa {
                 println!("looking for {}", fundef.ids[k].name);
                 match &fundef.ssa[k] {
                     ast::Expr::Tensor(ast::Tensor { iv, lb, ub, ret, .. }) => {
-                        let iv = IndexVector(fundef.ids[iv.0].name.clone());
+                        let iv = IndexVector(fundef.ids[*iv].name.clone());
                         let expr = self.inline_expr(*ret, fundef);
                         let lb = self.inline_expr(*lb, fundef);
                         let ub = self.inline_expr(*ub, fundef);

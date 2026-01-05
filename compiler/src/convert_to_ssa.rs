@@ -107,13 +107,12 @@ impl ConvertToSsa {
                     Avis::new(ArgOrVar::Iv(key), &iv, MaybeType(None))
                 });
                 self.name_to_key.last_mut().unwrap().insert(iv.clone(), ArgOrVar::Iv(key));
-                let iv = IndexVector(key);
 
                 let ret = self.convert_expr(*expr);
 
                 let (ids, ssa) = self.pop_scope();
 
-                Expr::Tensor(Tensor { iv, lb, ub, ids, ssa, ret })
+                Expr::Tensor(Tensor { iv: key, lb, ub, ids, ssa, ret })
             },
             parse_ast::Expr::Binary { l, r, op } => {
                 let l_key = self.convert_expr(*l);

@@ -22,7 +22,8 @@ pub trait Rewriter: Scoped<Self::InAst, Self::OutAst> {
         }
     }
 
-    fn trav_rhs_id(&mut self, id: ArgOrVar) -> Result<(Self::Ok, ArgOrVar), Self::Err>;
+    /// Recursively traverse the single static assignment of an identifier
+    fn trav_ssa(&mut self, id: ArgOrVar) -> Result<(Self::Ok, ArgOrVar), Self::Err>;
 
     fn trav_tensor(&mut self, tensor: Tensor<Self::InAst>) -> Result<(Self::Ok, Tensor<Self::OutAst>), Self::Err>;
 

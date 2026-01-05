@@ -70,7 +70,7 @@ impl CodegenContext {
                 let mut forloop = String::new();
 
                 let ty = to_ctype(&fundef[ret.clone()].ty);
-                let iv_name = fundef.ids[iv.0].name.clone();
+                let iv_name = fundef.ids[*iv].name.clone();
                 let lb_name = fundef[lb.clone()].name.clone();
                 let ub_name = fundef[ub.clone()].name.clone();
 

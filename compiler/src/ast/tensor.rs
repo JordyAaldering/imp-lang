@@ -34,13 +34,10 @@ use super::{AstConfig, ArgOrVar, Avis, Expr};
 /// we might have to look through a number of scopes.
 #[derive(Clone, Debug)]
 pub struct Tensor<Ast: AstConfig> {
-    pub iv: IndexVector,
+    pub iv: Key,
     pub lb: ArgOrVar,
     pub ub: ArgOrVar,
     pub ids: Arena<Avis<Ast>>,
     pub ssa: SecondaryArena<Expr<Ast>>,
     pub ret: ArgOrVar,
 }
-
-#[derive(Clone, Copy, Debug)]
-pub struct IndexVector(pub Key);

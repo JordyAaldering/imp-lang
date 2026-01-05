@@ -122,7 +122,7 @@ impl<Ast: AstConfig> Show<Ast> {
         res.push_str(&format!("{}| {} <= {} < {} }}",
             self.indent(),
             self.find_id(tensor.lb).unwrap().name,
-            self.find_key(tensor.iv.0).unwrap().name,
+            self.find_key(tensor.iv).unwrap().name,
             self.find_id(tensor.ub).unwrap().name,
         ));
 

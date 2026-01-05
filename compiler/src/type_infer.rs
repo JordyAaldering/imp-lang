@@ -82,7 +82,7 @@ impl Rewriter for TypeInfer {
         self.set_fargs(fundef.args.clone());
         self.push_scope(fundef.ids.clone(), fundef.ssa.clone());
 
-        let (ret_ty, ret) = self.trav_rhs_id(fundef.ret)?;
+        let (ret_ty, ret) = self.trav_ssa(fundef.ret)?;
 
         let (ids, ssa) = self.pop_scope();
         let args = self.pop_fargs();
@@ -96,8 +96,7 @@ impl Rewriter for TypeInfer {
         }))
     }
 
-    /// Identifiers occurring in an expression position
-    fn trav_rhs_id(&mut self, id: ArgOrVar) -> Result<(Type, ArgOrVar), InferenceError> {
+    fn trav_ssa(&mut self, id: ArgOrVar) -> Result<(Type, ArgOrVar), InferenceError> {
         let ty = match id {
             ArgOrVar::Arg(i) => {
                 self.fargs[i].ty.clone().unwrap()
@@ -120,25 +119,17 @@ impl Rewriter for TypeInfer {
         Ok((ty, id))
     }
 
-    // fn trav_iv(&mut self, iv: IndexVector) -> Result<(Type, IndexVector), InferenceError> {
-    //     let old_avis = self.find_key(iv.0).cloned().unwrap();
-    //     let avis = Avis::from(&old_avis, Type::scalar(BaseType::U32));
-    //     self.typed_ids.last_mut().unwrap().insert_with_key(iv.0, avis);
-    //     Ok(iv)
-    // }
-
     fn trav_tensor(&mut self, tensor: Tensor<Self::InAst>) -> Result<(Type, Tensor<Self::OutAst>), InferenceError> {
         self.push_scope(tensor.ids.clone(), tensor.ssa.clone());
 
-        let (_, lb) = self.trav_rhs_id(tensor.lb)?;
-        let (_, ub) = self.trav_rhs_id(tensor.ub)?;
+        let (_, lb) = self.trav_ssa(tensor.lb)?;
+        let (_, ub) = self.trav_ssa(tensor.ub)?;
 
-        //let iv = self.trav_iv(tensor.iv)?;
-        let old_avis = self.find_key(tensor.iv.0).cloned().unwrap();
+        let old_avis = self.find_key(tensor.iv).cloned().unwrap();
         let avis = Avis::from(&old_avis, Type::scalar(BaseType::U32));
-        self.new_ids.last_mut().unwrap().insert_with_key(tensor.iv.0, avis);
+        self.new_ids.last_mut().unwrap().insert_with_key(tensor.iv, avis);
 
-        let (ret_ty, ret) = self.trav_rhs_id(tensor.ret)?;
+        let (ret_ty, ret) = self.trav_ssa(tensor.ret)?;
 
         let shp = if let Shape::Scalar = ret_ty.shp { "." } else { "*" };
         let tensor_ty = Type::vector(ret_ty.basetype, shp);
@@ -156,8 +147,8 @@ impl Rewriter for TypeInfer {
     }
 
     fn trav_binary(&mut self, Binary { l, r, op }: Binary) -> Result<(Type, Binary), Self::Err> {
-        let (lty, l) = self.trav_rhs_id(l)?;
-        let (rty, r) = self.trav_rhs_id(r)?;
+        let (lty, l) = self.trav_ssa(l)?;
+        let (rty, r) = self.trav_ssa(r)?;
 
         let ty = unifies(lty, rty)?;
 
@@ -180,7 +171,7 @@ impl Rewriter for TypeInfer {
     }
 
     fn trav_unary(&mut self, Unary { r, op }: Unary) -> Result<(Type, Unary), Self::Err> {
-        let (rty, r) = self.trav_rhs_id(r)?;
+        let (rty, r) = self.trav_ssa(r)?;
 
         use Uop::*;
         let ty = match op {
