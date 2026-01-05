@@ -2,13 +2,6 @@ use std::collections::HashMap;
 
 use crate::{arena::{Arena, SecondaryArena}, ast::*, scanparse::parse_ast};
 
-pub struct ConvertToSsa {
-    uid: usize,
-    ids: Vec<Arena<Avis<UntypedAst>>>,
-    ssa: Vec<SecondaryArena<Expr<UntypedAst>>>,
-    name_to_key: Vec<HashMap<String, ArgOrVar>>,
-}
-
 pub fn convert_to_ssa(program: parse_ast::Program) -> Program<UntypedAst> {
     let fundefs = program.fundefs.into_iter()
         .map(|f| ConvertToSsa::new().convert_fundef(f))
@@ -16,12 +9,45 @@ pub fn convert_to_ssa(program: parse_ast::Program) -> Program<UntypedAst> {
     Program { fundefs }
 }
 
+pub struct ConvertToSsa {
+    uid: usize,
+    scopes: Vec<(Arena<Avis<UntypedAst>>, SecondaryArena<Expr<UntypedAst>>)>,
+    name_to_key: Vec<HashMap<String, ArgOrVar>>,
+}
+
+impl Scoped<UntypedAst> for ConvertToSsa {
+    fn fargs(&self) -> &Vec<Avis<UntypedAst>> {
+        unreachable!()
+    }
+
+    fn set_fargs(&mut self, _fargs: Vec<Avis<UntypedAst>>) {
+        unreachable!()
+    }
+
+    fn pop_fargs(&mut self) -> Vec<Avis<UntypedAst>> {
+        unreachable!()
+    }
+
+    fn scopes(&self) -> &Vec<(Arena<Avis<UntypedAst>>, SecondaryArena<Expr<UntypedAst>>)> {
+        &self.scopes
+    }
+
+    fn push_scope(&mut self, ids: Arena<Avis<UntypedAst>>, ssa: SecondaryArena<Expr<UntypedAst>>) {
+        self.name_to_key.push(HashMap::new());
+        self.scopes.push((ids, ssa));
+    }
+
+    fn pop_scope(&mut self) -> (Arena<Avis<UntypedAst>>, SecondaryArena<Expr<UntypedAst>>) {
+        self.name_to_key.pop().unwrap();
+        self.scopes.pop().unwrap()
+    }
+}
+
 impl ConvertToSsa {
     fn new() -> Self {
         Self {
             uid: 0,
-            ids: Vec::new(),
-            ssa: Vec::new(),
+            scopes: Vec::new(),
             name_to_key: Vec::new(),
         }
     }
@@ -31,27 +57,14 @@ impl ConvertToSsa {
         format!("_ssa_{}", self.uid)
     }
 
-    fn create_scope(&mut self) {
-        self.ids.push(Arena::new());
-        self.ssa.push(SecondaryArena::new());
-        self.name_to_key.push(HashMap::new());
-    }
-
-    fn close_scope(&mut self) -> (Arena<Avis<UntypedAst>>, SecondaryArena<Expr<UntypedAst>>) {
-        self.name_to_key.pop().unwrap();
-        let ids = self.ids.pop().unwrap();
-        let ssa = self.ssa.pop().unwrap();
-        (ids, ssa)
-    }
-
     pub fn convert_fundef(&mut self, fundef: parse_ast::Fundef) -> Fundef<UntypedAst> {
-        self.create_scope();
-
         let mut args = Vec::new();
         for (i, (ty, id)) in fundef.args.into_iter().enumerate() {
             args.push(Avis::new(ArgOrVar::Arg(i), &id, Some(ty)));
             self.name_to_key.last_mut().unwrap().insert(id, ArgOrVar::Arg(i));
         }
+
+        self.push_scope(Arena::new(), SecondaryArena::new());
 
         for stmt in fundef.body {
             self.convert_stmt(stmt);
@@ -59,10 +72,10 @@ impl ConvertToSsa {
 
         let ret_value = self.convert_expr(fundef.ret_expr);
         if let ArgOrVar::Var(k) = ret_value {
-            self.ids[0][k].ty = Some(fundef.ret_type);
+            self.scopes[0].0[k].ty = Some(fundef.ret_type);
         }
 
-        let (ids, ssa) = self.close_scope();
+        let (ids, ssa) = self.pop_scope();
 
         Fundef {
             name: fundef.id,
@@ -88,11 +101,9 @@ impl ConvertToSsa {
                 let lb = self.convert_expr(*lb);
                 let ub = self.convert_expr(*ub);
 
-                self.ids.push(Arena::new());
-                self.ssa.push(SecondaryArena::new());
-                self.name_to_key.push(HashMap::new());
+                self.push_scope(Arena::new(), SecondaryArena::new());
 
-                let key = self.ids.last_mut().unwrap().insert_with(|key| {
+                let key = self.scopes.last_mut().unwrap().0.insert_with(|key| {
                     Avis::new(ArgOrVar::Iv(key), &iv, None)
                 });
                 self.name_to_key.last_mut().unwrap().insert(iv.clone(), ArgOrVar::Iv(key));
@@ -100,9 +111,7 @@ impl ConvertToSsa {
 
                 let ret = self.convert_expr(*expr);
 
-                let ids = self.ids.pop().unwrap();
-                let ssa = self.ssa.pop().unwrap();
-                self.name_to_key.pop().unwrap();
+                let (ids, ssa) = self.pop_scope();
 
                 Expr::Tensor(Tensor { iv, lb, ub, ids, ssa, ret })
             },
@@ -132,11 +141,11 @@ impl ConvertToSsa {
         };
 
         let id = self.fresh_uid();
-        let key = self.ids.last_mut().unwrap().insert_with(|key| {
+        let key = self.scopes.last_mut().unwrap().0.insert_with(|key| {
             Avis::new(ArgOrVar::Var(key), &id, None)
         });
 
-        self.ssa.last_mut().unwrap().insert(key, e);
+        self.scopes.last_mut().unwrap().1.insert(key, e);
         ArgOrVar::Var(key)
     }
 }
