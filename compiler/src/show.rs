@@ -66,7 +66,7 @@ impl<Ast: AstConfig> Show<Ast> {
             .collect::<Vec<String>>()
             .join(", ");
         let ret_ty = &self.find_id(fundef.ret).unwrap().ty;
-        res.push_str(&format!("fn {} ({}) -> {} {{\n", fundef.name, args, ret_ty));
+        res.push_str(&format!("fn {}({}) -> {} {{\n", fundef.name, args, ret_ty));
 
         for (k, id) in fundef.ids.iter() {
             res.push_str(&format!("{}{} {}; // {:?}\n", self.indent(), id.ty, id.name, k));
@@ -119,14 +119,14 @@ impl<Ast: AstConfig> Show<Ast> {
             self.find_id(tensor.ret).unwrap().name,
         ));
 
-        self.pop_scope();
-
-        res.push_str(&format!("{}  | {} <= {} < {} }}",
+        res.push_str(&format!("{}| {} <= {} < {} }}",
             self.indent(),
             self.find_id(tensor.lb).unwrap().name,
             self.find_key(tensor.iv.0).unwrap().name,
             self.find_id(tensor.ub).unwrap().name,
         ));
+
+        self.pop_scope();
 
         res
     }

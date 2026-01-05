@@ -58,15 +58,6 @@ pub trait Scoped<Ast: AstConfig, OutAst: AstConfig = Ast> {
         }
         None
     }
-
-    fn depth(&self, key: Key) -> Option<usize> {
-        for (depth, (ids, _ssa)) in self.scopes().iter().enumerate().rev() {
-            if ids.get(key).is_some() {
-                return Some(depth);
-            }
-        }
-        None
-    }
 }
 
 pub trait AstConfig: Clone + fmt::Debug {

@@ -1,11 +1,19 @@
 use crate::{arena::{Arena, SecondaryArena}, ast::*, traverse::Rewriter};
 
+pub fn type_infer(program: Program<UntypedAst>) -> Result<Program<TypedAst>, InferenceError> {
+    let mut fundefs = Vec::new();
+
+    for fundef in program.fundefs {
+        let (_, res) = TypeInfer::new().trav_fundef(fundef)?;
+        fundefs.push(res);
+    }
+
+    Ok(Program { fundefs })
+}
+
 pub struct TypeInfer {
     typed_ids: Vec<Arena<Avis<TypedAst>>>,
     typed_ssa: Vec<SecondaryArena<Expr<TypedAst>>>,
-    // todo: this should be included in the return type, probably we should
-    // return Result<(Self::OK, Node), Self::Err> instead
-    found_ty: Option<Type>,
     fargs: Vec<Avis<UntypedAst>>,
     scopes: Vec<(Arena<Avis<UntypedAst>>, SecondaryArena<Expr<UntypedAst>>)>,
 }
@@ -18,7 +26,6 @@ impl TypeInfer {
         Self {
             typed_ids: Vec::new(),
             typed_ssa: Vec::new(),
-            found_ty: None,
             fargs: Vec::new(),
             scopes: Vec::new(),
         }
@@ -67,88 +74,95 @@ impl Rewriter for TypeInfer {
 
     type OutAst = TypedAst;
 
+    type Ok = Type;
+
     type Err = InferenceError;
 
-    fn trav_fundef(&mut self, fundef: Fundef<Self::InAst>) -> Result<Fundef<Self::OutAst>, Self::Err> {
-        self.fargs = fundef.args.clone();
-
+    fn trav_fundef(&mut self, fundef: Fundef<Self::InAst>) -> Result<(Type, Fundef<Self::OutAst>), InferenceError> {
+        self.set_fargs(fundef.args.clone());
         self.push_scope(fundef.ids.clone(), fundef.ssa.clone());
 
-        let ret = self.trav_ssa(fundef.ret)?;
+        let (ret_ty, ret) = self.trav_rhs_id(fundef.ret)?;
 
-        let args = self.pop_fargs();
         let (ids, ssa) = self.pop_scope();
+        let args = self.pop_fargs();
 
-        Ok(Fundef {
+        Ok((ret_ty, Fundef {
             name: fundef.name,
             args,
             ids,
             ssa,
             ret,
-        })
+        }))
     }
 
-    fn trav_ssa(&mut self, id: ArgOrVar) -> Result<ArgOrVar, Self::Err> {
-        match id {
+    /// Identifiers occurring in an expression position
+    fn trav_rhs_id(&mut self, id: ArgOrVar) -> Result<(Type, ArgOrVar), InferenceError> {
+        let ty = match id {
             ArgOrVar::Arg(i) => {
-                let ty = self.fargs[i].ty.clone().unwrap();
-                self.found_ty = Some(ty);
+                self.fargs[i].ty.clone().unwrap()
             },
             ArgOrVar::Var(key) => {
                 let old_avis = self.find_key(key).cloned().unwrap();
                 let old_expr = self.find_ssa(key).cloned().unwrap();
-                let new_expr = self.trav_expr(old_expr)?;
+                let (new_ty, new_expr) = self.trav_expr(old_expr)?;
 
-                let avis = Avis::from(&old_avis, self.found_ty.clone().unwrap());
-                let depth = self.depth(key).unwrap();
-                self.typed_ids[depth].insert_with_key(key, avis);
-                self.typed_ssa[depth].insert(key, new_expr);
+                let avis = Avis::from(&old_avis, new_ty.clone());
+                self.typed_ids.last_mut().unwrap().insert_with_key(key, avis);
+                self.typed_ssa.last_mut().unwrap().insert(key, new_expr);
+                new_ty
             },
             ArgOrVar::Iv(_) => {
-                // Index vector in an expression position, get the type of the index vector
-                self.found_ty = Some(Type::scalar(BaseType::U32));
+                Type::scalar(BaseType::U32)
             },
         };
 
-        Ok(id)
+        Ok((ty, id))
     }
 
-    fn trav_iv(&mut self, iv: IndexVector) -> Result<IndexVector, Self::Err> {
-        let old_avis = self.find_key(iv.0).cloned().unwrap();
-        let avis = Avis::from(&old_avis, Type::scalar(BaseType::U32));
-        self.typed_ids.last_mut().unwrap().insert_with_key(iv.0, avis);
-        Ok(iv)
-    }
+    // fn trav_iv(&mut self, iv: IndexVector) -> Result<(Type, IndexVector), InferenceError> {
+    //     let old_avis = self.find_key(iv.0).cloned().unwrap();
+    //     let avis = Avis::from(&old_avis, Type::scalar(BaseType::U32));
+    //     self.typed_ids.last_mut().unwrap().insert_with_key(iv.0, avis);
+    //     Ok(iv)
+    // }
 
-    fn trav_tensor(&mut self, tensor: Tensor<Self::InAst>) -> Result<Tensor<Self::OutAst>, Self::Err> {
+    fn trav_tensor(&mut self, tensor: Tensor<Self::InAst>) -> Result<(Type, Tensor<Self::OutAst>), InferenceError> {
         self.push_scope(tensor.ids.clone(), tensor.ssa.clone());
 
-        let iv = self.trav_iv(tensor.iv)?;
-        let lb = self.trav_ssa(tensor.lb)?;
-        let ub = self.trav_ssa(tensor.ub)?;
+        let (_, lb) = self.trav_rhs_id(tensor.lb)?;
+        let (_, ub) = self.trav_rhs_id(tensor.ub)?;
 
-        let ret = self.trav_ssa(tensor.ret)?;
-        let ety = self.found_ty.take().unwrap();
+        //let iv = self.trav_iv(tensor.iv)?;
+        let old_avis = self.find_key(tensor.iv.0).cloned().unwrap();
+        let avis = Avis::from(&old_avis, Type::scalar(BaseType::U32));
+        self.typed_ids.last_mut().unwrap().insert_with_key(tensor.iv.0, avis);
 
-        let shp = if let Shape::Scalar = ety.shp { "." } else { "*" };
-        self.found_ty = Some(Type::vector(ety.basetype, shp));
+        let (ret_ty, ret) = self.trav_rhs_id(tensor.ret)?;
+
+        let shp = if let Shape::Scalar = ret_ty.shp { "." } else { "*" };
+        let tensor_ty = Type::vector(ret_ty.basetype, shp);
 
         let (ids, ssa) = self.pop_scope();
 
-        Ok(Tensor { iv, lb, ub, ret, ids, ssa })
+        Ok((tensor_ty, Tensor {
+            iv: tensor.iv,
+            lb,
+            ub,
+            ret,
+            ids,
+            ssa,
+        }))
     }
 
-    fn trav_binary(&mut self, Binary { l, r, op }: Binary) -> Result<Binary, Self::Err> {
-        let l = self.trav_ssa(l)?;
-        let lty = self.found_ty.take().unwrap();
-        let r = self.trav_ssa(r)?;
-        let rty = self.found_ty.take().unwrap();
+    fn trav_binary(&mut self, Binary { l, r, op }: Binary) -> Result<(Type, Binary), Self::Err> {
+        let (lty, l) = self.trav_rhs_id(l)?;
+        let (rty, r) = self.trav_rhs_id(r)?;
 
         let ty = unifies(lty, rty)?;
-        // TODO: check if lty and rty unify
 
         use Bop::*;
-        self.found_ty = Some(match op {
+        let ty = match op {
             Add | Sub | Mul | Div => {
                 // TODO: check if unifies with num
                 Type { basetype: BaseType::U32, shp: ty.shp }
@@ -160,17 +174,16 @@ impl Rewriter for TypeInfer {
                 // TODO: check if unifies with num
                 Type { basetype: BaseType::Bool, shp: ty.shp }
             },
-        });
+        };
 
-        Ok(Binary { l, r, op })
+        Ok((ty, Binary { l, r, op }))
     }
 
-    fn trav_unary(&mut self, Unary { r, op }: Unary) -> Result<Unary, Self::Err> {
-        let r = self.trav_ssa(r)?;
-        let rty = self.found_ty.take().unwrap();
+    fn trav_unary(&mut self, Unary { r, op }: Unary) -> Result<(Type, Unary), Self::Err> {
+        let (rty, r) = self.trav_rhs_id(r)?;
 
         use Uop::*;
-        self.found_ty = Some(match op {
+        let ty = match op {
             Neg => {
                 // TODO: check if r_ty unifies with signed num
                 Type { basetype: BaseType::U32, shp: rty.shp }
@@ -179,19 +192,19 @@ impl Rewriter for TypeInfer {
                 // TODO: check if r_ty unifies with bool
                 Type { basetype: BaseType::Bool, shp: rty.shp }
             },
-        });
+        };
 
-        Ok(Unary { r, op })
+        Ok((ty, Unary { r, op }))
     }
 
-    fn trav_bool(&mut self, value: bool) -> Result<bool, Self::Err> {
-        self.found_ty = Some(Type::scalar(BaseType::Bool));
-        Ok(value)
+    fn trav_bool(&mut self, value: bool) -> Result<(Type, bool), Self::Err> {
+        let ty = Type::scalar(BaseType::Bool);
+        Ok((ty, value))
     }
 
-    fn trav_u32(&mut self, value: u32) -> Result<u32, Self::Err> {
-        self.found_ty = Some(Type::scalar(BaseType::U32));
-        Ok(value)
+    fn trav_u32(&mut self, value: u32) -> Result<(Type, u32), Self::Err> {
+        let ty = Type::scalar(BaseType::U32);
+        Ok((ty, value))
     }
 }
 

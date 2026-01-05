@@ -1,4 +1,4 @@
-use compiler::{traverse::Rewriter, *};
+use compiler::*;
 
 use std::{env, fs};
 
@@ -9,7 +9,7 @@ fn main() {
     println!("{}", ast);
     let ast = convert_to_ssa::convert_to_ssa(ast);
     println!("{}", show::show(&ast));
-    let ast = type_infer::TypeInfer::new().trav_program(ast).unwrap();
+    let ast = type_infer::type_infer(ast).unwrap();
     println!("{}", show::show(&ast));
     let c_code = compile::codegen_c::CodegenContext::new().compile_program(&ast);
     print!("{}", c_code);

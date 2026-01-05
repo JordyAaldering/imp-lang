@@ -5,76 +5,34 @@ pub trait Rewriter: Scoped<Self::InAst, Self::OutAst> {
 
     type OutAst: AstConfig;
 
+    type Ok;
+
     type Err;
 
-    // If we require setscope and getscope functions, we can automate the scoping and looking up somewhat
-    fn trav_program(&mut self, program: Program<Self::InAst>) -> Result<Program<Self::OutAst>, Self::Err> {
-        let mut new_program = Program::new();
+    fn trav_fundef(&mut self, fundef: Fundef<Self::InAst>) -> Result<(Self::Ok, Fundef<Self::OutAst>), Self::Err>;
 
-        for fundef in program.fundefs {
-            self.set_fargs(fundef.args.clone());
-            self.push_scope(fundef.ids.clone(), fundef.ssa.clone());
-
-            let fundef = self.trav_fundef(fundef)?;
-            new_program.fundefs.push(fundef);
-
-            // Potential: here, we can compare the old (cloned) fundef against the updated one
-            // which for example allows us to only print changes when debugging
-            self.pop_fargs();
-            self.pop_scope();
-        }
-
-        Ok(new_program)
-    }
-
-    fn trav_fundef(&mut self, fundef: Fundef<Self::InAst>) -> Result<Fundef<Self::OutAst>, Self::Err>;
-
-    fn trav_ssa(&mut self, id: ArgOrVar) -> Result<ArgOrVar, Self::Err>;
-
-    fn trav_expr(&mut self, expr: Expr<Self::InAst>) -> Result<Expr<Self::OutAst>, Self::Err> {
+    fn trav_expr(&mut self, expr: Expr<Self::InAst>) -> Result<(Self::Ok, Expr<Self::OutAst>), Self::Err> {
         use Expr::*;
         match expr {
-            Tensor(n) => self.trav_tensor(n).map(Tensor),
-            Binary(n) => self.trav_binary(n).map(Binary),
-            Unary(n) => self.trav_unary(n).map(Unary),
-            Bool(n) => self.trav_bool(n).map(Bool),
-            U32(n) => self.trav_u32(n).map(U32),
+            Tensor(n) => self.trav_tensor(n).map(|(x,n)| (x, Tensor(n))),
+            Binary(n) => self.trav_binary(n).map(|(x,n)| (x, Binary(n))),
+            Unary(n) => self.trav_unary(n).map(|(x,n)| (x, Unary(n))),
+            Bool(n) => self.trav_bool(n).map(|(x,n)| (x, Bool(n))),
+            U32(n) => self.trav_u32(n).map(|(x,n)| (x, U32(n))),
         }
     }
 
-    fn trav_tensor(&mut self, tensor: Tensor<Self::InAst>) -> Result<Tensor<Self::OutAst>, Self::Err> {
-        self.push_scope(tensor.ids.clone(), tensor.ssa.clone());
+    fn trav_rhs_id(&mut self, id: ArgOrVar) -> Result<(Self::Ok, ArgOrVar), Self::Err>;
 
-        let lb = self.trav_ssa(tensor.lb)?;
-        let ub = self.trav_ssa(tensor.ub)?;
-        let iv = self.trav_iv(tensor.iv)?;
-        let ret = self.trav_ssa(tensor.ret)?;
+    fn trav_tensor(&mut self, tensor: Tensor<Self::InAst>) -> Result<(Self::Ok, Tensor<Self::OutAst>), Self::Err>;
 
-        let (ids, ssa) = self.pop_scope();
+    fn trav_binary(&mut self, binary: Binary) -> Result<(Self::Ok, Binary), Self::Err>;
 
-        Ok(Tensor { iv, lb, ub, ids, ssa, ret })
-    }
+    fn trav_unary(&mut self, unary: Unary) -> Result<(Self::Ok, Unary), Self::Err>;
 
-    fn trav_iv(&mut self, iv: IndexVector) -> Result<IndexVector, Self::Err>;
+    fn trav_bool(&mut self, value: bool) -> Result<(Self::Ok, bool), Self::Err>;
 
-    fn trav_binary(&mut self, binary: Binary) -> Result<Binary, Self::Err> {
-        let l = self.trav_ssa(binary.l)?;
-        let r = self.trav_ssa(binary.r)?;
-        Ok(Binary { l, r, op: binary.op })
-    }
-
-    fn trav_unary(&mut self, unary: Unary) -> Result<Unary, Self::Err> {
-        let r = self.trav_ssa(unary.r)?;
-        Ok(Unary { r, op: unary.op })
-    }
-
-    fn trav_bool(&mut self, value: bool) -> Result<bool, Self::Err> {
-        Ok(value)
-    }
-
-    fn trav_u32(&mut self, value: u32) -> Result<u32, Self::Err> {
-        Ok(value)
-    }
+    fn trav_u32(&mut self, value: u32) -> Result<(Self::Ok, u32), Self::Err>;
 }
 
 pub trait Traversal<Ast: AstConfig>: Scoped<Ast> {

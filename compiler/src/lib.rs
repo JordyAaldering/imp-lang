@@ -12,12 +12,12 @@ pub mod undo_ssa;
 
 // use llvm_sys::core::LLVMPrintModuleToFile;
 
-use crate::{ast::*, traverse::{Rewriter, Traversal}};
+use crate::{ast::*, traverse::Traversal};
 
 pub fn compile(src: &str) -> Program<TypedAst> {
     let ast = scanparse::scanparse(&src).unwrap();
     let ast = convert_to_ssa::convert_to_ssa(ast);
-    let ast = type_infer::TypeInfer::new().trav_program(ast).unwrap();
+    let ast = type_infer::type_infer(ast).unwrap();
     ast
 }
 
