@@ -1,9 +1,17 @@
-use std::{io, mem};
+use std::mem;
 
 use crate::{arena::{Arena, SecondaryArena}, ast::*};
 
+pub fn show<Ast: AstConfig>(program: &Program<Ast>)-> String {
+    program.fundefs.iter()
+        .map(|fundef| {
+            Show::new().show_fundef(fundef)
+        })
+        .collect::<Vec<String>>()
+        .join("\n\n")
+}
+
 pub struct Show<Ast: AstConfig> {
-    w: Box<dyn io::Write>,
     fargs: Vec<Avis<Ast>>,
     scopes: Vec<(Arena<Avis<Ast>>, SecondaryArena<Expr<Ast>>)>,
 }
@@ -37,99 +45,95 @@ impl<Ast: AstConfig> Scoped<Ast> for Show<Ast> {
 }
 
 impl<Ast: AstConfig> Show<Ast> {
-    pub fn new(w: Box<dyn io::Write>) -> Self {
+    pub fn new() -> Self {
         Self {
-            w,
             fargs: Vec::new(),
             scopes: Vec::new(),
         }
     }
 
-    pub fn show_program(&mut self, program: &Program<Ast>) -> io::Result<()> {
-        for fundef in &program.fundefs {
-            self.fargs = fundef.args.clone();
-            self.scopes.push((fundef.ids.clone(), fundef.ssa.clone()));
-
-            self.show_fundef(fundef)?;
-
-            self.scopes.pop().unwrap();
-            self.fargs = Vec::new();
-        }
-        Ok(())
+    fn indent(&self) -> String {
+        " ".repeat(4 * self.scopes.len())
     }
 
-    fn show_fundef(&mut self, fundef: &Fundef<Ast>) -> io::Result<()> {
-        write!(self.w, "fn {} (", fundef.name)?;
-        for avis in &fundef.args {
-            write!(self.w, "{:?} {}, ", avis.ty, avis.name)?;
-        }
-        writeln!(self.w, ") -> {:?} {{", fundef.ret)?;
+    fn show_fundef(&mut self, fundef: &Fundef<Ast>) -> String {
+        self.set_fargs(fundef.args.clone());
+        self.push_scope(fundef.ids.clone(), fundef.ssa.clone());
+        let mut res = String::new();
 
-        println!("  vars:");
-        for (_, v) in fundef.ids.iter() {
-            println!("    {:?}", v);
+        let args = fundef.args.iter()
+            .map(|arg| format!("{:?} {}", arg.ty, arg.name))
+            .collect::<Vec<String>>()
+            .join(", ");
+        res.push_str(&format!("fn {} ({}) -> {:?} {{\n", fundef.name, args, fundef.ret));
+
+        for (k, id) in fundef.ids.iter() {
+            res.push_str(&format!("{}{:?} {}; // {:?}\n", self.indent(), id.ty, id.name, k));
         }
 
-        println!("  ssa:");
         for (k, expr) in fundef.ssa.iter() {
-            print!("    {} = ", fundef.ids[k].name);
-            match expr {
-                Expr::Tensor(tensor) => {
-                    self.show_tensor(tensor)?;
-                }
-                Expr::Binary(Binary { l, r, op }) => {
-                    print!("{} {} {}", fundef[*l].name, op, fundef[*r].name);
-                },
-                Expr::Unary(Unary { r, op }) => {
-                    print!("{} {}", op, fundef[*r].name);
-                },
-                Expr::Bool(v) => print!("{}", v),
-                Expr::U32(v) => print!("{}", v),
-            }
-            println!(";");
+            let rhs = self.show_expr(expr);
+            let lhs = &self.find_key(k).unwrap().name;
+            res.push_str(&format!("{}{} = {};\n", self.indent(), lhs, rhs));
         }
 
-        println!("  return {};", fundef[fundef.ret.clone()].name);
+        let ret = &self.find_id(fundef.ret).unwrap().name;
+        res.push_str(&format!("    return {};\n", ret));
+        res.push_str("}}");
 
-        Ok(())
+        self.pop_scope();
+        self.pop_fargs();
+        res
     }
 
-    fn show_tensor(&mut self, tensor: &Tensor<Ast>) -> io::Result<()> {
-        self.scopes.push((tensor.ids.clone(), tensor.ssa.clone()));
+    fn show_expr(&mut self, expr: &Expr<Ast>) -> String {
+        use Expr::*;
+        match expr {
+            Tensor(n) => self.show_tensor(n),
+            Binary(n) => self.show_binary(n),
+            Unary(n) => self.show_unary(n),
+            Bool(v) => v.to_string(),
+            U32(v) => v.to_string(),
+        }
+    }
 
-        println!("{{");
-        println!("    local vars:");
-        for (_, v) in tensor.ids.iter() {
-            println!("    {:?}", v);
+    fn show_tensor(&mut self, tensor: &Tensor<Ast>) -> String {
+        self.push_scope(tensor.ids.clone(), tensor.ssa.clone());
+        let mut res = String::new();
+
+        res.push_str("{\n");
+
+        for (k, id) in tensor.ids.iter() {
+            res.push_str(&format!("{}{:?} {}; // {:?}\n", self.indent(), id.ty, id.name, k));
         }
 
-        println!("  local exprs:");
         for (k, expr) in tensor.ssa.iter() {
-            print!("    {} = ", tensor.ids[k].name);
-            match expr {
-                Expr::Tensor(tensor) => {
-                    self.show_tensor(tensor)?;
-                }
-                Expr::Binary(Binary { l, r, op }) => {
-                    print!("{} {} {}", self.find_id(*l).unwrap().name, op, self.find_id(*r).unwrap().name);
-                },
-                Expr::Unary(Unary { r, op }) => {
-                    print!("{} {}", op, self.find_id(*r).unwrap().name);
-                },
-                Expr::Bool(v) => print!("{}", v),
-                Expr::U32(v) => print!("{}", v),
-            }
-            println!(";");
+            let rhs = self.show_expr(expr);
+            let lhs = &self.find_key(k).unwrap().name;
+            res.push_str(&format!("{}{} = {};\n", self.indent(), lhs, rhs));
         }
 
-        print!("  {} | {} <= {} < {} }}",
+        print!("{}{} | {} <= {} < {}",
+            self.indent(),
             self.find_id(tensor.ret).unwrap().name,
             self.find_id(tensor.lb).unwrap().name,
             self.find_key(tensor.iv.0).unwrap().name,
             self.find_id(tensor.ub).unwrap().name,
         );
 
-        self.scopes.pop().unwrap();
-        Ok(())
+        self.pop_scope();
+        res.push_str(&format!("{}}}", self.indent()));
+        res
+    }
+
+    fn show_binary(&mut self, binary: &Binary) -> String {
+        let l = &self.find_id(binary.l).unwrap().name;
+        let r = &self.find_id(binary.r).unwrap().name;
+        format!("{} {} {}", l, binary.op, r)
+    }
+
+    fn show_unary(&mut self, unary: &Unary) -> String {
+        let r = &self.find_id(unary.r).unwrap().name;
+        format!("{} {}", unary.op, r)
     }
 }

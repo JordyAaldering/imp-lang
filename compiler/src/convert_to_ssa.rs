@@ -58,13 +58,13 @@ impl ConvertToSsa {
     }
 
     pub fn convert_fundef(&mut self, fundef: parse_ast::Fundef) -> Fundef<UntypedAst> {
+        self.push_scope(Arena::new(), SecondaryArena::new());
+
         let mut args = Vec::new();
         for (i, (ty, id)) in fundef.args.into_iter().enumerate() {
             args.push(Avis::new(ArgOrVar::Arg(i), &id, Some(ty)));
             self.name_to_key.last_mut().unwrap().insert(id, ArgOrVar::Arg(i));
         }
-
-        self.push_scope(Arena::new(), SecondaryArena::new());
 
         for stmt in fundef.body {
             self.convert_stmt(stmt);
