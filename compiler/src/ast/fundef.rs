@@ -8,7 +8,7 @@ use super::{ArgOrVar, AstConfig, Avis};
 pub struct Fundef<Ast: AstConfig> {
     pub name: String,
     pub args: Vec<Avis<Ast>>,
-    pub block: Block<Ast>,
+    pub body: Block<Ast>,
 }
 
 impl<Ast: AstConfig> ops::Index<ArgOrVar> for Fundef<Ast> {
@@ -17,8 +17,8 @@ impl<Ast: AstConfig> ops::Index<ArgOrVar> for Fundef<Ast> {
     fn index(&self, x: ArgOrVar) -> &Self::Output {
         match x {
             ArgOrVar::Arg(i) => &self.args[i],
-            ArgOrVar::Var(k) => &self.block.ids[k],
-            ArgOrVar::Iv(k) => &self.block.ids[k],
+            ArgOrVar::Var(k) => &self.body.ids[k],
+            ArgOrVar::Iv(k) => &self.body.ids[k],
         }
     }
 }

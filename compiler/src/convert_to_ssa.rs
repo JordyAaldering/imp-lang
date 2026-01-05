@@ -67,7 +67,7 @@ impl ConvertToSsa {
         Fundef {
             name: fundef.id,
             args,
-            block,
+            body: block,
         }
     }
 

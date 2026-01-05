@@ -1,40 +1,28 @@
 use std::io;
 
-use crate::{arena::Key, ast::*, traverse::Scoped};
+use crate::ast::*;
 
 pub struct Show<Ast: AstConfig> {
     w: Box<dyn io::Write>,
-    args: Vec<Avis<Ast>>,
+    fargs: Vec<Avis<Ast>>,
     scopes: Vec<Block<Ast>>,
 }
 
 impl<Ast: AstConfig> Scoped<Ast> for Show<Ast> {
-    fn find_id(&self, key: Key) -> Option<&Avis<Ast>> {
-        for scope in self.scopes.iter().rev() {
-            if let Some(v) = scope.ids.get(key) {
-                return  Some(v);
-            }
-        }
-
-        None
+    fn fargs(&self) -> &Vec<Avis<Ast>> {
+        &self.fargs
     }
 
-    fn find_ssa(&self, key: Key) -> Option<&Expr<Ast>> {
-        for scope in self.scopes.iter().rev() {
-            if let Some(v) = scope.ssa.get(key) {
-                return  Some(v);
-            }
-        }
-
-        None
+    fn fargs_mut(&mut self) -> &mut Vec<Avis<Ast>> {
+        &mut self.fargs
     }
 
-    fn push_scope(&mut self, scope: Block<Ast>) {
-        self.scopes.push(scope);
+    fn scopes(&self) -> &Vec<Block<Ast>> {
+        &self.scopes
     }
 
-    fn pop_scope(&mut self) -> Block<Ast> {
-        self.scopes.pop().unwrap()
+    fn scopes_mut(&mut self) -> &mut Vec<Block<Ast>> {
+        &mut self.scopes
     }
 }
 
@@ -42,28 +30,20 @@ impl<Ast: AstConfig> Show<Ast> {
     pub fn new(w: Box<dyn io::Write>) -> Self {
         Self {
             w,
-            args: Vec::new(),
+            fargs: Vec::new(),
             scopes: Vec::new(),
-        }
-    }
-
-    pub fn find_id_or_arg(&mut self, key: ArgOrVar) -> Option<&Avis<Ast>> {
-        match key {
-            ArgOrVar::Arg(i) => self.args.get(i),
-            ArgOrVar::Var(key) => self.find_id(key),
-            ArgOrVar::Iv(key) => self.find_id(key),
         }
     }
 
     pub fn show_program(&mut self, program: &Program<Ast>) -> io::Result<()> {
         for fundef in &program.fundefs {
-            self.args = fundef.args.clone();
-            self.scopes.push(fundef.block.clone());
+            self.fargs = fundef.args.clone();
+            self.scopes.push(fundef.body.clone());
 
             self.show_fundef(fundef)?;
 
             self.scopes.pop().unwrap();
-            self.args = Vec::new();
+            self.fargs = Vec::new();
         }
         Ok(())
     }
@@ -73,16 +53,16 @@ impl<Ast: AstConfig> Show<Ast> {
         for avis in &fundef.args {
             write!(self.w, "{:?} {}, ", avis.ty, avis.name)?;
         }
-        writeln!(self.w, ") -> {:?} {{", fundef.block.ret)?;
+        writeln!(self.w, ") -> {:?} {{", fundef.body.ret)?;
 
         println!("  vars:");
-        for (_, v) in fundef.block.ids.iter() {
+        for (_, v) in fundef.body.ids.iter() {
             println!("    {:?}", v);
         }
 
         println!("  ssa:");
-        for (k, expr) in fundef.block.ssa.iter() {
-            print!("    {} = ", fundef.block.ids[k].name);
+        for (k, expr) in fundef.body.ssa.iter() {
+            print!("    {} = ", fundef.body.ids[k].name);
             match expr {
                 Expr::Tensor(tensor) => {
                     self.show_tensor(tensor)?;
@@ -99,7 +79,7 @@ impl<Ast: AstConfig> Show<Ast> {
             println!(";");
         }
 
-        println!("  return {};", fundef[fundef.block.ret.clone()].name);
+        println!("  return {};", fundef[fundef.body.ret.clone()].name);
 
         Ok(())
     }
@@ -123,10 +103,10 @@ impl<Ast: AstConfig> Show<Ast> {
                     self.show_tensor(tensor)?;
                 }
                 Expr::Binary(Binary { l, r, op }) => {
-                    print!("binarytodo");
+                    print!("{} {} {}", self.find_id(*l).unwrap().name, op, self.find_id(*r).unwrap().name);
                 },
                 Expr::Unary(Unary { r, op }) => {
-                    print!("unarytodo");
+                    print!("{} {}", op, self.find_id(*r).unwrap().name);
                 },
                 Expr::Bool(v) => print!("{}", v),
                 Expr::U32(v) => print!("{}", v),
@@ -135,10 +115,10 @@ impl<Ast: AstConfig> Show<Ast> {
         }
 
         print!("  {} | {} <= {} < {} }}",
-            self.find_id_or_arg(body.ret).unwrap().name.clone(),
-            self.find_id_or_arg(*lb).unwrap().name.clone(),
-            self.find_id(iv.0).unwrap().name.clone(),
-            self.find_id_or_arg(*ub).unwrap().name.clone(),
+            self.find_id(body.ret).unwrap().name,
+            self.find_id(*lb).unwrap().name,
+            self.find_key(iv.0).unwrap().name,
+            self.find_id(*ub).unwrap().name,
         );
 
         self.scopes.pop().unwrap();

@@ -22,7 +22,7 @@ pub fn compile(src: &str) -> Program<TypedAst> {
 }
 
 pub fn emit_header(ast: &mut Program<TypedAst>, outfile: &str) {
-    let res = compile::codegen_header::CompileHeader.trav_program(ast).unwrap();
+    let res = compile::codegen_header::CompileHeader::new().trav_program(ast).unwrap();
     std::fs::write(outfile, res).unwrap();
 }
 

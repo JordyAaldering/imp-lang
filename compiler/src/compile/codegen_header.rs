@@ -1,28 +1,34 @@
-use crate::{arena::Key, ast::*, traverse::{Scoped, Traversal}};
+use crate::{ast::*, traverse::Traversal};
 
-pub struct CompileHeader;
+pub struct CompileHeader {
+    fargs: Vec<Avis<TypedAst>>,
+    scopes: Vec<Block<TypedAst>>,
+}
 
 impl CompileHeader {
     pub fn new() -> Self {
-        Self
+        Self {
+            fargs: Vec::new(),
+            scopes: Vec::new(),
+        }
     }
 }
 
 impl Scoped<TypedAst> for CompileHeader {
-    fn find_id(&self, _key: Key) -> Option<&Avis<TypedAst>> {
-        unreachable!()
+    fn fargs(&self) -> &Vec<Avis<TypedAst>> {
+        &self.fargs
     }
 
-    fn find_ssa(&self, _key: Key) -> Option<&Expr<TypedAst>> {
-        unreachable!()
+    fn fargs_mut(&mut self) -> &mut Vec<Avis<TypedAst>> {
+        &mut self.fargs
     }
 
-    fn push_scope(&mut self, _fundef: Block<TypedAst>) {
-        unreachable!()
+    fn scopes(&self) -> &Vec<Block<TypedAst>> {
+        &self.scopes
     }
 
-    fn pop_scope(&mut self) -> Block<TypedAst> {
-        unreachable!()
+    fn scopes_mut(&mut self) -> &mut Vec<Block<TypedAst>> {
+        &mut self.scopes
     }
 }
 
@@ -36,7 +42,7 @@ impl Traversal<TypedAst> for CompileHeader {
     fn trav_fundef(&mut self, fundef: &mut Fundef<TypedAst>) -> Result<Self::Ok, Self::Err> {
         let mut res = String::new();
 
-        let ret_type = to_rusttype(&fundef[fundef.block.ret.clone()].ty);
+        let ret_type = to_rusttype(&fundef[fundef.body.ret.clone()].ty);
 
         let args = fundef.args.iter_mut().map(|arg| {
             self.trav_farg(arg).unwrap()

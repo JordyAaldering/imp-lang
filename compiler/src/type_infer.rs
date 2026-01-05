@@ -1,15 +1,12 @@
-use std::mem;
-
-use crate::{arena::{Arena, Key, SecondaryArena}, ast::*, traverse::{Scoped, Rewriter}};
+use crate::{arena::{Arena, SecondaryArena}, ast::*, traverse::Rewriter};
 
 pub struct TypeInfer {
-    // todo: this should be a vec of arenas, one for each scoping level
-    typed_ids: Arena<Avis<TypedAst>>,
-    typed_ssa: SecondaryArena<Expr<TypedAst>>,
+    typed_ids: Vec<Arena<Avis<TypedAst>>>,
+    typed_ssa: Vec<SecondaryArena<Expr<TypedAst>>>,
     // todo: this should be included in the return type, probably we should
     // return Result<(Self::OK, Node), Self::Err> instead
     found_ty: Option<Type>,
-    args: Vec<Avis<TypedAst>>,
+    fargs: Vec<Avis<UntypedAst>>,
     scopes: Vec<Block<UntypedAst>>,
 }
 
@@ -19,42 +16,30 @@ pub enum InferenceError {}
 impl TypeInfer {
     pub fn new() -> Self {
         Self {
-            typed_ids: Arena::new(),
-            typed_ssa: SecondaryArena::new(),
+            typed_ids: Vec::new(),
+            typed_ssa: Vec::new(),
             found_ty: None,
-            args: Vec::new(),
+            fargs: Vec::new(),
             scopes: Vec::new(),
         }
     }
 }
 
 impl Scoped<UntypedAst> for TypeInfer {
-    fn find_id(&self, key: Key) -> Option<&Avis<UntypedAst>> {
-        for scope in self.scopes.iter().rev() {
-            if let Some(v) = scope.ids.get(key) {
-                return  Some(v);
-            }
-        }
-
-        None
+    fn fargs(&self) -> &Vec<Avis<UntypedAst>> {
+        &self.fargs
     }
 
-    fn find_ssa(&self, key: Key) -> Option<&Expr<UntypedAst>> {
-        for scope in self.scopes.iter().rev() {
-            if let Some(v) = scope.ssa.get(key) {
-                return  Some(v);
-            }
-        }
-
-        None
+    fn fargs_mut(&mut self) -> &mut Vec<Avis<UntypedAst>> {
+        &mut self.fargs
     }
 
-    fn push_scope(&mut self, fundef: Block<UntypedAst>) {
-        self.scopes.push(fundef);
+    fn scopes(&self) -> &Vec<Block<UntypedAst>> {
+        &self.scopes
     }
 
-    fn pop_scope(&mut self) -> Block<UntypedAst> {
-        self.scopes.pop().unwrap()
+    fn scopes_mut(&mut self) -> &mut Vec<Block<UntypedAst>> {
+        &mut self.scopes
     }
 }
 
@@ -66,32 +51,31 @@ impl Rewriter for TypeInfer {
     type Err = InferenceError;
 
     fn trav_fundef(&mut self, fundef: Fundef<Self::InAst>) -> Result<Fundef<Self::OutAst>, Self::Err> {
-        self.args = Vec::new();
-        for arg in fundef.args {
-            let ty = arg.ty.clone().expect("function argument cannot be untyped");
-            self.args.push(Avis::from(&arg, ty));
-        }
+        self.fargs = fundef.args.clone();
 
-        let block = self.trav_block(fundef.block)?;
-        //unifies(fundef.ret_type, self.found_ty.unwrap())?;
+        self.typed_ids.push(Arena::new());
+        self.typed_ssa.push(SecondaryArena::new());
+        let body = self.trav_block(fundef.body)?;
 
         let mut args = Vec::new();
-        mem::swap(&mut args, &mut self.args);
+        for arg in &self.fargs {
+            let ty = arg.ty.clone().expect("function argument cannot be untyped");
+            args.push(Avis::from(&arg, ty));
+        }
+        self.fargs.clear();
+
         Ok(Fundef {
             name: fundef.name,
             args,
-            block,
+            body,
         })
     }
 
     fn trav_block(&mut self, block: Block<Self::InAst>) -> Result<Block<Self::OutAst>, Self::Err> {
         let ret = self.trav_ssa(block.ret)?;
 
-        let mut ids = Arena::new();
-        mem::swap(&mut self.typed_ids, &mut ids);
-        let mut ssa = SecondaryArena::new();
-        mem::swap(&mut self.typed_ssa, &mut ssa);
-
+        let ids = self.typed_ids.pop().unwrap();
+        let ssa = self.typed_ssa.pop().unwrap();
         Ok(Block {
             ids,
             ssa,
@@ -102,17 +86,18 @@ impl Rewriter for TypeInfer {
     fn trav_ssa(&mut self, id: ArgOrVar) -> Result<ArgOrVar, Self::Err> {
         match id {
             ArgOrVar::Arg(i) => {
-                let ty = self.args[i].ty.clone();
+                let ty = self.fargs[i].ty.clone().expect("function argument cannot be untyped");
                 self.found_ty = Some(ty);
             },
             ArgOrVar::Var(key) => {
-                let old_avis = self.find_id(key).cloned().unwrap();
+                let old_avis = self.find_key(key).cloned().unwrap();
                 let old_expr = self.find_ssa(key).cloned().unwrap();
                 let new_expr = self.trav_expr(old_expr)?;
 
                 let avis = Avis::from(&old_avis, self.found_ty.clone().unwrap());
-                self.typed_ids.insert_with_key(key, avis);
-                self.typed_ssa.insert(key, new_expr);
+                let depth = self.depth(key).unwrap();
+                self.typed_ids[depth].insert_with_key(key, avis);
+                self.typed_ssa[depth].insert(key, new_expr);
             },
             ArgOrVar::Iv(_) => {
                 // Index vector in an expression position, get the type of the index vector
@@ -124,13 +109,16 @@ impl Rewriter for TypeInfer {
     }
 
     fn trav_iv(&mut self, iv: IndexVector) -> Result<IndexVector, Self::Err> {
-        let old_avis = self.find_id(iv.0).cloned().unwrap();
+        let old_avis = self.find_key(iv.0).cloned().unwrap();
         let avis = Avis::from(&old_avis, Type::scalar(BaseType::U32));
-        self.typed_ids.insert_with_key(iv.0, avis);
+        self.typed_ids.last_mut().unwrap().insert_with_key(iv.0, avis);
         Ok(iv)
     }
 
     fn trav_tensor(&mut self, tensor: Tensor<Self::InAst>) -> Result<Tensor<Self::OutAst>, Self::Err> {
+        self.typed_ids.push(Arena::new());
+        self.typed_ssa.push(SecondaryArena::new());
+
         let iv = self.trav_iv(tensor.iv)?;
         let lb = self.trav_ssa(tensor.lb)?;
         let ub = self.trav_ssa(tensor.ub)?;
