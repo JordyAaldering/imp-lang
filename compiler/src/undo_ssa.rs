@@ -41,9 +41,9 @@ impl UndoSsa {
             ArgOrVar::Var(k) => {
                 // TODO: if an ssa key is used in multiple places, pull the computation out. otherwise inline it
                 match &fundef.ssa[k] {
-                    ast::Expr::Tensor(ast::Tensor { iv, body, lb, ub }) => {
+                    ast::Expr::Tensor(ast::Tensor { iv, lb, ub, ret, .. }) => {
                         let iv = IndexVector(fundef.ids[iv.0].name.clone());
-                        let expr = self.inline_expr(body.ret, fundef);
+                        let expr = self.inline_expr(*ret, fundef);
                         let lb = self.inline_expr(*lb, fundef);
                         let ub = self.inline_expr(*ub, fundef);
                         Expr::Tensor { iv, expr: Box::new(expr), lb: Box::new(lb), ub: Box::new(ub) }
@@ -77,9 +77,9 @@ impl UndoSsa {
             ArgOrVar::Var(k) => {
                 println!("looking for {}", fundef.ids[k].name);
                 match &fundef.ssa[k] {
-                    ast::Expr::Tensor(ast::Tensor { iv, body: expr, lb, ub }) => {
+                    ast::Expr::Tensor(ast::Tensor { iv, lb, ub, ret, .. }) => {
                         let iv = IndexVector(fundef.ids[iv.0].name.clone());
-                        let expr = self.inline_expr(expr.ret, fundef);
+                        let expr = self.inline_expr(*ret, fundef);
                         let lb = self.inline_expr(*lb, fundef);
                         let ub = self.inline_expr(*ub, fundef);
                         Expr::Tensor { iv, expr: Box::new(expr), lb: Box::new(lb), ub: Box::new(ub) }

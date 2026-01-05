@@ -66,18 +66,18 @@ impl CodegenContext {
         let mut c_code = String::new();
 
         match expr {
-            Expr::Tensor(Tensor { iv, body: expr, lb, ub }) => {
+            Expr::Tensor(Tensor { iv, lb, ub, ret, .. }) => {
                 let mut forloop = String::new();
 
-                let ty = to_ctype(&fundef[expr.ret.clone()].ty);
+                let ty = to_ctype(&fundef[ret.clone()].ty);
                 let iv_name = fundef.ids[iv.0].name.clone();
                 let lb_name = fundef[lb.clone()].name.clone();
                 let ub_name = fundef[ub.clone()].name.clone();
 
                 forloop.push_str(&format!("for (size_t {} = {}; {} < {}; {} += 1) {{\n", iv_name, lb_name, iv_name, ub_name, iv_name));
 
-                if let ArgOrVar::Var(k) = expr.ret {
-                    let expr_code = self.compile_expr(fundef, &fundef.ssa[k]);
+                if let ArgOrVar::Var(k) = ret {
+                    let expr_code = self.compile_expr(fundef, &fundef.ssa[*k]);
                     forloop.push_str(&format!("        res[{}] = {};\n", iv_name, expr_code));
                 }
 

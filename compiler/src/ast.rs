@@ -1,6 +1,5 @@
 mod program;
 mod fundef;
-mod block;
 mod expr;
 mod tensor;
 mod binary;
@@ -10,7 +9,6 @@ mod typ;
 
 pub use program::*;
 pub use fundef::*;
-pub use block::*;
 pub use expr::*;
 pub use tensor::*;
 pub use binary::*;
@@ -22,14 +20,16 @@ use std::fmt;
 
 use crate::arena::{Arena, Key, SecondaryArena};
 
-pub trait Scoped<Ast: AstConfig> {
+pub trait Scoped<Ast: AstConfig, OutAst: AstConfig = Ast> {
     fn fargs(&self) -> &Vec<Avis<Ast>>;
 
     fn fargs_mut(&mut self) -> &mut Vec<Avis<Ast>>;
 
     fn scopes(&self) -> &Vec<(Arena<Avis<Ast>>, SecondaryArena<Expr<Ast>>)>;
 
-    fn scopes_mut(&mut self) -> &mut Vec<(Arena<Avis<Ast>>, SecondaryArena<Expr<Ast>>)>;
+    fn push_scope(&mut self, ids: Arena<Avis<Ast>>, ssa: SecondaryArena<Expr<Ast>>);
+
+    fn pop_scope(&mut self) -> (Arena<Avis<OutAst>>, SecondaryArena<Expr<OutAst>>);
 
     fn find_id(&self, key: ArgOrVar) -> Option<&Avis<Ast>> {
         match key {

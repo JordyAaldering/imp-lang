@@ -1,6 +1,6 @@
-use crate::arena::Key;
+use crate::arena::{Arena, Key, SecondaryArena};
 
-use super::{AstConfig, ArgOrVar, Block};
+use super::{AstConfig, ArgOrVar, Avis, Expr};
 
 /// ```
 /// { iv + 1 | 0 <= iv < 3;
@@ -34,10 +34,12 @@ use super::{AstConfig, ArgOrVar, Block};
 /// we might have to look through a number of scopes.
 #[derive(Clone, Debug)]
 pub struct Tensor<Ast: AstConfig> {
-    pub body: Block<Ast>,
     pub iv: IndexVector,
     pub lb: ArgOrVar,
     pub ub: ArgOrVar,
+    pub ids: Arena<Avis<Ast>>,
+    pub ssa: SecondaryArena<Expr<Ast>>,
+    pub ret: ArgOrVar,
 }
 
 #[derive(Clone, Copy, Debug)]

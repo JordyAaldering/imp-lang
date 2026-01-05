@@ -1,6 +1,6 @@
 use crate::ast::*;
 
-pub trait Rewriter: Scoped<Self::InAst> {
+pub trait Rewriter: Scoped<Self::InAst, Self::OutAst> {
     type InAst: AstConfig;
 
     type OutAst: AstConfig;
@@ -13,23 +13,21 @@ pub trait Rewriter: Scoped<Self::InAst> {
 
         for fundef in program.fundefs {
             *self.fargs_mut() = fundef.args.clone();
-            self.scopes_mut().push((fundef.ids.clone(), fundef.ssa.clone()));
+            self.push_scope(fundef.ids.clone(), fundef.ssa.clone());
 
             let fundef = self.trav_fundef(fundef)?;
             new_program.fundefs.push(fundef);
 
             // Potential: here, we can compare the old (cloned) fundef against the updated one
             // which for example allows us to only print changes when debugging
-            self.scopes_mut().pop().unwrap();
             self.fargs_mut().clear();
+            self.pop_scope();
         }
 
         Ok(new_program)
     }
 
     fn trav_fundef(&mut self, fundef: Fundef<Self::InAst>) -> Result<Fundef<Self::OutAst>, Self::Err>;
-
-    fn trav_block(&mut self, block: Block<Self::InAst>) -> Result<Block<Self::OutAst>, Self::Err>;
 
     fn trav_ssa(&mut self, id: ArgOrVar) -> Result<ArgOrVar, Self::Err>;
 
@@ -45,16 +43,16 @@ pub trait Rewriter: Scoped<Self::InAst> {
     }
 
     fn trav_tensor(&mut self, tensor: Tensor<Self::InAst>) -> Result<Tensor<Self::OutAst>, Self::Err> {
-        self.scopes_mut().push((tensor.body.ids.clone(), tensor.body.ssa.clone()));
+        self.push_scope(tensor.ids.clone(), tensor.ssa.clone());
 
         let lb = self.trav_ssa(tensor.lb)?;
         let ub = self.trav_ssa(tensor.ub)?;
         let iv = self.trav_iv(tensor.iv)?;
-        let expr = self.trav_block(tensor.body)?;
+        let ret = self.trav_ssa(tensor.ret)?;
 
-        self.scopes_mut().pop().unwrap();
+        let (ids, ssa) = self.pop_scope();
 
-        Ok(Tensor { iv, body: expr, lb, ub })
+        Ok(Tensor { iv, lb, ub, ids, ssa, ret })
     }
 
     fn trav_iv(&mut self, iv: IndexVector) -> Result<IndexVector, Self::Err>;
@@ -95,7 +93,7 @@ pub trait Traversal<Ast: AstConfig>: Scoped<Ast> {
 
     fn trav_fundef(&mut self, fundef: &mut Fundef<Ast>) -> Result<Self::Ok, Self::Err> {
         *self.fargs_mut() = fundef.args.clone();
-        self.scopes_mut().push((fundef.ids.clone(), fundef.ssa.clone()));
+        self.push_scope(fundef.ids.clone(), fundef.ssa.clone());
 
         for arg in &mut fundef.args {
             self.trav_farg(arg)?;
@@ -104,14 +102,9 @@ pub trait Traversal<Ast: AstConfig>: Scoped<Ast> {
 
         // Potential: here, we can compare the old (cloned) fundef against the updated one
         // which for example allows us to only print changes when debugging
-        self.scopes_mut().pop().unwrap();
         self.fargs_mut().clear();
+        self.pop_scope();
 
-        Self::DEFAULT
-    }
-
-    fn trav_block(&mut self, block: &mut Block<Ast>) -> Result<Self::Ok, Self::Err> {
-        self.trav_ssa(&mut block.ret)?;
         Self::DEFAULT
     }
 
@@ -136,11 +129,13 @@ pub trait Traversal<Ast: AstConfig>: Scoped<Ast> {
     }
 
     fn trav_tensor(&mut self, tensor: &mut Tensor<Ast>) -> Result<Self::Ok, Self::Err> {
-        self.scopes_mut().push((tensor.body.ids.clone(), tensor.body.ssa.clone()));
+        self.push_scope(tensor.ids.clone(), tensor.ssa.clone());
 
-        self.trav_block(&mut tensor.body)?;
+        self.trav_ssa(&mut tensor.lb)?;
+        self.trav_ssa(&mut tensor.ub)?;
+        self.trav_ssa(&mut tensor.ret)?;
 
-        self.scopes_mut().pop().unwrap();
+        self.pop_scope();
 
         Self::DEFAULT
     }

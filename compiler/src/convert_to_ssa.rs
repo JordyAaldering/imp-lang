@@ -104,8 +104,7 @@ impl ConvertToSsa {
                 let ssa = self.ssa.pop().unwrap();
                 self.name_to_key.pop().unwrap();
 
-                let body = Block { ids, ssa, ret };
-                Expr::Tensor(Tensor { body, iv, lb, ub })
+                Expr::Tensor(Tensor { iv, lb, ub, ids, ssa, ret })
             },
             parse_ast::Expr::Binary { l, r, op } => {
                 let l_key = self.convert_expr(*l);

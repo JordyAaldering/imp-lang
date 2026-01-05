@@ -21,8 +21,12 @@ impl<Ast: AstConfig> Scoped<Ast> for Show<Ast> {
         &self.scopes
     }
 
-    fn scopes_mut(&mut self) -> &mut Vec<(Arena<Avis<Ast>>, SecondaryArena<Expr<Ast>>)> {
-        &mut self.scopes
+    fn push_scope(&mut self, ids: Arena<Avis<Ast>>, ssa: SecondaryArena<Expr<Ast>>) {
+        self.scopes.push((ids, ssa));
+    }
+
+    fn pop_scope(&mut self) -> (Arena<Avis<Ast>>, SecondaryArena<Expr<Ast>>) {
+        self.scopes.pop().unwrap()
     }
 }
 
@@ -85,19 +89,17 @@ impl<Ast: AstConfig> Show<Ast> {
     }
 
     fn show_tensor(&mut self, tensor: &Tensor<Ast>) -> io::Result<()> {
-        let Tensor { body, iv, lb, ub } = tensor;
-
-        self.scopes.push((body.ids.clone(), body.ssa.clone()));
+        self.scopes.push((tensor.ids.clone(), tensor.ssa.clone()));
 
         println!("{{");
         println!("    local vars:");
-        for (_, v) in body.ids.iter() {
+        for (_, v) in tensor.ids.iter() {
             println!("    {:?}", v);
         }
 
         println!("  local exprs:");
-        for (k, expr) in body.ssa.iter() {
-            print!("    {} = ", body.ids[k].name);
+        for (k, expr) in tensor.ssa.iter() {
+            print!("    {} = ", tensor.ids[k].name);
             match expr {
                 Expr::Tensor(tensor) => {
                     self.show_tensor(tensor)?;
@@ -115,10 +117,10 @@ impl<Ast: AstConfig> Show<Ast> {
         }
 
         print!("  {} | {} <= {} < {} }}",
-            self.find_id(body.ret).unwrap().name,
-            self.find_id(*lb).unwrap().name,
-            self.find_key(iv.0).unwrap().name,
-            self.find_id(*ub).unwrap().name,
+            self.find_id(tensor.ret).unwrap().name,
+            self.find_id(tensor.lb).unwrap().name,
+            self.find_key(tensor.iv.0).unwrap().name,
+            self.find_id(tensor.ub).unwrap().name,
         );
 
         self.scopes.pop().unwrap();

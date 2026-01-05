@@ -27,8 +27,12 @@ impl Scoped<TypedAst> for CompileHeader {
         &self.scopes
     }
 
-    fn scopes_mut(&mut self) -> &mut Vec<(Arena<Avis<TypedAst>>, SecondaryArena<Expr<TypedAst>>)> {
-        &mut self.scopes
+    fn push_scope(&mut self, ids: Arena<Avis<TypedAst>>, ssa: SecondaryArena<Expr<TypedAst>>) {
+        self.scopes.push((ids, ssa));
+    }
+
+    fn pop_scope(&mut self) -> (Arena<Avis<TypedAst>>, SecondaryArena<Expr<TypedAst>>) {
+        self.scopes.pop().unwrap()
     }
 }
 

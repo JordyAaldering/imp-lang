@@ -25,7 +25,7 @@ impl TypeInfer {
     }
 }
 
-impl Scoped<UntypedAst> for TypeInfer {
+impl Scoped<UntypedAst, TypedAst> for TypeInfer {
     fn fargs(&self) -> &Vec<Avis<UntypedAst>> {
         &self.fargs
     }
@@ -38,8 +38,17 @@ impl Scoped<UntypedAst> for TypeInfer {
         &self.scopes
     }
 
-    fn scopes_mut(&mut self) -> &mut Vec<(Arena<Avis<UntypedAst>>, SecondaryArena<Expr<UntypedAst>>)> {
-        &mut self.scopes
+    fn push_scope(&mut self, ids: Arena<Avis<UntypedAst>>, ssa: SecondaryArena<Expr<UntypedAst>>) {
+        self.scopes.push((ids, ssa));
+        self.typed_ids.push(Arena::new());
+        self.typed_ssa.push(SecondaryArena::new());
+    }
+
+    fn pop_scope(&mut self) -> (Arena<Avis<TypedAst>>, SecondaryArena<Expr<TypedAst>>) {
+        self.scopes.pop().unwrap();
+        let ids = self.typed_ids.pop().unwrap();
+        let ssa = self.typed_ssa.pop().unwrap();
+        (ids, ssa)
     }
 }
 
@@ -53,12 +62,9 @@ impl Rewriter for TypeInfer {
     fn trav_fundef(&mut self, fundef: Fundef<Self::InAst>) -> Result<Fundef<Self::OutAst>, Self::Err> {
         self.fargs = fundef.args.clone();
 
-        self.typed_ids.push(Arena::new());
-        self.typed_ssa.push(SecondaryArena::new());
+        self.push_scope(fundef.ids.clone(), fundef.ssa.clone());
         let ret = self.trav_ssa(fundef.ret)?;
-
-        let ids = self.typed_ids.pop().unwrap();
-        let ssa = self.typed_ssa.pop().unwrap();
+        let (ids, ssa) = self.pop_scope();
 
         let mut args = Vec::new();
         for arg in &self.fargs {
@@ -70,18 +76,6 @@ impl Rewriter for TypeInfer {
         Ok(Fundef {
             name: fundef.name,
             args,
-            ids,
-            ssa,
-            ret,
-        })
-    }
-
-    fn trav_block(&mut self, block: Block<Self::InAst>) -> Result<Block<Self::OutAst>, Self::Err> {
-        let ret = self.trav_ssa(block.ret)?;
-
-        let ids = self.typed_ids.pop().unwrap();
-        let ssa = self.typed_ssa.pop().unwrap();
-        Ok(Block {
             ids,
             ssa,
             ret,
@@ -121,19 +115,21 @@ impl Rewriter for TypeInfer {
     }
 
     fn trav_tensor(&mut self, tensor: Tensor<Self::InAst>) -> Result<Tensor<Self::OutAst>, Self::Err> {
-        self.typed_ids.push(Arena::new());
-        self.typed_ssa.push(SecondaryArena::new());
+        self.push_scope(tensor.ids.clone(), tensor.ssa.clone());
 
         let iv = self.trav_iv(tensor.iv)?;
         let lb = self.trav_ssa(tensor.lb)?;
         let ub = self.trav_ssa(tensor.ub)?;
 
-        let body = self.trav_block(tensor.body)?;
+        let ret = self.trav_ssa(tensor.ret)?;
         let ety = self.found_ty.take().unwrap();
 
         let shp = if let Shape::Scalar = ety.shp { "." } else { "*" };
         self.found_ty = Some(Type::vector(ety.basetype, shp));
-        Ok(Tensor { iv, body, lb, ub })
+
+        let (ids, ssa) = self.pop_scope();
+
+        Ok(Tensor { iv, lb, ub, ret, ids, ssa })
     }
 
     fn trav_binary(&mut self, Binary { l, r, op }: Binary) -> Result<Binary, Self::Err> {
