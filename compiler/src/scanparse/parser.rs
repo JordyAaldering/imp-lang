@@ -46,7 +46,6 @@ impl<'src> Parser<'src> {
         let (_, _span_start) = self.expect(Token::Fn)?;
 
         let (id, _) = self.parse_id()?;
-        println!("Parsing fundef {}", id);
 
         let mut args = Vec::new();
 

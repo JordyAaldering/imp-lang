@@ -12,8 +12,8 @@ pub fn type_infer(program: Program<UntypedAst>) -> Result<Program<TypedAst>, Inf
 }
 
 pub struct TypeInfer {
-    typed_ids: Vec<Arena<Avis<TypedAst>>>,
-    typed_ssa: Vec<SecondaryArena<Expr<TypedAst>>>,
+    new_ids: Vec<Arena<Avis<TypedAst>>>,
+    new_ssa: Vec<SecondaryArena<Expr<TypedAst>>>,
     fargs: Vec<Avis<UntypedAst>>,
     scopes: Vec<(Arena<Avis<UntypedAst>>, SecondaryArena<Expr<UntypedAst>>)>,
 }
@@ -24,8 +24,8 @@ pub enum InferenceError {}
 impl TypeInfer {
     pub fn new() -> Self {
         Self {
-            typed_ids: Vec::new(),
-            typed_ssa: Vec::new(),
+            new_ids: Vec::new(),
+            new_ssa: Vec::new(),
             fargs: Vec::new(),
             scopes: Vec::new(),
         }
@@ -57,14 +57,14 @@ impl Scoped<UntypedAst, TypedAst> for TypeInfer {
 
     fn push_scope(&mut self, ids: Arena<Avis<UntypedAst>>, ssa: SecondaryArena<Expr<UntypedAst>>) {
         self.scopes.push((ids, ssa));
-        self.typed_ids.push(Arena::new());
-        self.typed_ssa.push(SecondaryArena::new());
+        self.new_ids.push(Arena::new());
+        self.new_ssa.push(SecondaryArena::new());
     }
 
     fn pop_scope(&mut self) -> (Arena<Avis<TypedAst>>, SecondaryArena<Expr<TypedAst>>) {
         self.scopes.pop().unwrap();
-        let ids = self.typed_ids.pop().unwrap();
-        let ssa = self.typed_ssa.pop().unwrap();
+        let ids = self.new_ids.pop().unwrap();
+        let ssa = self.new_ssa.pop().unwrap();
         (ids, ssa)
     }
 }
@@ -108,8 +108,8 @@ impl Rewriter for TypeInfer {
                 let (new_ty, new_expr) = self.trav_expr(old_expr)?;
 
                 let avis = Avis::from(&old_avis, new_ty.clone());
-                self.typed_ids.last_mut().unwrap().insert_with_key(key, avis);
-                self.typed_ssa.last_mut().unwrap().insert(key, new_expr);
+                self.new_ids.last_mut().unwrap().insert_with_key(key, avis);
+                self.new_ssa.last_mut().unwrap().insert(key, new_expr);
                 new_ty
             },
             ArgOrVar::Iv(_) => {
@@ -136,7 +136,7 @@ impl Rewriter for TypeInfer {
         //let iv = self.trav_iv(tensor.iv)?;
         let old_avis = self.find_key(tensor.iv.0).cloned().unwrap();
         let avis = Avis::from(&old_avis, Type::scalar(BaseType::U32));
-        self.typed_ids.last_mut().unwrap().insert_with_key(tensor.iv.0, avis);
+        self.new_ids.last_mut().unwrap().insert_with_key(tensor.iv.0, avis);
 
         let (ret_ty, ret) = self.trav_rhs_id(tensor.ret)?;
 
