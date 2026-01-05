@@ -62,7 +62,7 @@ impl ConvertToSsa {
 
         let mut args = Vec::new();
         for (i, (ty, id)) in fundef.args.into_iter().enumerate() {
-            args.push(Avis::new(ArgOrVar::Arg(i), &id, Some(ty)));
+            args.push(Avis::new(ArgOrVar::Arg(i), &id, MaybeType(Some(ty))));
             self.name_to_key.last_mut().unwrap().insert(id, ArgOrVar::Arg(i));
         }
 
@@ -72,7 +72,7 @@ impl ConvertToSsa {
 
         let ret_value = self.convert_expr(fundef.ret_expr);
         if let ArgOrVar::Var(k) = ret_value {
-            self.scopes[0].0[k].ty = Some(fundef.ret_type);
+            self.scopes[0].0[k].ty = MaybeType(Some(fundef.ret_type));
         }
 
         let (ids, ssa) = self.pop_scope();
@@ -104,7 +104,7 @@ impl ConvertToSsa {
                 self.push_scope(Arena::new(), SecondaryArena::new());
 
                 let key = self.scopes.last_mut().unwrap().0.insert_with(|key| {
-                    Avis::new(ArgOrVar::Iv(key), &iv, None)
+                    Avis::new(ArgOrVar::Iv(key), &iv, MaybeType(None))
                 });
                 self.name_to_key.last_mut().unwrap().insert(iv.clone(), ArgOrVar::Iv(key));
                 let iv = IndexVector(key);
@@ -142,7 +142,7 @@ impl ConvertToSsa {
 
         let id = self.fresh_uid();
         let key = self.scopes.last_mut().unwrap().0.insert_with(|key| {
-            Avis::new(ArgOrVar::Var(key), &id, None)
+            Avis::new(ArgOrVar::Var(key), &id, MaybeType(None))
         });
 
         self.scopes.last_mut().unwrap().1.insert(key, e);

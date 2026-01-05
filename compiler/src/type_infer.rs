@@ -37,7 +37,7 @@ impl Scoped<UntypedAst, TypedAst> for TypeInfer {
     fn pop_fargs(&mut self) -> Vec<Avis<TypedAst>> {
         let mut args = Vec::new();
         for arg in &self.fargs {
-            let ty = arg.ty.clone().expect("function argument cannot be untyped");
+            let ty = arg.ty.clone().unwrap();
             args.push(Avis::from(&arg, ty));
         }
         self.fargs.clear();
@@ -91,7 +91,7 @@ impl Rewriter for TypeInfer {
     fn trav_ssa(&mut self, id: ArgOrVar) -> Result<ArgOrVar, Self::Err> {
         match id {
             ArgOrVar::Arg(i) => {
-                let ty = self.fargs[i].ty.clone().expect("function argument cannot be untyped");
+                let ty = self.fargs[i].ty.clone().unwrap();
                 self.found_ty = Some(ty);
             },
             ArgOrVar::Var(key) => {

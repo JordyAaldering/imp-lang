@@ -70,14 +70,14 @@ pub trait Scoped<Ast: AstConfig, OutAst: AstConfig = Ast> {
 }
 
 pub trait AstConfig: Clone + fmt::Debug {
-    type ValueType: Clone + fmt::Debug;
+    type ValueType: Clone + fmt::Debug + fmt::Display;
 }
 
 #[derive(Clone, Debug)]
 pub struct UntypedAst;
 
 impl AstConfig for UntypedAst {
-    type ValueType = Option<Type>;
+    type ValueType = MaybeType;
 }
 
 #[derive(Clone, Debug)]

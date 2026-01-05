@@ -62,13 +62,14 @@ impl<Ast: AstConfig> Show<Ast> {
         let mut res = String::new();
 
         let args = fundef.args.iter()
-            .map(|arg| format!("{:?} {}", arg.ty, arg.name))
+            .map(|arg| format!("{} {}", arg.ty, arg.name))
             .collect::<Vec<String>>()
             .join(", ");
-        res.push_str(&format!("fn {} ({}) -> {:?} {{\n", fundef.name, args, fundef.ret));
+        let ret_ty = &self.find_id(fundef.ret).unwrap().ty;
+        res.push_str(&format!("fn {} ({}) -> {} {{\n", fundef.name, args, ret_ty));
 
         for (k, id) in fundef.ids.iter() {
-            res.push_str(&format!("{}{:?} {}; // {:?}\n", self.indent(), id.ty, id.name, k));
+            res.push_str(&format!("{}{} {}; // {:?}\n", self.indent(), id.ty, id.name, k));
         }
 
         for (k, expr) in fundef.ssa.iter() {
@@ -104,7 +105,7 @@ impl<Ast: AstConfig> Show<Ast> {
         res.push_str("{\n");
 
         for (k, id) in tensor.ids.iter() {
-            res.push_str(&format!("{}{:?} {}; // {:?}\n", self.indent(), id.ty, id.name, k));
+            res.push_str(&format!("{}{} {}; // {:?}\n", self.indent(), id.ty, id.name, k));
         }
 
         for (k, expr) in tensor.ssa.iter() {
@@ -113,16 +114,20 @@ impl<Ast: AstConfig> Show<Ast> {
             res.push_str(&format!("{}{} = {};\n", self.indent(), lhs, rhs));
         }
 
-        print!("{}{} | {} <= {} < {}",
+        res.push_str(&format!("{}return {};\n",
             self.indent(),
             self.find_id(tensor.ret).unwrap().name,
+        ));
+
+        self.pop_scope();
+
+        res.push_str(&format!("{}  | {} <= {} < {} }}",
+            self.indent(),
             self.find_id(tensor.lb).unwrap().name,
             self.find_key(tensor.iv.0).unwrap().name,
             self.find_id(tensor.ub).unwrap().name,
-        );
+        ));
 
-        self.pop_scope();
-        res.push_str(&format!("{}}}", self.indent()));
         res
     }
 
