@@ -1,21 +1,21 @@
-use std::{collections::HashMap, mem};
+use std::collections::HashMap;
 
 use crate::{arena::{Arena, SecondaryArena}, ast::*, scanparse::parse_ast};
 
 pub struct ConvertToSsa {
     uid: usize,
-    vars: Arena<Avis<UntypedAst>>,
-    ssa: SecondaryArena<Expr<UntypedAst>>,
-    name_to_key: HashMap<String, ArgOrVar>,
+    ids: Vec<Arena<Avis<UntypedAst>>>,
+    ssa: Vec<SecondaryArena<Expr<UntypedAst>>>,
+    name_to_key: Vec<HashMap<String, ArgOrVar>>,
 }
 
 impl ConvertToSsa {
     pub fn new() -> Self {
         Self {
             uid: 0,
-            vars: Arena::new(),
-            ssa: SecondaryArena::new(),
-            name_to_key: HashMap::new(),
+            ids: Vec::new(),
+            ssa: Vec::new(),
+            name_to_key: Vec::new(),
         }
     }
 
@@ -34,10 +34,14 @@ impl ConvertToSsa {
     }
 
     pub fn convert_fundef(&mut self, fundef: parse_ast::Fundef) -> Fundef<UntypedAst> {
+        self.ids.push(Arena::new());
+        self.ssa.push(SecondaryArena::new());
+        self.name_to_key.push(HashMap::new());
+
         let mut args = Vec::new();
         for (i, (ty, id)) in fundef.args.into_iter().enumerate() {
             args.push(Avis::new(ArgOrVar::Arg(i), &id, Some(ty)));
-            self.name_to_key.insert(id, ArgOrVar::Arg(i));
+            self.name_to_key.last_mut().unwrap().insert(id, ArgOrVar::Arg(i));
         }
 
         for stmt in fundef.body {
@@ -46,18 +50,16 @@ impl ConvertToSsa {
 
         let ret_value = self.convert_expr(fundef.ret_expr);
         if let ArgOrVar::Var(k) = ret_value {
-            self.vars[k].ty = Some(fundef.ret_type);
+            self.ids[0][k].ty = Some(fundef.ret_type);
         }
 
-        let mut vars = Arena::new();
-        mem::swap(&mut self.vars, &mut vars);
-        let mut ssa = SecondaryArena::new();
-        mem::swap(&mut self.ssa, &mut ssa);
-        self.name_to_key.clear();
+        let ids = self.ids.pop().unwrap();
+        let ssa = self.ssa.pop().unwrap();
+        self.name_to_key.pop().unwrap();
         self.uid = 0;
 
         let block = Block {
-            ids: vars,
+            ids,
             ssa,
             ret: ret_value,
         };
@@ -73,7 +75,7 @@ impl ConvertToSsa {
         match stmt {
             parse_ast::Stmt::Assign { lhs, expr } => {
                 let key = self.convert_expr(expr);
-                self.name_to_key.insert(lhs, key);
+                self.name_to_key.last_mut().unwrap().insert(lhs, key);
             },
         }
     }
@@ -81,19 +83,27 @@ impl ConvertToSsa {
     pub fn convert_expr(&mut self, expr: parse_ast::Expr) -> ArgOrVar {
         let e = match expr {
             parse_ast::Expr::Tensor { expr, iv, lb, ub } => {
-                let key = self.vars.insert_with(|key| {
-                    Avis::new(ArgOrVar::Iv(key), &iv.0, None)
-                });
-                self.name_to_key.insert(iv.0.clone(), ArgOrVar::Iv(key));
-                let iv = IndexVector(key);
-
-                let expr = self.convert_expr(*expr);
-                // For now, assume that we have just the return expr and no local statements
-                // todo: this means we should not update the local vars and ssa, but this local one
-                let expr = Block { ids: Arena::new(), ssa: SecondaryArena::new(), ret: expr };
                 let lb = self.convert_expr(*lb);
                 let ub = self.convert_expr(*ub);
-                Expr::Tensor(Tensor { body: expr, iv, lb, ub })
+
+                self.ids.push(Arena::new());
+                self.ssa.push(SecondaryArena::new());
+                self.name_to_key.push(HashMap::new());
+
+                let key = self.ids.last_mut().unwrap().insert_with(|key| {
+                    Avis::new(ArgOrVar::Iv(key), &iv.0, None)
+                });
+                self.name_to_key.last_mut().unwrap().insert(iv.0.clone(), ArgOrVar::Iv(key));
+                let iv = IndexVector(key);
+
+                let ret = self.convert_expr(*expr);
+
+                let ids = self.ids.pop().unwrap();
+                let ssa = self.ssa.pop().unwrap();
+                self.name_to_key.pop().unwrap();
+
+                let body = Block { ids, ssa, ret };
+                Expr::Tensor(Tensor { body, iv, lb, ub })
             },
             parse_ast::Expr::Binary { l, r, op } => {
                 let l_key = self.convert_expr(*l);
@@ -111,16 +121,21 @@ impl ConvertToSsa {
                 Expr::U32(v)
             },
             parse_ast::Expr::Identifier(id) => {
-                return self.name_to_key[&id]
+                for scope in self.name_to_key.iter().rev() {
+                    if let Some(key) = scope.get(&id) {
+                        return *key;
+                    }
+                }
+                unreachable!("could not find {}", id);
             },
         };
 
         let id = self.fresh_uid();
-        let key = self.vars.insert_with(|key| {
+        let key = self.ids.last_mut().unwrap().insert_with(|key| {
             Avis::new(ArgOrVar::Var(key), &id, None)
         });
 
-        self.ssa.insert(key, e);
+        self.ssa.last_mut().unwrap().insert(key, e);
         ArgOrVar::Var(key)
     }
 }
