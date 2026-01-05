@@ -12,7 +12,7 @@ pub trait Rewriter: Scoped<Self::InAst, Self::OutAst> {
         let mut new_program = Program::new();
 
         for fundef in program.fundefs {
-            *self.fargs_mut() = fundef.args.clone();
+            self.set_fargs(fundef.args.clone());
             self.push_scope(fundef.ids.clone(), fundef.ssa.clone());
 
             let fundef = self.trav_fundef(fundef)?;
@@ -20,7 +20,7 @@ pub trait Rewriter: Scoped<Self::InAst, Self::OutAst> {
 
             // Potential: here, we can compare the old (cloned) fundef against the updated one
             // which for example allows us to only print changes when debugging
-            self.fargs_mut().clear();
+            self.pop_fargs();
             self.pop_scope();
         }
 
@@ -92,7 +92,7 @@ pub trait Traversal<Ast: AstConfig>: Scoped<Ast> {
     }
 
     fn trav_fundef(&mut self, fundef: &mut Fundef<Ast>) -> Result<Self::Ok, Self::Err> {
-        *self.fargs_mut() = fundef.args.clone();
+        self.set_fargs(fundef.args.clone());
         self.push_scope(fundef.ids.clone(), fundef.ssa.clone());
 
         for arg in &mut fundef.args {
@@ -102,7 +102,7 @@ pub trait Traversal<Ast: AstConfig>: Scoped<Ast> {
 
         // Potential: here, we can compare the old (cloned) fundef against the updated one
         // which for example allows us to only print changes when debugging
-        self.fargs_mut().clear();
+        self.pop_fargs();
         self.pop_scope();
 
         Self::DEFAULT

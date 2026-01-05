@@ -1,4 +1,4 @@
-use std::io;
+use std::{io, mem};
 
 use crate::{arena::{Arena, SecondaryArena}, ast::*};
 
@@ -13,8 +13,14 @@ impl<Ast: AstConfig> Scoped<Ast> for Show<Ast> {
         &self.fargs
     }
 
-    fn fargs_mut(&mut self) -> &mut Vec<Avis<Ast>> {
-        &mut self.fargs
+    fn set_fargs(&mut self, fargs: Vec<Avis<Ast>>) {
+        self.fargs = fargs
+    }
+
+    fn pop_fargs(&mut self) -> Vec<Avis<Ast>> {
+        let mut fargs = Vec::new();
+        mem::swap(&mut self.fargs, &mut fargs);
+        fargs
     }
 
     fn scopes(&self) -> &Vec<(Arena<Avis<Ast>>, SecondaryArena<Expr<Ast>>)> {

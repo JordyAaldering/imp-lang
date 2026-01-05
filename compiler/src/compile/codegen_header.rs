@@ -1,3 +1,5 @@
+use std::mem;
+
 use crate::{arena::{Arena, SecondaryArena}, ast::*, traverse::Traversal};
 
 pub struct CompileHeader {
@@ -19,8 +21,14 @@ impl Scoped<TypedAst> for CompileHeader {
         &self.fargs
     }
 
-    fn fargs_mut(&mut self) -> &mut Vec<Avis<TypedAst>> {
-        &mut self.fargs
+    fn set_fargs(&mut self, fargs: Vec<Avis<TypedAst>>) {
+        self.fargs = fargs;
+    }
+
+    fn pop_fargs(&mut self) -> Vec<Avis<TypedAst>> {
+        let mut fargs = Vec::new();
+        mem::swap(&mut self.fargs, &mut fargs);
+        fargs
     }
 
     fn scopes(&self) -> &Vec<(Arena<Avis<TypedAst>>, SecondaryArena<Expr<TypedAst>>)> {

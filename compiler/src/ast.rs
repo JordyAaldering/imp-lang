@@ -23,7 +23,9 @@ use crate::arena::{Arena, Key, SecondaryArena};
 pub trait Scoped<Ast: AstConfig, OutAst: AstConfig = Ast> {
     fn fargs(&self) -> &Vec<Avis<Ast>>;
 
-    fn fargs_mut(&mut self) -> &mut Vec<Avis<Ast>>;
+    fn set_fargs(&mut self, fargs: Vec<Avis<Ast>>);
+
+    fn pop_fargs(&mut self) -> Vec<Avis<OutAst>>;
 
     fn scopes(&self) -> &Vec<(Arena<Avis<Ast>>, SecondaryArena<Expr<Ast>>)>;
 

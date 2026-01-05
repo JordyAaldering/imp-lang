@@ -30,8 +30,18 @@ impl Scoped<UntypedAst, TypedAst> for TypeInfer {
         &self.fargs
     }
 
-    fn fargs_mut(&mut self) -> &mut Vec<Avis<UntypedAst>> {
-        &mut self.fargs
+    fn set_fargs(&mut self, fargs: Vec<Avis<UntypedAst>>) {
+        self.fargs = fargs
+    }
+
+    fn pop_fargs(&mut self) -> Vec<Avis<TypedAst>> {
+        let mut args = Vec::new();
+        for arg in &self.fargs {
+            let ty = arg.ty.clone().expect("function argument cannot be untyped");
+            args.push(Avis::from(&arg, ty));
+        }
+        self.fargs.clear();
+        args
     }
 
     fn scopes(&self) -> &Vec<(Arena<Avis<UntypedAst>>, SecondaryArena<Expr<UntypedAst>>)> {
@@ -63,15 +73,11 @@ impl Rewriter for TypeInfer {
         self.fargs = fundef.args.clone();
 
         self.push_scope(fundef.ids.clone(), fundef.ssa.clone());
-        let ret = self.trav_ssa(fundef.ret)?;
-        let (ids, ssa) = self.pop_scope();
 
-        let mut args = Vec::new();
-        for arg in &self.fargs {
-            let ty = arg.ty.clone().expect("function argument cannot be untyped");
-            args.push(Avis::from(&arg, ty));
-        }
-        self.fargs.clear();
+        let ret = self.trav_ssa(fundef.ret)?;
+
+        let args = self.pop_fargs();
+        let (ids, ssa) = self.pop_scope();
 
         Ok(Fundef {
             name: fundef.name,
