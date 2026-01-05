@@ -20,12 +20,12 @@ impl UndoSsa {
         }).collect();
 
         let mut body = Vec::new();
-        body.push(self.generate_assignment(fundef.body.ret, fundef));
-        body.push(Stmt::Return { expr: Expr::Identifier(fundef[fundef.body.ret].name.to_owned()) });
+        body.push(self.generate_assignment(fundef.ret, fundef));
+        body.push(Stmt::Return { expr: Expr::Identifier(fundef[fundef.ret].name.to_owned()) });
 
         Fundef {
             name: fundef.name.to_owned(),
-            ret_type: fundef[fundef.body.ret].ty.to_owned(),
+            ret_type: fundef[fundef.ret].ty.to_owned(),
             args,
             block: Block { stmts: body },
         }
@@ -40,9 +40,9 @@ impl UndoSsa {
             },
             ArgOrVar::Var(k) => {
                 // TODO: if an ssa key is used in multiple places, pull the computation out. otherwise inline it
-                match &fundef.body.ssa[k] {
+                match &fundef.ssa[k] {
                     ast::Expr::Tensor(ast::Tensor { iv, body, lb, ub }) => {
-                        let iv = IndexVector(fundef.body.ids[iv.0].name.clone());
+                        let iv = IndexVector(fundef.ids[iv.0].name.clone());
                         let expr = self.inline_expr(body.ret, fundef);
                         let lb = self.inline_expr(*lb, fundef);
                         let ub = self.inline_expr(*ub, fundef);
@@ -62,7 +62,7 @@ impl UndoSsa {
                 }
             },
             ArgOrVar::Iv(k) => {
-                Expr::Identifier(fundef.body.ids[k].name.clone())
+                Expr::Identifier(fundef.ids[k].name.clone())
             },
         };
 
@@ -75,10 +75,10 @@ impl UndoSsa {
                 Expr::Identifier(fundef.args[i].name.clone())
             },
             ArgOrVar::Var(k) => {
-                println!("looking for {}", fundef.body.ids[k].name);
-                match &fundef.body.ssa[k] {
+                println!("looking for {}", fundef.ids[k].name);
+                match &fundef.ssa[k] {
                     ast::Expr::Tensor(ast::Tensor { iv, body: expr, lb, ub }) => {
-                        let iv = IndexVector(fundef.body.ids[iv.0].name.clone());
+                        let iv = IndexVector(fundef.ids[iv.0].name.clone());
                         let expr = self.inline_expr(expr.ret, fundef);
                         let lb = self.inline_expr(*lb, fundef);
                         let ub = self.inline_expr(*ub, fundef);
@@ -98,7 +98,7 @@ impl UndoSsa {
                 }
             },
             ArgOrVar::Iv(k) => {
-                Expr::Identifier(fundef.body.ids[k].name.clone())
+                Expr::Identifier(fundef.ids[k].name.clone())
             },
         }
     }

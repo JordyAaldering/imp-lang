@@ -9,8 +9,15 @@ pub struct ConvertToSsa {
     name_to_key: Vec<HashMap<String, ArgOrVar>>,
 }
 
+pub fn convert_to_ssa(program: parse_ast::Program) -> Program<UntypedAst> {
+    let fundefs = program.fundefs.into_iter()
+        .map(|f| ConvertToSsa::new().convert_fundef(f))
+        .collect();
+    Program { fundefs }
+}
+
 impl ConvertToSsa {
-    pub fn new() -> Self {
+    fn new() -> Self {
         Self {
             uid: 0,
             ids: Vec::new(),
@@ -24,19 +31,21 @@ impl ConvertToSsa {
         format!("_ssa_{}", self.uid)
     }
 
-    pub fn convert_program(&mut self, program: parse_ast::Program) -> Program<UntypedAst> {
-        let mut fundefs = Vec::new();
-        for f in program.fundefs {
-            fundefs.push(self.convert_fundef(f));
-        }
-
-        Program { fundefs }
-    }
-
-    pub fn convert_fundef(&mut self, fundef: parse_ast::Fundef) -> Fundef<UntypedAst> {
+    fn create_scope(&mut self) {
         self.ids.push(Arena::new());
         self.ssa.push(SecondaryArena::new());
         self.name_to_key.push(HashMap::new());
+    }
+
+    fn close_scope(&mut self) -> (Arena<Avis<UntypedAst>>, SecondaryArena<Expr<UntypedAst>>) {
+        self.name_to_key.pop().unwrap();
+        let ids = self.ids.pop().unwrap();
+        let ssa = self.ssa.pop().unwrap();
+        (ids, ssa)
+    }
+
+    pub fn convert_fundef(&mut self, fundef: parse_ast::Fundef) -> Fundef<UntypedAst> {
+        self.create_scope();
 
         let mut args = Vec::new();
         for (i, (ty, id)) in fundef.args.into_iter().enumerate() {
@@ -53,21 +62,14 @@ impl ConvertToSsa {
             self.ids[0][k].ty = Some(fundef.ret_type);
         }
 
-        let ids = self.ids.pop().unwrap();
-        let ssa = self.ssa.pop().unwrap();
-        self.name_to_key.pop().unwrap();
-        self.uid = 0;
-
-        let block = Block {
-            ids,
-            ssa,
-            ret: ret_value,
-        };
+        let (ids, ssa) = self.close_scope();
 
         Fundef {
             name: fundef.id,
             args,
-            body: block,
+            ids,
+            ssa,
+            ret: ret_value,
         }
     }
 

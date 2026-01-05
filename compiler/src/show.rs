@@ -1,11 +1,11 @@
 use std::io;
 
-use crate::ast::*;
+use crate::{arena::{Arena, SecondaryArena}, ast::*};
 
 pub struct Show<Ast: AstConfig> {
     w: Box<dyn io::Write>,
     fargs: Vec<Avis<Ast>>,
-    scopes: Vec<Block<Ast>>,
+    scopes: Vec<(Arena<Avis<Ast>>, SecondaryArena<Expr<Ast>>)>,
 }
 
 impl<Ast: AstConfig> Scoped<Ast> for Show<Ast> {
@@ -17,11 +17,11 @@ impl<Ast: AstConfig> Scoped<Ast> for Show<Ast> {
         &mut self.fargs
     }
 
-    fn scopes(&self) -> &Vec<Block<Ast>> {
+    fn scopes(&self) -> &Vec<(Arena<Avis<Ast>>, SecondaryArena<Expr<Ast>>)> {
         &self.scopes
     }
 
-    fn scopes_mut(&mut self) -> &mut Vec<Block<Ast>> {
+    fn scopes_mut(&mut self) -> &mut Vec<(Arena<Avis<Ast>>, SecondaryArena<Expr<Ast>>)> {
         &mut self.scopes
     }
 }
@@ -38,7 +38,7 @@ impl<Ast: AstConfig> Show<Ast> {
     pub fn show_program(&mut self, program: &Program<Ast>) -> io::Result<()> {
         for fundef in &program.fundefs {
             self.fargs = fundef.args.clone();
-            self.scopes.push(fundef.body.clone());
+            self.scopes.push((fundef.ids.clone(), fundef.ssa.clone()));
 
             self.show_fundef(fundef)?;
 
@@ -53,16 +53,16 @@ impl<Ast: AstConfig> Show<Ast> {
         for avis in &fundef.args {
             write!(self.w, "{:?} {}, ", avis.ty, avis.name)?;
         }
-        writeln!(self.w, ") -> {:?} {{", fundef.body.ret)?;
+        writeln!(self.w, ") -> {:?} {{", fundef.ret)?;
 
         println!("  vars:");
-        for (_, v) in fundef.body.ids.iter() {
+        for (_, v) in fundef.ids.iter() {
             println!("    {:?}", v);
         }
 
         println!("  ssa:");
-        for (k, expr) in fundef.body.ssa.iter() {
-            print!("    {} = ", fundef.body.ids[k].name);
+        for (k, expr) in fundef.ssa.iter() {
+            print!("    {} = ", fundef.ids[k].name);
             match expr {
                 Expr::Tensor(tensor) => {
                     self.show_tensor(tensor)?;
@@ -79,7 +79,7 @@ impl<Ast: AstConfig> Show<Ast> {
             println!(";");
         }
 
-        println!("  return {};", fundef[fundef.body.ret.clone()].name);
+        println!("  return {};", fundef[fundef.ret.clone()].name);
 
         Ok(())
     }
@@ -87,7 +87,7 @@ impl<Ast: AstConfig> Show<Ast> {
     fn show_tensor(&mut self, tensor: &Tensor<Ast>) -> io::Result<()> {
         let Tensor { body, iv, lb, ub } = tensor;
 
-        self.scopes.push(body.clone());
+        self.scopes.push((body.ids.clone(), body.ssa.clone()));
 
         println!("{{");
         println!("    local vars:");

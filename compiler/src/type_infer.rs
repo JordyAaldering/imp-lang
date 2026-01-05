@@ -7,7 +7,7 @@ pub struct TypeInfer {
     // return Result<(Self::OK, Node), Self::Err> instead
     found_ty: Option<Type>,
     fargs: Vec<Avis<UntypedAst>>,
-    scopes: Vec<Block<UntypedAst>>,
+    scopes: Vec<(Arena<Avis<UntypedAst>>, SecondaryArena<Expr<UntypedAst>>)>,
 }
 
 #[derive(Debug)]
@@ -34,11 +34,11 @@ impl Scoped<UntypedAst> for TypeInfer {
         &mut self.fargs
     }
 
-    fn scopes(&self) -> &Vec<Block<UntypedAst>> {
+    fn scopes(&self) -> &Vec<(Arena<Avis<UntypedAst>>, SecondaryArena<Expr<UntypedAst>>)> {
         &self.scopes
     }
 
-    fn scopes_mut(&mut self) -> &mut Vec<Block<UntypedAst>> {
+    fn scopes_mut(&mut self) -> &mut Vec<(Arena<Avis<UntypedAst>>, SecondaryArena<Expr<UntypedAst>>)> {
         &mut self.scopes
     }
 }
@@ -55,7 +55,10 @@ impl Rewriter for TypeInfer {
 
         self.typed_ids.push(Arena::new());
         self.typed_ssa.push(SecondaryArena::new());
-        let body = self.trav_block(fundef.body)?;
+        let ret = self.trav_ssa(fundef.ret)?;
+
+        let ids = self.typed_ids.pop().unwrap();
+        let ssa = self.typed_ssa.pop().unwrap();
 
         let mut args = Vec::new();
         for arg in &self.fargs {
@@ -67,7 +70,9 @@ impl Rewriter for TypeInfer {
         Ok(Fundef {
             name: fundef.name,
             args,
-            body,
+            ids,
+            ssa,
+            ret,
         })
     }
 

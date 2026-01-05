@@ -1,14 +1,25 @@
 use std::ops;
 
-use crate::ast::Block;
+use crate::{arena::{Arena, SecondaryArena}, ast::Expr};
 
 use super::{ArgOrVar, AstConfig, Avis};
 
 #[derive(Clone, Debug)]
 pub struct Fundef<Ast: AstConfig> {
+    /// User-defined function name
     pub name: String,
+    /// Function arguments
     pub args: Vec<Avis<Ast>>,
-    pub body: Block<Ast>,
+    /// Local identifiers
+    pub ids: Arena<Avis<Ast>>,
+    /// arena containing a mapping of variable keys to their ssa assignment expressions
+    /// two options for multi-return:
+    ///  1) also keep track of return index here
+    ///  2) add tuple types, and insert extraction functions, then there is always only one lhs
+    /// I am leaning towards option 1
+    pub ssa: SecondaryArena<Expr<Ast>>,
+    /// Key of the return value
+    pub ret: ArgOrVar,
 }
 
 impl<Ast: AstConfig> ops::Index<ArgOrVar> for Fundef<Ast> {
@@ -17,8 +28,8 @@ impl<Ast: AstConfig> ops::Index<ArgOrVar> for Fundef<Ast> {
     fn index(&self, x: ArgOrVar) -> &Self::Output {
         match x {
             ArgOrVar::Arg(i) => &self.args[i],
-            ArgOrVar::Var(k) => &self.body.ids[k],
-            ArgOrVar::Iv(k) => &self.body.ids[k],
+            ArgOrVar::Var(k) => &self.ids[k],
+            ArgOrVar::Iv(k) => &self.ids[k],
         }
     }
 }

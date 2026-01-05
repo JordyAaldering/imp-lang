@@ -34,7 +34,7 @@ impl CodegenContext {
         let mut c_code = String::new();
 
         // Function signature
-        let ret_type = to_ctype(&fundef[fundef.body.ret.clone()].ty);
+        let ret_type = to_ctype(&fundef[fundef.ret.clone()].ty);
 
         let args: Vec<String> = fundef.args.iter().map(|avis| {
             let ty_str = to_ctype(&avis.ty);
@@ -43,9 +43,9 @@ impl CodegenContext {
 
         c_code.push_str(&format!("{} DSL_{}({}) {{\n", ret_type, fundef.name, args.join(", ")));
 
-        let ret_code = match fundef.body.ret {
+        let ret_code = match fundef.ret {
             ArgOrVar::Arg(i) => fundef.args[i].name.to_owned(),
-            ArgOrVar::Var(k) => self.compile_expr(fundef, &fundef.body.ssa[k]),
+            ArgOrVar::Var(k) => self.compile_expr(fundef, &fundef.ssa[k]),
             ArgOrVar::Iv(_) => unreachable!(),
         };
 
@@ -70,14 +70,14 @@ impl CodegenContext {
                 let mut forloop = String::new();
 
                 let ty = to_ctype(&fundef[expr.ret.clone()].ty);
-                let iv_name = fundef.body.ids[iv.0].name.clone();
+                let iv_name = fundef.ids[iv.0].name.clone();
                 let lb_name = fundef[lb.clone()].name.clone();
                 let ub_name = fundef[ub.clone()].name.clone();
 
                 forloop.push_str(&format!("for (size_t {} = {}; {} < {}; {} += 1) {{\n", iv_name, lb_name, iv_name, ub_name, iv_name));
 
                 if let ArgOrVar::Var(k) = expr.ret {
-                    let expr_code = self.compile_expr(fundef, &fundef.body.ssa[k]);
+                    let expr_code = self.compile_expr(fundef, &fundef.ssa[k]);
                     forloop.push_str(&format!("        res[{}] = {};\n", iv_name, expr_code));
                 }
 
@@ -87,34 +87,34 @@ impl CodegenContext {
                 self.stmts.push(format!("{} *res = ({} *)malloc({} * sizeof({}));", ty, ty, ub_name, ty));
 
                 if let ArgOrVar::Var(k) = ub {
-                    let l_code = self.compile_expr(fundef, &fundef.body.ssa[*k]);
-                    self.stmts.push(format!("{} {} = {};", to_ctype(&fundef.body.ids[*k].ty), fundef.body.ids[*k].name, l_code));
+                    let l_code = self.compile_expr(fundef, &fundef.ssa[*k]);
+                    self.stmts.push(format!("{} {} = {};", to_ctype(&fundef.ids[*k].ty), fundef.ids[*k].name, l_code));
                 }
 
                 if let ArgOrVar::Var(k) = lb {
-                    let l_code = self.compile_expr(fundef, &fundef.body.ssa[*k]);
-                    self.stmts.push(format!("{} {} = {};", to_ctype(&fundef.body.ids[*k].ty), fundef.body.ids[*k].name, l_code));
+                    let l_code = self.compile_expr(fundef, &fundef.ssa[*k]);
+                    self.stmts.push(format!("{} {} = {};", to_ctype(&fundef.ids[*k].ty), fundef.ids[*k].name, l_code));
                 }
 
                 c_code.push_str("res");
             }
             Expr::Binary(Binary { l, r, op }) => {
                 if let ArgOrVar::Var(k) = l {
-                    let l_code = self.compile_expr(fundef, &fundef.body.ssa[*k]);
-                    self.stmts.push(format!("{} {} = {};", to_ctype(&fundef.body.ids[*k].ty), fundef.body.ids[*k].name, l_code));
+                    let l_code = self.compile_expr(fundef, &fundef.ssa[*k]);
+                    self.stmts.push(format!("{} {} = {};", to_ctype(&fundef.ids[*k].ty), fundef.ids[*k].name, l_code));
                 }
 
                 if let ArgOrVar::Var(k) = r {
-                    let r_code = self.compile_expr(fundef, &fundef.body.ssa[*k]);
-                    self.stmts.push(format!("{} {} = {};", to_ctype(&fundef.body.ids[*k].ty), fundef.body.ids[*k].name, r_code));
+                    let r_code = self.compile_expr(fundef, &fundef.ssa[*k]);
+                    self.stmts.push(format!("{} {} = {};", to_ctype(&fundef.ids[*k].ty), fundef.ids[*k].name, r_code));
                 }
 
                 c_code.push_str(&format!("{} {} {}", fundef[l.clone()].name, op, fundef[r.clone()].name));
             },
             Expr::Unary(Unary { r, op }) => {
                 if let ArgOrVar::Var(k) = r {
-                    let r_code = self.compile_expr(fundef, &fundef.body.ssa[*k]);
-                    self.stmts.push(format!("{} {} = {};", to_ctype(&fundef.body.ids[*k].ty), fundef.body.ids[*k].name, r_code));
+                    let r_code = self.compile_expr(fundef, &fundef.ssa[*k]);
+                    self.stmts.push(format!("{} {} = {};", to_ctype(&fundef.ids[*k].ty), fundef.ids[*k].name, r_code));
                 }
 
                 c_code.push_str(&format!("{} {}", op, fundef[r.clone()].name));

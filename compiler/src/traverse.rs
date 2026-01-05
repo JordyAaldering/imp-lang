@@ -13,7 +13,7 @@ pub trait Rewriter: Scoped<Self::InAst> {
 
         for fundef in program.fundefs {
             *self.fargs_mut() = fundef.args.clone();
-            self.scopes_mut().push(fundef.body.clone());
+            self.scopes_mut().push((fundef.ids.clone(), fundef.ssa.clone()));
 
             let fundef = self.trav_fundef(fundef)?;
             new_program.fundefs.push(fundef);
@@ -45,7 +45,7 @@ pub trait Rewriter: Scoped<Self::InAst> {
     }
 
     fn trav_tensor(&mut self, tensor: Tensor<Self::InAst>) -> Result<Tensor<Self::OutAst>, Self::Err> {
-        self.scopes_mut().push(tensor.body.clone());
+        self.scopes_mut().push((tensor.body.ids.clone(), tensor.body.ssa.clone()));
 
         let lb = self.trav_ssa(tensor.lb)?;
         let ub = self.trav_ssa(tensor.ub)?;
@@ -88,24 +88,25 @@ pub trait Traversal<Ast: AstConfig>: Scoped<Ast> {
 
     fn trav_program(&mut self, program: &mut Program<Ast>) -> Result<Self::Ok, Self::Err> {
         for fundef in &mut program.fundefs {
-            *self.fargs_mut() = fundef.args.clone();
-            self.scopes_mut().push(fundef.body.clone());
-
             self.trav_fundef(fundef)?;
-
-            // Potential: here, we can compare the old (cloned) fundef against the updated one
-            // which for example allows us to only print changes when debugging
-            self.scopes_mut().pop().unwrap();
-            self.fargs_mut().clear();
         }
         Self::DEFAULT
     }
 
     fn trav_fundef(&mut self, fundef: &mut Fundef<Ast>) -> Result<Self::Ok, Self::Err> {
+        *self.fargs_mut() = fundef.args.clone();
+        self.scopes_mut().push((fundef.ids.clone(), fundef.ssa.clone()));
+
         for arg in &mut fundef.args {
             self.trav_farg(arg)?;
         }
-        self.trav_block(&mut fundef.body)?;
+        self.trav_ssa(&mut fundef.ret)?;
+
+        // Potential: here, we can compare the old (cloned) fundef against the updated one
+        // which for example allows us to only print changes when debugging
+        self.scopes_mut().pop().unwrap();
+        self.fargs_mut().clear();
+
         Self::DEFAULT
     }
 
@@ -135,7 +136,7 @@ pub trait Traversal<Ast: AstConfig>: Scoped<Ast> {
     }
 
     fn trav_tensor(&mut self, tensor: &mut Tensor<Ast>) -> Result<Self::Ok, Self::Err> {
-        self.scopes_mut().push(tensor.body.clone());
+        self.scopes_mut().push((tensor.body.ids.clone(), tensor.body.ssa.clone()));
 
         self.trav_block(&mut tensor.body)?;
 

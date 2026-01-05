@@ -16,7 +16,7 @@ use crate::{ast::*, traverse::{Rewriter, Traversal}};
 
 pub fn compile(src: &str) -> Program<TypedAst> {
     let ast = scanparse::scanparse(&src).unwrap();
-    let ast = convert_to_ssa::ConvertToSsa::new().convert_program(ast);
+    let ast = convert_to_ssa::convert_to_ssa(ast);
     let ast = type_infer::TypeInfer::new().trav_program(ast).unwrap();
     ast
 }

@@ -1,8 +1,8 @@
-use crate::{ast::*, traverse::Traversal};
+use crate::{arena::{Arena, SecondaryArena}, ast::*, traverse::Traversal};
 
 pub struct CompileHeader {
     fargs: Vec<Avis<TypedAst>>,
-    scopes: Vec<Block<TypedAst>>,
+    scopes: Vec<(Arena<Avis<TypedAst>>, SecondaryArena<Expr<TypedAst>>)>,
 }
 
 impl CompileHeader {
@@ -23,11 +23,11 @@ impl Scoped<TypedAst> for CompileHeader {
         &mut self.fargs
     }
 
-    fn scopes(&self) -> &Vec<Block<TypedAst>> {
+    fn scopes(&self) -> &Vec<(Arena<Avis<TypedAst>>, SecondaryArena<Expr<TypedAst>>)> {
         &self.scopes
     }
 
-    fn scopes_mut(&mut self) -> &mut Vec<Block<TypedAst>> {
+    fn scopes_mut(&mut self) -> &mut Vec<(Arena<Avis<TypedAst>>, SecondaryArena<Expr<TypedAst>>)> {
         &mut self.scopes
     }
 }
@@ -42,7 +42,7 @@ impl Traversal<TypedAst> for CompileHeader {
     fn trav_fundef(&mut self, fundef: &mut Fundef<TypedAst>) -> Result<Self::Ok, Self::Err> {
         let mut res = String::new();
 
-        let ret_type = to_rusttype(&fundef[fundef.body.ret.clone()].ty);
+        let ret_type = to_rusttype(&fundef[fundef.ret.clone()].ty);
 
         let args = fundef.args.iter_mut().map(|arg| {
             self.trav_farg(arg).unwrap()
