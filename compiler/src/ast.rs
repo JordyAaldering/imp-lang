@@ -67,12 +67,6 @@ pub trait Scoped<Ast: AstConfig> {
     }
 }
 
-pub trait Visitor<Ast: AstConfig, Knapsack>
-    where Knapsack: Scoped<Ast>,
-{
-    fn visit(&mut self, x: &mut Knapsack);
-}
-
 pub trait AstConfig: Clone + fmt::Debug {
     type ValueType: Clone + fmt::Debug;
 }
