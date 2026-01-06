@@ -1,7 +1,5 @@
 use slotmap::SecondaryMap;
 
-use crate::visit::{Visit, Walk};
-
 use super::{AstConfig, ArgOrVar, Expr};
 
 /// ```
@@ -41,17 +39,4 @@ pub struct Tensor<Ast: AstConfig> {
     pub lb: ArgOrVar<Ast>,
     pub ub: ArgOrVar<Ast>,
     pub ret: ArgOrVar<Ast>,
-}
-
-impl<Ast, W> Visit<Ast, W> for Tensor<Ast>
-where
-    Ast: AstConfig,
-    W: Walk<Ast>,
-{
-    fn visit(&self, walk: &mut W) -> W::Output {
-        walk.trav_ssa(&self.lb);
-        walk.trav_ssa(&self.ub);
-        walk.trav_ssa(&self.ret);
-        W::DEFAULT
-    }
 }

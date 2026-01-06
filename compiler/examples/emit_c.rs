@@ -9,9 +9,9 @@ fn main() {
     println!("{}", ast);
     let ast = convert_to_ssa::convert_to_ssa(ast);
     println!("{}", show::show(&ast));
-    let ast = type_infer::type_infer(ast).unwrap();
+    let mut ast = type_infer::type_infer(ast).unwrap();
     println!("{}", show::show(&ast));
-    let c_code = compile::codegen_c::CodegenContext::new().trav_program(&ast);
+    let c_code = compile::codegen_c::CodegenContext::new().trav_program(&mut ast);
     print!("{}", c_code);
 
     let undo_ssa = undo_ssa::UndoSsa::new().trav_program(&ast);

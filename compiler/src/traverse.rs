@@ -36,39 +36,40 @@ pub trait Rewriter {
     fn trav_u32(&mut self, value: u32) -> Result<(Self::Ok, u32), Self::Err>;
 }
 
-
+/// Maybe it is okay to pass some Scope vector/struct as a readonly reference.
+/// Any traversal should only be allowed to modify itself, not its parents.
 pub trait Traverse<Ast: AstConfig> {
     type Output;
 
     const DEFAULT: Self::Output;
 
-    fn trav_program(&mut self, program: &Program<Ast>) -> Self::Output {
-        for fundef in &program.fundefs {
+    fn trav_program(&mut self, program: &mut Program<Ast>) -> Self::Output {
+        for fundef in &mut program.fundefs {
             self.trav_fundef(fundef);
         }
         Self::DEFAULT
     }
 
-    fn trav_fundef(&mut self, fundef: &Fundef<Ast>) -> Self::Output {
-        for arg in &fundef.args {
+    fn trav_fundef(&mut self, fundef: &mut Fundef<Ast>) -> Self::Output {
+        for arg in &mut fundef.args {
             self.trav_arg(arg);
         }
-        self.trav_ssa(&fundef.ret);
+        self.trav_ssa(&mut fundef.ret);
         Self::DEFAULT
     }
 
-    fn trav_arg(&mut self, _arg: &Avis<Ast>) -> Self::Output {
+    fn trav_arg(&mut self, _arg: &mut Avis<Ast>) -> Self::Output {
         Self::DEFAULT
     }
 
     /// An identifier was encountered in an expression position.
     ///
     /// Recursively traverse the single static assignment of the identifier.
-    fn trav_ssa(&mut self, _id: &ArgOrVar<Ast>) -> Self::Output {
+    fn trav_ssa(&mut self, _id: &mut ArgOrVar<Ast>) -> Self::Output {
         Self::DEFAULT
     }
 
-    fn trav_expr(&mut self, expr: &Expr<Ast>) -> Self::Output {
+    fn trav_expr(&mut self, expr: &mut Expr<Ast>) -> Self::Output {
         use Expr::*;
         match expr {
             Tensor(n) => self.trav_tensor(n),
@@ -79,29 +80,29 @@ pub trait Traverse<Ast: AstConfig> {
         }
     }
 
-    fn trav_tensor(&mut self, tensor: &Tensor<Ast>) -> Self::Output {
-        self.trav_ssa(&tensor.lb);
-        self.trav_ssa(&tensor.ub);
-        self.trav_ssa(&tensor.ret);
+    fn trav_tensor(&mut self, tensor: &mut Tensor<Ast>) -> Self::Output {
+        self.trav_ssa(&mut tensor.lb);
+        self.trav_ssa(&mut tensor.ub);
+        self.trav_ssa(&mut tensor.ret);
         Self::DEFAULT
     }
 
-    fn trav_binary(&mut self, binary: &Binary<Ast>) -> Self::Output {
-        self.trav_ssa(&binary.r);
-        self.trav_ssa(&binary.r);
+    fn trav_binary(&mut self, binary: &mut Binary<Ast>) -> Self::Output {
+        self.trav_ssa(&mut binary.r);
+        self.trav_ssa(&mut binary.r);
         Self::DEFAULT
     }
 
-    fn trav_unary(&mut self, unary: &Unary<Ast>) -> Self::Output {
-        self.trav_ssa(&unary.r);
+    fn trav_unary(&mut self, unary: &mut Unary<Ast>) -> Self::Output {
+        self.trav_ssa(&mut unary.r);
         Self::DEFAULT
     }
 
-    fn trav_bool(&mut self, _: &bool) -> Self::Output {
+    fn trav_bool(&mut self, _: &mut bool) -> Self::Output {
         Self::DEFAULT
     }
 
-    fn trav_u32(&mut self, _: &u32) -> Self::Output {
+    fn trav_u32(&mut self, _: &mut u32) -> Self::Output {
         Self::DEFAULT
     }
 }

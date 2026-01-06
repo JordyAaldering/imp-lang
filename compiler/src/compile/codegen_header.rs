@@ -13,7 +13,7 @@ impl Traverse<TypedAst> for CompileHeader {
 
     const DEFAULT: Self::Output = String::new();
 
-    fn trav_fundef(&mut self, fundef: &Fundef<TypedAst>) -> Self::Output {
+    fn trav_fundef(&mut self, fundef: &mut Fundef<TypedAst>) -> Self::Output {
         let mut res = String::new();
 
         let ret_type = match fundef.ret {
@@ -22,7 +22,7 @@ impl Traverse<TypedAst> for CompileHeader {
             ArgOrVar::Iv(k) => to_rusttype(&fundef.ids[k].ty),
         };
 
-        let args = fundef.args.iter()
+        let args = fundef.args.iter_mut()
             .map(|arg| {
                 self.trav_arg(arg)
             })
@@ -44,7 +44,7 @@ impl Traverse<TypedAst> for CompileHeader {
         res
     }
 
-    fn trav_arg(&mut self, arg: &Avis<TypedAst>) -> Self::Output {
+    fn trav_arg(&mut self, arg: &mut Avis<TypedAst>) -> Self::Output {
         format!("{}: {}", arg.name, to_rusttype(&arg.ty))
     }
 }

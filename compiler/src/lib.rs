@@ -6,7 +6,6 @@ pub mod show;
 pub mod traverse;
 pub mod type_infer;
 pub mod undo_ssa;
-mod visit;
 
 // use std::{ffi::CString, ptr};
 
@@ -36,7 +35,7 @@ pub fn emit_header(ast: &mut Program<TypedAst>, outfile: &str) {
 //     }
 // }
 
-pub fn emit_c(ast: &Program<TypedAst>, outfile: &str) {
-    let c_code = compile::codegen_c::CodegenContext::new().trav_program(&ast);
+pub fn emit_c(ast: &mut Program<TypedAst>, outfile: &str) {
+    let c_code = compile::codegen_c::CodegenContext::new().trav_program(ast);
     std::fs::write(outfile, c_code).unwrap();
 }

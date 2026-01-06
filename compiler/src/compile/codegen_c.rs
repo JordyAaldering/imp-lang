@@ -46,14 +46,14 @@ impl Traverse<TypedAst> for CodegenContext {
 
     const DEFAULT: String = String::new();
 
-    fn trav_program(&mut self, program: &Program<TypedAst>) -> String {
+    fn trav_program(&mut self, program: &mut Program<TypedAst>) -> String {
         let mut res = String::new();
 
         res.push_str("#include <stdlib.h>\n");
         res.push_str("#include <stdbool.h>\n");
         res.push_str("#include <stdint.h>\n");
 
-        for fundef in &program.fundefs {
+        for fundef in &mut program.fundefs {
             res.push('\n');
             res.push_str(&self.trav_fundef(fundef));
         }
@@ -61,7 +61,7 @@ impl Traverse<TypedAst> for CodegenContext {
         res
     }
 
-    fn trav_fundef(&mut self, fundef: &Fundef<TypedAst>) -> String {
+    fn trav_fundef(&mut self, fundef: &mut Fundef<TypedAst>) -> String {
         self.args = fundef.args.clone();
         self.ids = fundef.ids.clone();
         self.scopes.push(fundef.ssa.clone());
@@ -79,7 +79,7 @@ impl Traverse<TypedAst> for CodegenContext {
 
         let ret_code = match fundef.ret {
             ArgOrVar::Arg(i) => fundef.args[i].name.to_owned(),
-            ArgOrVar::Var(k) => self.trav_expr(&fundef.ssa[k]),
+            ArgOrVar::Var(k) => self.trav_expr(&mut fundef.ssa[k]),
             ArgOrVar::Iv(_) => unreachable!(),
         };
 
@@ -98,7 +98,7 @@ impl Traverse<TypedAst> for CodegenContext {
         res
     }
 
-    fn trav_expr(&mut self, expr: &Expr<TypedAst>) -> String {
+    fn trav_expr(&mut self, expr: &mut Expr<TypedAst>) -> String {
         let mut res = String::new();
 
         match expr {
@@ -115,7 +115,7 @@ impl Traverse<TypedAst> for CodegenContext {
                 forloop.push_str(&format!("for (size_t {} = {}; {} < {}; {} += 1) {{\n", iv_name, lb_name, iv_name, ub_name, iv_name));
 
                 if let ArgOrVar::Var(k) = ret {
-                    let expr_code = self.trav_expr(&self.find_ssa(*k).clone());
+                    let expr_code = self.trav_expr(&mut self.find_ssa(*k).clone());
                     forloop.push_str(&format!("        res[{}] = {};\n", iv_name, expr_code));
                 }
 
@@ -125,12 +125,12 @@ impl Traverse<TypedAst> for CodegenContext {
                 self.stmts.push(format!("{} *res = ({} *)malloc({} * sizeof({}));", ty, ty, ub_name, ty));
 
                 if let ArgOrVar::Var(k) = ub {
-                    let l_code = self.trav_expr(&self.find_ssa(*k).clone());
+                    let l_code = self.trav_expr(&mut self.find_ssa(*k).clone());
                     self.stmts.push(format!("{} {} = {};", to_ctype(&self.ids[*k].ty), self.ids[*k].name, l_code));
                 }
 
                 if let ArgOrVar::Var(k) = lb {
-                    let l_code = self.trav_expr(&self.find_ssa(*k).clone());
+                    let l_code = self.trav_expr(&mut self.find_ssa(*k).clone());
                     self.stmts.push(format!("{} {} = {};", to_ctype(&self.ids[*k].ty), self.ids[*k].name, l_code));
                 }
 
@@ -139,12 +139,12 @@ impl Traverse<TypedAst> for CodegenContext {
             }
             Expr::Binary(Binary { l, r, op }) => {
                 if let ArgOrVar::Var(k) = l {
-                    let l_code = self.trav_expr(&self.find_ssa(*k).clone());
+                    let l_code = self.trav_expr(&mut self.find_ssa(*k).clone());
                     self.stmts.push(format!("{} {} = {};", to_ctype(&self.ids[*k].ty), self.ids[*k].name, l_code));
                 }
 
                 if let ArgOrVar::Var(k) = r {
-                    let r_code = self.trav_expr(&self.find_ssa(*k).clone());
+                    let r_code = self.trav_expr(&mut self.find_ssa(*k).clone());
                     self.stmts.push(format!("{} {} = {};", to_ctype(&self.ids[*k].ty), self.ids[*k].name, r_code));
                 }
 
@@ -152,7 +152,7 @@ impl Traverse<TypedAst> for CodegenContext {
             },
             Expr::Unary(Unary { r, op }) => {
                 if let ArgOrVar::Var(k) = r {
-                    let r_code = self.trav_expr(&self.find_ssa(*k).clone());
+                    let r_code = self.trav_expr(&mut self.find_ssa(*k).clone());
                     self.stmts.push(format!("{} {} = {};", to_ctype(&self.ids[*k].ty), self.ids[*k].name, r_code));
                 }
 

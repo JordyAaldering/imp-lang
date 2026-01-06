@@ -38,7 +38,7 @@ fn build_c() {
     let src = fs::read_to_string(&"src/simple.imp").unwrap();
     let mut ast = compile(&src);
     emit_header(&mut ast, h_path.to_str().unwrap());
-    emit_c(&ast, c_path.to_str().unwrap());
+    emit_c(&mut ast, c_path.to_str().unwrap());
 
     cc::Build::new()
         .file(&c_path)
