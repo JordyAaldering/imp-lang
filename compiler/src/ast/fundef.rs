@@ -1,5 +1,7 @@
 use slotmap::{SecondaryMap, SlotMap};
 
+use crate::visit::{Visit, Walk};
+
 use super::{ArgOrVar, AstConfig, Avis, Expr};
 
 #[derive(Clone, Debug)]
@@ -18,4 +20,18 @@ pub struct Fundef<Ast: AstConfig> {
     pub ssa: SecondaryMap<Ast::SlotKey, Expr<Ast>>,
     /// Key of the return value
     pub ret: ArgOrVar<Ast>,
+}
+
+impl<Ast, W> Visit<Ast, W> for Fundef<Ast>
+where
+    Ast: AstConfig,
+    W: Walk<Ast>,
+{
+    fn visit(&mut self, walk: &mut W) -> W::Output {
+        for arg in &mut self.args {
+            walk.trav_arg(arg);
+        }
+        walk.trav_ssa(&mut self.ret);
+        W::DEFAULT
+    }
 }

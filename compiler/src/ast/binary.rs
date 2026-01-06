@@ -1,5 +1,7 @@
 use std::fmt;
 
+use crate::visit::{Visit, Walk};
+
 use super::{ArgOrVar, AstConfig};
 
 #[derive(Clone, Debug)]
@@ -7,6 +9,18 @@ pub struct Binary<Ast: AstConfig> {
     pub l: ArgOrVar<Ast>,
     pub r: ArgOrVar<Ast>,
     pub op: Bop,
+}
+
+impl<Ast, W> Visit<Ast, W> for Binary<Ast>
+where
+    Ast: AstConfig,
+    W: Walk<Ast>,
+{
+    fn visit(&mut self, walk: &mut W) -> W::Output {
+        walk.trav_ssa(&mut self.l);
+        walk.trav_ssa(&mut self.r);
+        W::DEFAULT
+    }
 }
 
 #[derive(Clone, Copy, Debug)]

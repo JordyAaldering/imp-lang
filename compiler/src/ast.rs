@@ -24,6 +24,9 @@ pub trait AstConfig: Clone + Copy + fmt::Debug {
     type ValueType: Clone + fmt::Debug + fmt::Display;
 }
 
+///
+/// Untyped AST
+///
 #[derive(Clone, Copy, Debug)]
 pub struct UntypedAst;
 
@@ -35,10 +38,13 @@ impl AstConfig for UntypedAst {
     type ValueType = MaybeType;
 }
 
-slotmap::new_key_type! { pub struct TypedKey; }
-
+///
+/// Typed AST
+///
 #[derive(Clone, Copy, Debug)]
 pub struct TypedAst;
+
+slotmap::new_key_type! { pub struct TypedKey; }
 
 impl AstConfig for TypedAst {
     type SlotKey = TypedKey;

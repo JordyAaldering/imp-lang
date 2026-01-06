@@ -1,4 +1,4 @@
-use crate::{ast::*, traverse::Traversal};
+use crate::{ast::*, visit::Walk};
 
 pub struct CompileHeader;
 
@@ -8,14 +8,12 @@ impl CompileHeader {
     }
 }
 
-impl Traversal<TypedAst> for CompileHeader {
-    type Ok = String;
+impl Walk<TypedAst> for CompileHeader {
+    type Output = String;
 
-    type Err = ();
+    const DEFAULT: Self::Output = String::new();
 
-    const DEFAULT: Result<Self::Ok, Self::Err> = Err(());
-
-    fn trav_fundef(&mut self, fundef: &mut Fundef<TypedAst>) -> Result<Self::Ok, Self::Err> {
+    fn trav_fundef(&mut self, fundef: &mut Fundef<TypedAst>) -> Self::Output {
         let mut res = String::new();
 
         let ret_type = match fundef.ret {
@@ -24,9 +22,12 @@ impl Traversal<TypedAst> for CompileHeader {
             ArgOrVar::Iv(k) => to_rusttype(&fundef.ids[k].ty),
         };
 
-        let args = fundef.args.iter_mut().map(|arg| {
-            format!("{}: {}", arg.name, to_rusttype(&arg.ty))
-        }).collect::<Vec<_>>().join(", ");
+        let args = fundef.args.iter_mut()
+            .map(|arg| {
+                self.trav_arg(arg)
+            })
+            .collect::<Vec<String>>()
+            .join(", ");
 
         res.push_str("unsafe extern \"C\" {\n");
         res.push_str(&format!("    fn DSL_{}({}) -> {};\n", fundef.name, args, ret_type));
@@ -40,7 +41,11 @@ impl Traversal<TypedAst> for CompileHeader {
                             .collect::<Vec<_>>().join(", ")));
         res.push_str("}\n");
 
-        Ok(res)
+        res
+    }
+
+    fn trav_arg(&mut self, arg: &mut Avis<TypedAst>) -> Self::Output {
+        format!("{}: {}", arg.name, to_rusttype(&arg.ty))
     }
 }
 

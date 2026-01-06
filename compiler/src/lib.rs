@@ -6,12 +6,13 @@ pub mod show;
 pub mod traverse;
 pub mod type_infer;
 pub mod undo_ssa;
+mod visit;
 
 // use std::{ffi::CString, ptr};
 
 // use llvm_sys::core::LLVMPrintModuleToFile;
 
-use crate::{ast::*, traverse::Traversal};
+use crate::{ast::*, visit::Walk};
 
 pub fn compile(src: &str) -> Program<TypedAst> {
     let ast = scanparse::scanparse(&src).unwrap();
@@ -21,7 +22,7 @@ pub fn compile(src: &str) -> Program<TypedAst> {
 }
 
 pub fn emit_header(ast: &mut Program<TypedAst>, outfile: &str) {
-    let res = compile::codegen_header::CompileHeader::new().trav_program(ast).unwrap();
+    let res = compile::codegen_header::CompileHeader::new().trav_program(ast);
     std::fs::write(outfile, res).unwrap();
 }
 
