@@ -1,6 +1,4 @@
-use std::marker::PhantomData;
-
-use slotmap::{DefaultKey, SecondaryMap};
+use slotmap::SecondaryMap;
 
 use super::{AstConfig, ArgOrVar, Expr};
 
@@ -36,11 +34,9 @@ use super::{AstConfig, ArgOrVar, Expr};
 /// we might have to look through a number of scopes.
 #[derive(Clone, Debug)]
 pub struct Tensor<Ast: AstConfig> {
-    pub iv: DefaultKey,
-    pub lb: ArgOrVar,
-    pub ub: ArgOrVar,
-    // todo: Ast generic can be removed from Expr
-    pub _phantom: PhantomData<Ast>,
-    pub ssa: SecondaryMap<DefaultKey, Expr<Ast>>,
-    pub ret: ArgOrVar,
+    pub ssa: SecondaryMap<Ast::SlotKey, Expr<Ast>>,
+    pub iv: Ast::SlotKey,
+    pub lb: ArgOrVar<Ast>,
+    pub ub: ArgOrVar<Ast>,
+    pub ret: ArgOrVar<Ast>,
 }

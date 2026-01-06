@@ -23,13 +23,13 @@ pub trait Rewriter {
     }
 
     /// Recursively traverse the single static assignment of an identifier
-    fn trav_ssa(&mut self, id: ArgOrVar) -> Result<(Self::Ok, ArgOrVar), Self::Err>;
+    fn trav_ssa(&mut self, id: ArgOrVar<Self::InAst>) -> Result<(Self::Ok, ArgOrVar<Self::OutAst>), Self::Err>;
 
     fn trav_tensor(&mut self, tensor: Tensor<Self::InAst>) -> Result<(Self::Ok, Tensor<Self::OutAst>), Self::Err>;
 
-    fn trav_binary(&mut self, binary: Binary) -> Result<(Self::Ok, Binary), Self::Err>;
+    fn trav_binary(&mut self, binary: Binary<Self::InAst>) -> Result<(Self::Ok, Binary<Self::OutAst>), Self::Err>;
 
-    fn trav_unary(&mut self, unary: Unary) -> Result<(Self::Ok, Unary), Self::Err>;
+    fn trav_unary(&mut self, unary: Unary<Self::InAst>) -> Result<(Self::Ok, Unary<Self::OutAst>), Self::Err>;
 
     fn trav_bool(&mut self, value: bool) -> Result<(Self::Ok, bool), Self::Err>;
 
@@ -62,7 +62,7 @@ pub trait Traversal<Ast: AstConfig> {
         Self::DEFAULT
     }
 
-    fn trav_ssa(&mut self, _: &mut ArgOrVar) -> Result<Self::Ok, Self::Err> {
+    fn trav_ssa(&mut self, _: &mut ArgOrVar<Ast>) -> Result<Self::Ok, Self::Err> {
         Self::DEFAULT
     }
 
@@ -85,13 +85,13 @@ pub trait Traversal<Ast: AstConfig> {
         Self::DEFAULT
     }
 
-    fn trav_binary(&mut self, binary: &mut Binary) -> Result<Self::Ok, Self::Err> {
+    fn trav_binary(&mut self, binary: &mut Binary<Ast>) -> Result<Self::Ok, Self::Err> {
         self.trav_ssa(&mut binary.l)?;
         self.trav_ssa(&mut binary.r)?;
         Self::DEFAULT
     }
 
-    fn trav_unary(&mut self, unary: &mut Unary) -> Result<Self::Ok, Self::Err> {
+    fn trav_unary(&mut self, unary: &mut Unary<Ast>) -> Result<Self::Ok, Self::Err> {
         self.trav_ssa(&mut unary.r)?;
         Self::DEFAULT
     }

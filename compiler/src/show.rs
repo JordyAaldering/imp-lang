@@ -1,4 +1,4 @@
-use slotmap::{DefaultKey, SecondaryMap, SlotMap};
+use slotmap::{SecondaryMap, SlotMap};
 
 use crate::ast::*;
 
@@ -13,8 +13,8 @@ pub fn show<Ast: AstConfig>(program: &Program<Ast>)-> String {
 
 pub struct Show<Ast: AstConfig> {
     args: Vec<Avis<Ast>>,
-    ids: SlotMap<DefaultKey, Avis<Ast>>,
-    scopes: Vec<SecondaryMap<DefaultKey, Expr<Ast>>>,
+    ids: SlotMap<Ast::SlotKey, Avis<Ast>>,
+    scopes: Vec<SecondaryMap<Ast::SlotKey, Expr<Ast>>>,
 }
 
 impl<Ast: AstConfig> Show<Ast> {
@@ -22,7 +22,7 @@ impl<Ast: AstConfig> Show<Ast> {
     pub fn new() -> Self {
         Self {
             args: Vec::new(),
-            ids: SlotMap::new(),
+            ids: SlotMap::with_key(),
             scopes: Vec::new(),
         }
     }
@@ -31,7 +31,7 @@ impl<Ast: AstConfig> Show<Ast> {
         " ".repeat(4 * self.scopes.len())
     }
 
-    fn find(&self, key: ArgOrVar) -> &Avis<Ast> {
+    fn find(&self, key: ArgOrVar<Ast>) -> &Avis<Ast> {
         match key {
             ArgOrVar::Arg(i) => &self.args[i],
             ArgOrVar::Var(k) => &self.ids[k],
@@ -112,13 +112,13 @@ impl<Ast: AstConfig> Show<Ast> {
         res
     }
 
-    fn show_binary(&mut self, binary: &Binary) -> String {
+    fn show_binary(&mut self, binary: &Binary<Ast>) -> String {
         let l = &self.find(binary.l).name;
         let r = &self.find(binary.r).name;
         format!("{} {} {}", l, binary.op, r)
     }
 
-    fn show_unary(&mut self, unary: &Unary) -> String {
+    fn show_unary(&mut self, unary: &Unary<Ast>) -> String {
         let r = &self.find(unary.r).name;
         format!("{} {}", unary.op, r)
     }

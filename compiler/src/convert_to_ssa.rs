@@ -1,6 +1,6 @@
-use std::{collections::HashMap, marker::PhantomData, mem};
+use std::{collections::HashMap, mem};
 
-use slotmap::{DefaultKey, SecondaryMap, SlotMap};
+use slotmap::{SecondaryMap, SlotMap};
 
 use crate::{ast::*, scanparse::parse_ast};
 
@@ -13,9 +13,9 @@ pub fn convert_to_ssa(program: parse_ast::Program) -> Program<UntypedAst> {
 
 pub struct ConvertToSsa {
     uid: usize,
-    ids: SlotMap<DefaultKey, Avis<UntypedAst>>,
-    scopes: Vec<SecondaryMap<DefaultKey, Expr<UntypedAst>>>,
-    name_to_key: Vec<HashMap<String, ArgOrVar>>,
+    ids: SlotMap<UntypedKey, Avis<UntypedAst>>,
+    scopes: Vec<SecondaryMap<UntypedKey, Expr<UntypedAst>>>,
+    name_to_key: Vec<HashMap<String, ArgOrVar<UntypedAst>>>,
 }
 
 impl ConvertToSsa {
@@ -76,7 +76,7 @@ impl ConvertToSsa {
         }
     }
 
-    pub fn convert_expr(&mut self, expr: parse_ast::Expr) -> ArgOrVar {
+    pub fn convert_expr(&mut self, expr: parse_ast::Expr) -> ArgOrVar<UntypedAst> {
         let e = match expr {
             parse_ast::Expr::Tensor { expr, iv, lb, ub } => {
                 let lb = self.convert_expr(*lb);
@@ -93,7 +93,7 @@ impl ConvertToSsa {
 
                 let ssa = self.scopes.pop().unwrap();
 
-                Expr::Tensor(Tensor { iv: key, lb, ub, ssa, ret, _phantom: PhantomData::default() })
+                Expr::Tensor(Tensor { iv: key, lb, ub, ssa, ret })
             },
             parse_ast::Expr::Binary { l, r, op } => {
                 let l_key = self.convert_expr(*l);
@@ -113,7 +113,7 @@ impl ConvertToSsa {
             parse_ast::Expr::Identifier(id) => {
                 for scope in self.name_to_key.iter().rev() {
                     if let Some(key) = scope.get(&id) {
-                        return *key;
+                        return key.clone();
                     }
                 }
                 unreachable!("could not find {}", id);

@@ -1,6 +1,6 @@
-use std::{collections::HashMap, marker::PhantomData, mem};
+use std::{collections::HashMap, mem};
 
-use slotmap::{DefaultKey, SecondaryMap, SlotMap};
+use slotmap::{SecondaryMap, SlotMap};
 
 use crate::{ast::*, traverse::Rewriter};
 
@@ -17,12 +17,11 @@ pub fn type_infer(program: Program<UntypedAst>) -> Result<Program<TypedAst>, Inf
 
 pub struct TypeInfer {
     args: Vec<Avis<UntypedAst>>,
-    old_ids: SlotMap<DefaultKey, Avis<UntypedAst>>,
-    scopes: Vec<SecondaryMap<DefaultKey, Expr<UntypedAst>>>,
-    new_ids: SlotMap<DefaultKey, Avis<TypedAst>>,
-    new_ssa: Vec<SecondaryMap<DefaultKey, Expr<TypedAst>>>,
-    /// todo: use a different key for different AstConfig types
-    keymap: HashMap<DefaultKey, DefaultKey>,
+    old_ids: SlotMap<UntypedKey, Avis<UntypedAst>>,
+    scopes: Vec<SecondaryMap<UntypedKey, Expr<UntypedAst>>>,
+    new_ids: SlotMap<TypedKey, Avis<TypedAst>>,
+    new_ssa: Vec<SecondaryMap<TypedKey, Expr<TypedAst>>>,
+    keymap: HashMap<UntypedKey, TypedKey>,
 }
 
 #[derive(Debug)]
@@ -32,15 +31,15 @@ impl TypeInfer {
     pub fn new() -> Self {
         Self {
             args: Vec::new(),
-            old_ids: SlotMap::new(),
+            old_ids: SlotMap::with_key(),
             scopes: Vec::new(),
-            new_ids: SlotMap::new(),
+            new_ids: SlotMap::with_key(),
             new_ssa: Vec::new(),
             keymap: HashMap::new(),
         }
     }
 
-    fn find_ssa(&self, key: DefaultKey) -> &Expr<UntypedAst> {
+    fn find_ssa(&self, key: UntypedKey) -> &Expr<UntypedAst> {
         for scope in self.scopes.iter().rev() {
             if let Some(expr) = scope.get(key) {
                 return expr;
@@ -68,9 +67,12 @@ impl Rewriter for TypeInfer {
         let (ret_ty, ret) = self.trav_ssa(fundef.ret)?;
 
         let mut new_args = Vec::new();
-        for arg in &self.args {
-            let ty = arg.ty.clone().unwrap();
-            new_args.push(Avis::from(&arg, ty));
+        for (i, arg) in self.args.iter().enumerate() {
+            new_args.push(Avis {
+                key: ArgOrVar::Arg(i),
+                name: arg.name.clone(),
+                ty: arg.ty.clone().unwrap(),
+            });
         }
         self.args.clear();
 
@@ -90,7 +92,7 @@ impl Rewriter for TypeInfer {
         }))
     }
 
-    fn trav_ssa(&mut self, id: ArgOrVar) -> Result<(Type, ArgOrVar), InferenceError> {
+    fn trav_ssa(&mut self, id: ArgOrVar<Self::InAst>) -> Result<(Type, ArgOrVar<Self::OutAst>), InferenceError> {
         match id {
             ArgOrVar::Arg(i) => {
                 let ty = self.args[i].ty.clone().unwrap();
@@ -129,14 +131,14 @@ impl Rewriter for TypeInfer {
         let (_, ub) = self.trav_ssa(tensor.ub)?;
 
         let old_avis = &self.old_ids[tensor.iv];
-        let new_key = self.new_ids.insert_with_key(|key| {
+        let iv_new_key = self.new_ids.insert_with_key(|key| {
             Avis {
                 key: ArgOrVar::Iv(key),
                 name: old_avis.name.clone(),
                 ty: Type::scalar(BaseType::U32),
             }
         });
-        self.keymap.insert(tensor.iv, new_key);
+        self.keymap.insert(tensor.iv, iv_new_key);
 
         let (ret_ty, ret) = self.trav_ssa(tensor.ret)?;
 
@@ -147,23 +149,22 @@ impl Rewriter for TypeInfer {
         let ssa = self.new_ssa.pop().unwrap();
 
         Ok((tensor_ty, Tensor {
-            iv: tensor.iv,
+            iv: iv_new_key,
             lb,
             ub,
             ret,
             ssa,
-            _phantom: PhantomData::default(),
         }))
     }
 
-    fn trav_binary(&mut self, Binary { l, r, op }: Binary) -> Result<(Type, Binary), Self::Err> {
-        let (lty, l) = self.trav_ssa(l)?;
-        let (rty, r) = self.trav_ssa(r)?;
+    fn trav_binary(&mut self, binary: Binary<Self::InAst>) -> Result<(Type, Binary<Self::OutAst>), Self::Err> {
+        let (lty, l) = self.trav_ssa(binary.l)?;
+        let (rty, r) = self.trav_ssa(binary.r)?;
 
         let ty = unifies(lty, rty)?;
 
         use Bop::*;
-        let ty = match op {
+        let ty = match binary.op {
             Add | Sub | Mul | Div => {
                 // TODO: check if unifies with num
                 Type { basetype: BaseType::U32, shp: ty.shp }
@@ -177,14 +178,14 @@ impl Rewriter for TypeInfer {
             },
         };
 
-        Ok((ty, Binary { l, r, op }))
+        Ok((ty, Binary { l, r, op: binary.op }))
     }
 
-    fn trav_unary(&mut self, Unary { r, op }: Unary) -> Result<(Type, Unary), Self::Err> {
-        let (rty, r) = self.trav_ssa(r)?;
+    fn trav_unary(&mut self, unary: Unary<Self::InAst>) -> Result<(Type, Unary<Self::OutAst>), Self::Err> {
+        let (rty, r) = self.trav_ssa(unary.r)?;
 
         use Uop::*;
-        let ty = match op {
+        let ty = match unary.op {
             Neg => {
                 // TODO: check if r_ty unifies with signed num
                 Type { basetype: BaseType::U32, shp: rty.shp }
@@ -195,7 +196,7 @@ impl Rewriter for TypeInfer {
             },
         };
 
-        Ok((ty, Unary { r, op }))
+        Ok((ty, Unary { r, op: unary.op }))
     }
 
     fn trav_bool(&mut self, value: bool) -> Result<(Type, bool), Self::Err> {
