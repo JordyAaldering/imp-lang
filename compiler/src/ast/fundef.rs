@@ -22,16 +22,34 @@ pub struct Fundef<Ast: AstConfig> {
     pub ret: ArgOrVar<Ast>,
 }
 
+impl<Ast: AstConfig> Fundef<Ast> {
+    pub fn nameof(&self, k: ArgOrVar<Ast>) -> &str {
+        match k {
+            ArgOrVar::Arg(i) => &self.args[i].name,
+            ArgOrVar::Var(k) => &self.ids[k].name,
+            ArgOrVar::Iv(k) => &self.ids[k].name,
+        }
+    }
+
+    pub fn typof(&self, k: ArgOrVar<Ast>) -> &Ast::ValueType {
+        match k {
+            ArgOrVar::Arg(i) => &self.args[i].ty,
+            ArgOrVar::Var(k) => &self.ids[k].ty,
+            ArgOrVar::Iv(k) => &self.ids[k].ty,
+        }
+    }
+}
+
 impl<Ast, W> Visit<Ast, W> for Fundef<Ast>
 where
     Ast: AstConfig,
     W: Walk<Ast>,
 {
-    fn visit(&mut self, walk: &mut W) -> W::Output {
-        for arg in &mut self.args {
+    fn visit(&self, walk: &mut W) -> W::Output {
+        for arg in &self.args {
             walk.trav_arg(arg);
         }
-        walk.trav_ssa(&mut self.ret);
+        walk.trav_ssa(&self.ret);
         W::DEFAULT
     }
 }

@@ -12,7 +12,7 @@ mod visit;
 
 // use llvm_sys::core::LLVMPrintModuleToFile;
 
-use crate::{ast::*, visit::Walk};
+use crate::{ast::*, traverse::Traverse};
 
 pub fn compile(src: &str) -> Program<TypedAst> {
     let ast = scanparse::scanparse(&src).unwrap();
@@ -37,6 +37,6 @@ pub fn emit_header(ast: &mut Program<TypedAst>, outfile: &str) {
 // }
 
 pub fn emit_c(ast: &Program<TypedAst>, outfile: &str) {
-    let c_code = compile::codegen_c::CodegenContext::new().compile_program(&ast);
+    let c_code = compile::codegen_c::CodegenContext::new().trav_program(&ast);
     std::fs::write(outfile, c_code).unwrap();
 }

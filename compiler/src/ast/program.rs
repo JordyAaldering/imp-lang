@@ -20,8 +20,8 @@ where
     Ast: AstConfig,
     W: Walk<Ast>,
 {
-    fn visit(&mut self, walk: &mut W) -> W::Output {
-        for fundef in &mut self.fundefs {
+    fn visit(&self, walk: &mut W) -> W::Output {
+        for fundef in &self.fundefs {
             walk.trav_fundef(fundef);
         }
         W::DEFAULT

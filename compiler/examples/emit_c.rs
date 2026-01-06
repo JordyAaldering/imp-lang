@@ -1,4 +1,4 @@
-use compiler::*;
+use compiler::{traverse::Traverse, *};
 
 use std::{env, fs};
 
@@ -11,7 +11,7 @@ fn main() {
     println!("{}", show::show(&ast));
     let ast = type_infer::type_infer(ast).unwrap();
     println!("{}", show::show(&ast));
-    let c_code = compile::codegen_c::CodegenContext::new().compile_program(&ast);
+    let c_code = compile::codegen_c::CodegenContext::new().trav_program(&ast);
     print!("{}", c_code);
 
     let undo_ssa = undo_ssa::UndoSsa::new().trav_program(&ast);

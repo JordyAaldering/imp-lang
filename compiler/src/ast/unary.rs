@@ -15,8 +15,8 @@ where
     Ast: AstConfig,
     W: Walk<Ast>,
 {
-    fn visit(&mut self, walk: &mut W) -> W::Output {
-        walk.trav_ssa(&mut self.r);
+    fn visit(&self, walk: &mut W) -> W::Output {
+        walk.trav_ssa(&self.r);
         W::DEFAULT
     }
 }

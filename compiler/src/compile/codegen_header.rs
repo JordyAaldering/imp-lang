@@ -1,4 +1,4 @@
-use crate::{ast::*, visit::Walk};
+use crate::{ast::*, traverse::Traverse};
 
 pub struct CompileHeader;
 
@@ -8,12 +8,12 @@ impl CompileHeader {
     }
 }
 
-impl Walk<TypedAst> for CompileHeader {
+impl Traverse<TypedAst> for CompileHeader {
     type Output = String;
 
     const DEFAULT: Self::Output = String::new();
 
-    fn trav_fundef(&mut self, fundef: &mut Fundef<TypedAst>) -> Self::Output {
+    fn trav_fundef(&mut self, fundef: &Fundef<TypedAst>) -> Self::Output {
         let mut res = String::new();
 
         let ret_type = match fundef.ret {
@@ -22,7 +22,7 @@ impl Walk<TypedAst> for CompileHeader {
             ArgOrVar::Iv(k) => to_rusttype(&fundef.ids[k].ty),
         };
 
-        let args = fundef.args.iter_mut()
+        let args = fundef.args.iter()
             .map(|arg| {
                 self.trav_arg(arg)
             })
@@ -44,7 +44,7 @@ impl Walk<TypedAst> for CompileHeader {
         res
     }
 
-    fn trav_arg(&mut self, arg: &mut Avis<TypedAst>) -> Self::Output {
+    fn trav_arg(&mut self, arg: &Avis<TypedAst>) -> Self::Output {
         format!("{}: {}", arg.name, to_rusttype(&arg.ty))
     }
 }

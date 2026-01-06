@@ -19,7 +19,7 @@ where
     Ast: AstConfig,
     W: Walk<Ast>,
 {
-    fn visit(&mut self, walk: &mut W) -> W::Output {
+    fn visit(&self, walk: &mut W) -> W::Output {
         use Expr::*;
         match self {
             Tensor(n) => walk.trav_tensor(n),

@@ -2,7 +2,7 @@ use std::mem;
 
 use slotmap::{SecondaryMap, SlotMap};
 
-use crate::ast::*;
+use crate::{ast::*, traverse::Traverse};
 
 // TODO: we probably want an undo-ssa traversal before code generation
 // to share computation where possible, or push scope-local computations inside their scope
@@ -39,34 +39,36 @@ impl CodegenContext {
         }
         unreachable!()
     }
+}
 
-    pub fn compile_program(&mut self, program: &Program<TypedAst>) -> String {
-        let mut c_code = String::new();
+impl Traverse<TypedAst> for CodegenContext {
+    type Output = String;
 
-        c_code.push_str("#include <stdlib.h>\n");
-        c_code.push_str("#include <stdbool.h>\n");
-        c_code.push_str("#include <stdint.h>\n");
+    const DEFAULT: String = String::new();
+
+    fn trav_program(&mut self, program: &Program<TypedAst>) -> String {
+        let mut res = String::new();
+
+        res.push_str("#include <stdlib.h>\n");
+        res.push_str("#include <stdbool.h>\n");
+        res.push_str("#include <stdint.h>\n");
 
         for fundef in &program.fundefs {
-            c_code.push_str("\n");
-            c_code.push_str(&self.compile_fundef(fundef));
+            res.push('\n');
+            res.push_str(&self.trav_fundef(fundef));
         }
 
-        c_code
+        res
     }
 
-    fn compile_fundef(&mut self, fundef: &Fundef<TypedAst>) -> String {
+    fn trav_fundef(&mut self, fundef: &Fundef<TypedAst>) -> String {
         self.args = fundef.args.clone();
         self.ids = fundef.ids.clone();
         self.scopes.push(fundef.ssa.clone());
         let mut res = String::new();
 
         // Function signature
-        let ret_type = match fundef.ret {
-            ArgOrVar::Arg(i) => to_ctype(&fundef.args[i].ty),
-            ArgOrVar::Var(k) => to_ctype(&fundef.ids[k].ty),
-            ArgOrVar::Iv(k) => to_ctype(&fundef.ids[k].ty),
-        };
+        let ret_type = fundef.typof(fundef.ret);
 
         let args: Vec<String> = fundef.args.iter().map(|avis| {
             let ty_str = to_ctype(&avis.ty);
@@ -77,7 +79,7 @@ impl CodegenContext {
 
         let ret_code = match fundef.ret {
             ArgOrVar::Arg(i) => fundef.args[i].name.to_owned(),
-            ArgOrVar::Var(k) => self.compile_expr(&fundef.ssa[k]),
+            ArgOrVar::Var(k) => self.trav_expr(&fundef.ssa[k]),
             ArgOrVar::Iv(_) => unreachable!(),
         };
 
@@ -96,7 +98,7 @@ impl CodegenContext {
         res
     }
 
-    fn compile_expr(&mut self, expr: &Expr<TypedAst>) -> String {
+    fn trav_expr(&mut self, expr: &Expr<TypedAst>) -> String {
         let mut res = String::new();
 
         match expr {
@@ -113,7 +115,7 @@ impl CodegenContext {
                 forloop.push_str(&format!("for (size_t {} = {}; {} < {}; {} += 1) {{\n", iv_name, lb_name, iv_name, ub_name, iv_name));
 
                 if let ArgOrVar::Var(k) = ret {
-                    let expr_code = self.compile_expr(&self.find_ssa(*k).clone());
+                    let expr_code = self.trav_expr(&self.find_ssa(*k).clone());
                     forloop.push_str(&format!("        res[{}] = {};\n", iv_name, expr_code));
                 }
 
@@ -123,12 +125,12 @@ impl CodegenContext {
                 self.stmts.push(format!("{} *res = ({} *)malloc({} * sizeof({}));", ty, ty, ub_name, ty));
 
                 if let ArgOrVar::Var(k) = ub {
-                    let l_code = self.compile_expr(&self.find_ssa(*k).clone());
+                    let l_code = self.trav_expr(&self.find_ssa(*k).clone());
                     self.stmts.push(format!("{} {} = {};", to_ctype(&self.ids[*k].ty), self.ids[*k].name, l_code));
                 }
 
                 if let ArgOrVar::Var(k) = lb {
-                    let l_code = self.compile_expr(&self.find_ssa(*k).clone());
+                    let l_code = self.trav_expr(&self.find_ssa(*k).clone());
                     self.stmts.push(format!("{} {} = {};", to_ctype(&self.ids[*k].ty), self.ids[*k].name, l_code));
                 }
 
@@ -137,12 +139,12 @@ impl CodegenContext {
             }
             Expr::Binary(Binary { l, r, op }) => {
                 if let ArgOrVar::Var(k) = l {
-                    let l_code = self.compile_expr(&self.find_ssa(*k).clone());
+                    let l_code = self.trav_expr(&self.find_ssa(*k).clone());
                     self.stmts.push(format!("{} {} = {};", to_ctype(&self.ids[*k].ty), self.ids[*k].name, l_code));
                 }
 
                 if let ArgOrVar::Var(k) = r {
-                    let r_code = self.compile_expr(&self.find_ssa(*k).clone());
+                    let r_code = self.trav_expr(&self.find_ssa(*k).clone());
                     self.stmts.push(format!("{} {} = {};", to_ctype(&self.ids[*k].ty), self.ids[*k].name, r_code));
                 }
 
@@ -150,7 +152,7 @@ impl CodegenContext {
             },
             Expr::Unary(Unary { r, op }) => {
                 if let ArgOrVar::Var(k) = r {
-                    let r_code = self.compile_expr(&self.find_ssa(*k).clone());
+                    let r_code = self.trav_expr(&self.find_ssa(*k).clone());
                     self.stmts.push(format!("{} {} = {};", to_ctype(&self.ids[*k].ty), self.ids[*k].name, r_code));
                 }
 
