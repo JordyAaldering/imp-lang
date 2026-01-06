@@ -77,7 +77,7 @@ impl CodegenContext {
 
         let ret_code = match fundef.ret {
             ArgOrVar::Arg(i) => fundef.args[i].name.to_owned(),
-            ArgOrVar::Var(k) => self.compile_expr(fundef, &fundef.ssa[k]),
+            ArgOrVar::Var(k) => self.compile_expr(&fundef.ssa[k]),
             ArgOrVar::Iv(_) => unreachable!(),
         };
 
@@ -96,7 +96,7 @@ impl CodegenContext {
         res
     }
 
-    fn compile_expr(&mut self, fundef: &Fundef<TypedAst>, expr: &Expr<TypedAst>) -> String {
+    fn compile_expr(&mut self, expr: &Expr<TypedAst>) -> String {
         let mut res = String::new();
 
         match expr {
@@ -106,15 +106,14 @@ impl CodegenContext {
                 let mut forloop = String::new();
 
                 let ty = to_ctype(&self.find(*ret).ty);
-                let iv_name = fundef.ids[*iv].name.clone();
+                let iv_name = self.ids[*iv].name.clone();
                 let lb_name = self.find(*lb).name.clone();
                 let ub_name = self.find(*ub).name.clone();
 
                 forloop.push_str(&format!("for (size_t {} = {}; {} < {}; {} += 1) {{\n", iv_name, lb_name, iv_name, ub_name, iv_name));
 
                 if let ArgOrVar::Var(k) = ret {
-                    let expr = self.find_ssa(*k).clone();
-                    let expr_code = self.compile_expr(fundef, &expr);
+                    let expr_code = self.compile_expr(&self.find_ssa(*k).clone());
                     forloop.push_str(&format!("        res[{}] = {};\n", iv_name, expr_code));
                 }
 
@@ -124,15 +123,13 @@ impl CodegenContext {
                 self.stmts.push(format!("{} *res = ({} *)malloc({} * sizeof({}));", ty, ty, ub_name, ty));
 
                 if let ArgOrVar::Var(k) = ub {
-                    let expr = self.find_ssa(*k).clone();
-                    let l_code = self.compile_expr(fundef, &expr);
-                    self.stmts.push(format!("{} {} = {};", to_ctype(&fundef.ids[*k].ty), fundef.ids[*k].name, l_code));
+                    let l_code = self.compile_expr(&self.find_ssa(*k).clone());
+                    self.stmts.push(format!("{} {} = {};", to_ctype(&self.ids[*k].ty), self.ids[*k].name, l_code));
                 }
 
                 if let ArgOrVar::Var(k) = lb {
-                    let expr = self.find_ssa(*k).clone();
-                    let l_code = self.compile_expr(fundef, &expr);
-                    self.stmts.push(format!("{} {} = {};", to_ctype(&fundef.ids[*k].ty), fundef.ids[*k].name, l_code));
+                    let l_code = self.compile_expr(&self.find_ssa(*k).clone());
+                    self.stmts.push(format!("{} {} = {};", to_ctype(&self.ids[*k].ty), self.ids[*k].name, l_code));
                 }
 
                 res.push_str("res");
@@ -140,21 +137,21 @@ impl CodegenContext {
             }
             Expr::Binary(Binary { l, r, op }) => {
                 if let ArgOrVar::Var(k) = l {
-                    let l_code = self.compile_expr(fundef, &fundef.ssa[*k]);
-                    self.stmts.push(format!("{} {} = {};", to_ctype(&fundef.ids[*k].ty), fundef.ids[*k].name, l_code));
+                    let l_code = self.compile_expr(&self.find_ssa(*k).clone());
+                    self.stmts.push(format!("{} {} = {};", to_ctype(&self.ids[*k].ty), self.ids[*k].name, l_code));
                 }
 
                 if let ArgOrVar::Var(k) = r {
-                    let r_code = self.compile_expr(fundef, &fundef.ssa[*k]);
-                    self.stmts.push(format!("{} {} = {};", to_ctype(&fundef.ids[*k].ty), fundef.ids[*k].name, r_code));
+                    let r_code = self.compile_expr(&self.find_ssa(*k).clone());
+                    self.stmts.push(format!("{} {} = {};", to_ctype(&self.ids[*k].ty), self.ids[*k].name, r_code));
                 }
 
                 res.push_str(&format!("{} {} {}", self.find(*l).name, op, self.find(*r).name));
             },
             Expr::Unary(Unary { r, op }) => {
                 if let ArgOrVar::Var(k) = r {
-                    let r_code = self.compile_expr(fundef, &fundef.ssa[*k]);
-                    self.stmts.push(format!("{} {} = {};", to_ctype(&fundef.ids[*k].ty), fundef.ids[*k].name, r_code));
+                    let r_code = self.compile_expr(&self.find_ssa(*k).clone());
+                    self.stmts.push(format!("{} {} = {};", to_ctype(&self.ids[*k].ty), self.ids[*k].name, r_code));
                 }
 
                 res.push_str(&format!("{} {}", op, self.find(*r).name));

@@ -75,7 +75,7 @@ impl UndoSsa {
                 match self.find_ssa(k).clone() {
                     ast::Expr::Tensor(ast::Tensor { iv, lb, ub, ret, ssa }) => {
                         self.scopes.push(ssa.clone());
-                        let iv = IndexVector(fundef.ids[iv].name.clone());
+                        let iv = fundef.ids[iv].name.clone();
                         let expr = self.inline_expr(ret, fundef);
                         let lb = self.inline_expr(lb, fundef);
                         let ub = self.inline_expr(ub, fundef);
@@ -112,7 +112,7 @@ impl UndoSsa {
                 match self.find_ssa(k).clone() {
                     ast::Expr::Tensor(ast::Tensor { iv, lb, ub, ret, ssa }) => {
                         self.scopes.push(ssa.clone());
-                        let iv = IndexVector(fundef.ids[iv].name.clone());
+                        let iv = fundef.ids[iv].name.clone();
                         let expr = self.inline_expr(ret, fundef);
                         let lb = self.inline_expr(lb, fundef);
                         let ub = self.inline_expr(ub, fundef);

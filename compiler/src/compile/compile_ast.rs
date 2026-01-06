@@ -32,7 +32,7 @@ pub enum Stmt {
 #[derive(Debug)]
 pub enum Expr {
     Tensor {
-        iv: IndexVector,
+        iv: String,
         expr: Box<Expr>,
         lb: Box<Expr>,
         ub: Box<Expr>,
@@ -50,6 +50,3 @@ pub enum Expr {
     Bool(bool),
     U32(u32),
 }
-
-#[derive(Debug)]
-pub struct IndexVector(pub String);
