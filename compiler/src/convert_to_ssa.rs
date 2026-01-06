@@ -34,13 +34,23 @@ impl ConvertToSsa {
     }
 
     pub fn convert_fundef(&mut self, fundef: parse_ast::Fundef) -> Fundef<UntypedAst> {
-        self.scopes.push(SecondaryMap::new());
-
         let mut args = Vec::new();
-        for (i, (ty, id)) in fundef.args.into_iter().enumerate() {
-            args.push(Avis::new(ArgOrVar::Arg(i), &id, MaybeType(Some(ty))));
-            self.name_to_key.last_mut().unwrap().insert(id, ArgOrVar::Arg(i));
+        let mut arg_to_key = HashMap::new();
+
+        for (i, (ty, name)) in fundef.args.into_iter().enumerate() {
+            args.push(Avis {
+                name: name.clone(),
+                key: ArgOrVar::Arg(i),
+                ty: MaybeType(Some(ty)),
+            });
+            arg_to_key.insert(name, ArgOrVar::Arg(i));
         }
+
+        // Scope for the function arguments
+        self.name_to_key = vec![arg_to_key];
+        // Scope for the function body
+        self.name_to_key.push(HashMap::new());
+        self.scopes = vec![SecondaryMap::new()];
 
         for stmt in fundef.body {
             self.convert_stmt(stmt);
@@ -57,6 +67,10 @@ impl ConvertToSsa {
 
         let ssa = self.scopes.pop().unwrap();
         assert!(self.scopes.is_empty());
+
+        self.name_to_key.pop().unwrap();
+        self.name_to_key.pop().unwrap();
+        assert!(self.name_to_key.is_empty());
 
         Fundef {
             name: fundef.id,
@@ -82,16 +96,24 @@ impl ConvertToSsa {
                 let lb = self.convert_expr(*lb);
                 let ub = self.convert_expr(*ub);
 
-                self.scopes.push(SecondaryMap::new());
-
+                let mut name_to_key = HashMap::new();
                 let key = self.ids.insert_with_key(|key| {
-                    Avis::new(ArgOrVar::Iv(key), &iv, MaybeType(None))
+                    Avis {
+                        name: iv.clone(),
+                        key: ArgOrVar::Iv(key),
+                        ty: MaybeType(None),
+                    }
                 });
-                self.name_to_key.last_mut().unwrap().insert(iv.clone(), ArgOrVar::Iv(key));
+                name_to_key.insert(iv, ArgOrVar::Iv(key));
+
+                // Traverse tensor body
+                self.name_to_key.push(name_to_key);
+                self.scopes.push(SecondaryMap::new());
 
                 let ret = self.convert_expr(*expr);
 
                 let ssa = self.scopes.pop().unwrap();
+                self.name_to_key.pop().unwrap();
 
                 Expr::Tensor(Tensor { iv: key, lb, ub, ssa, ret })
             },
@@ -113,16 +135,20 @@ impl ConvertToSsa {
             parse_ast::Expr::Identifier(id) => {
                 for scope in self.name_to_key.iter().rev() {
                     if let Some(key) = scope.get(&id) {
-                        return key.clone();
+                        return *key;
                     }
                 }
                 unreachable!("could not find {}", id);
             },
         };
 
-        let id = self.fresh_uid();
+        let name = self.fresh_uid();
         let key = self.ids.insert_with_key(|key| {
-            Avis::new(ArgOrVar::Var(key), &id, MaybeType(None))
+            Avis {
+                name,
+                key: ArgOrVar::Var(key),
+                ty: MaybeType(None),
+            }
         });
 
         self.scopes.last_mut().unwrap().insert(key, e);

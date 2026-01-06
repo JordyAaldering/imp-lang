@@ -7,12 +7,6 @@ pub struct Avis<Ast: AstConfig> {
     pub ty: Ast::ValueType,
 }
 
-impl<Ast: AstConfig> Avis<Ast> {
-    pub fn new(key: ArgOrVar<Ast>, name: &str, ty: Ast::ValueType) -> Self {
-        Self { key, name: name.to_owned(), ty }
-    }
-}
-
 #[derive(Clone, Copy, Debug)]
 pub enum ArgOrVar<Ast: AstConfig> {
     /// Function argument
