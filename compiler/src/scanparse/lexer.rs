@@ -111,7 +111,6 @@ impl<'src> Lexer<'src> {
 }
 
 impl<'source> Iterator for Lexer<'source> {
-    // Should this return a tuple, or should we create a wrapper struct that contains the token and span?
     type Item = (Token, Span);
 
     fn next(&mut self) -> Option<Self::Item> {

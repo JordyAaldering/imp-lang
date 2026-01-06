@@ -48,10 +48,11 @@ pub enum Expr {
 
 impl fmt::Display for Program {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        for fundef in &self.fundefs {
-            writeln!(f, "{}", fundef)?;
-        }
-        Ok(())
+        let fundefs = self.fundefs.iter()
+            .map(Fundef::to_string)
+            .collect::<Vec<String>>()
+            .join("\n");
+        write!(f, "{}", fundefs)
     }
 }
 
@@ -71,8 +72,7 @@ impl fmt::Display for Fundef {
         }
 
         writeln!(f, "    return {};", self.ret_expr)?;
-
-        writeln!(f, "}}")
+        write!(f, "}}")
     }
 }
 
@@ -91,13 +91,13 @@ impl fmt::Display for Expr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use Expr::*;
         match self {
-            Tensor { iv, expr, lb, ub } => {
+            Tensor { expr, lb, iv, ub } => {
                 write!(f, "{{ {} | {} <= {} < {} }}", expr, lb, iv, ub)
             },
-            Binary { l, r, op } => {
+            Binary { l, op, r } => {
                 write!(f, "({} {} {})", l, op, r)
             },
-            Unary { r, op } => {
+            Unary { op, r } => {
                 write!(f, "{}{}", op, r)
             },
             // Terminals

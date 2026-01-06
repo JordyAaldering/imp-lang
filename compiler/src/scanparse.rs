@@ -1,12 +1,12 @@
 mod lexer;
-mod parser;
 mod operator;
-mod span;
 pub(crate) mod parse_ast;
+mod parser;
+mod span;
 
 use lexer::Lexer;
-use parser::Parser;
 use parse_ast::Program;
+use parser::Parser;
 
 pub fn scanparse(src: &str) -> Result<Program, String> {
     let lexer = Lexer::new(src);
