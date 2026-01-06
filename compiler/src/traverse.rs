@@ -38,6 +38,12 @@ pub trait Rewriter {
 
 /// Maybe it is okay to pass some Scope vector/struct as a readonly reference.
 /// Any traversal should only be allowed to modify itself, not its parents.
+///
+/// Hmmm, nevermind maybe?
+/// The problem is that the fundef/scope keeps the ssa definition, which IS
+/// in practise the node we are visiting, even though it lives in a parent somewhere...
+///
+/// Perhaps if we want to do this, we need to force a new entry to be created in the arena?
 pub trait Traverse<Ast: AstConfig> {
     type Output;
 
