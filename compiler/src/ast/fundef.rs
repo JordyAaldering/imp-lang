@@ -1,5 +1,3 @@
-use std::ops;
-
 use slotmap::{SecondaryMap, SlotMap};
 
 use super::{ArgOrVar, AstConfig, Avis, Expr};
@@ -20,16 +18,4 @@ pub struct Fundef<Ast: AstConfig> {
     pub ssa: SecondaryMap<Ast::SlotKey, Expr<Ast>>,
     /// Key of the return value
     pub ret: ArgOrVar<Ast>,
-}
-
-impl<Ast: AstConfig> ops::Index<ArgOrVar<Ast>> for Fundef<Ast> {
-    type Output = Avis<Ast>;
-
-    fn index(&self, x: ArgOrVar<Ast>) -> &Self::Output {
-        match x {
-            ArgOrVar::Arg(i) => &self.args[i],
-            ArgOrVar::Var(k) => &self.ids[k],
-            ArgOrVar::Iv(k) => &self.ids[k],
-        }
-    }
 }

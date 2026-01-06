@@ -18,7 +18,11 @@ impl Traversal<TypedAst> for CompileHeader {
     fn trav_fundef(&mut self, fundef: &mut Fundef<TypedAst>) -> Result<Self::Ok, Self::Err> {
         let mut res = String::new();
 
-        let ret_type = to_rusttype(&fundef[fundef.ret.clone()].ty);
+        let ret_type = match fundef.ret {
+            ArgOrVar::Arg(i) => to_rusttype(&fundef.args[i].ty),
+            ArgOrVar::Var(k) => to_rusttype(&fundef.ids[k].ty),
+            ArgOrVar::Iv(k) => to_rusttype(&fundef.ids[k].ty),
+        };
 
         let args = fundef.args.iter_mut().map(|arg| {
             self.trav_farg(arg).unwrap()
