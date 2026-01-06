@@ -1,46 +1,10 @@
-use std::mem;
+use crate::{ast::*, traverse::Traversal};
 
-use crate::{arena::{Arena, SecondaryArena}, ast::*, traverse::Traversal};
-
-pub struct CompileHeader {
-    fargs: Vec<Avis<TypedAst>>,
-    scopes: Vec<(Arena<Avis<TypedAst>>, SecondaryArena<Expr<TypedAst>>)>,
-}
+pub struct CompileHeader;
 
 impl CompileHeader {
     pub fn new() -> Self {
-        Self {
-            fargs: Vec::new(),
-            scopes: Vec::new(),
-        }
-    }
-}
-
-impl Scoped<TypedAst> for CompileHeader {
-    fn fargs(&self) -> &Vec<Avis<TypedAst>> {
-        &self.fargs
-    }
-
-    fn set_fargs(&mut self, fargs: Vec<Avis<TypedAst>>) {
-        self.fargs = fargs;
-    }
-
-    fn pop_fargs(&mut self) -> Vec<Avis<TypedAst>> {
-        let mut fargs = Vec::new();
-        mem::swap(&mut self.fargs, &mut fargs);
-        fargs
-    }
-
-    fn scopes(&self) -> &Vec<(Arena<Avis<TypedAst>>, SecondaryArena<Expr<TypedAst>>)> {
-        &self.scopes
-    }
-
-    fn push_scope(&mut self, ids: Arena<Avis<TypedAst>>, ssa: SecondaryArena<Expr<TypedAst>>) {
-        self.scopes.push((ids, ssa));
-    }
-
-    fn pop_scope(&mut self) -> (Arena<Avis<TypedAst>>, SecondaryArena<Expr<TypedAst>>) {
-        self.scopes.pop().unwrap()
+        Self
     }
 }
 

@@ -1,6 +1,6 @@
 use crate::ast::*;
 
-pub trait Rewriter: Scoped<Self::InAst, Self::OutAst> {
+pub trait Rewriter {
     type InAst: AstConfig;
 
     type OutAst: AstConfig;
@@ -36,7 +36,7 @@ pub trait Rewriter: Scoped<Self::InAst, Self::OutAst> {
     fn trav_u32(&mut self, value: u32) -> Result<(Self::Ok, u32), Self::Err>;
 }
 
-pub trait Traversal<Ast: AstConfig>: Scoped<Ast> {
+pub trait Traversal<Ast: AstConfig> {
     type Ok;
 
     type Err;
@@ -51,19 +51,10 @@ pub trait Traversal<Ast: AstConfig>: Scoped<Ast> {
     }
 
     fn trav_fundef(&mut self, fundef: &mut Fundef<Ast>) -> Result<Self::Ok, Self::Err> {
-        self.set_fargs(fundef.args.clone());
-        self.push_scope(fundef.ids.clone(), fundef.ssa.clone());
-
         for arg in &mut fundef.args {
             self.trav_farg(arg)?;
         }
         self.trav_ssa(&mut fundef.ret)?;
-
-        // Potential: here, we can compare the old (cloned) fundef against the updated one
-        // which for example allows us to only print changes when debugging
-        self.pop_fargs();
-        self.pop_scope();
-
         Self::DEFAULT
     }
 
@@ -88,14 +79,9 @@ pub trait Traversal<Ast: AstConfig>: Scoped<Ast> {
     }
 
     fn trav_tensor(&mut self, tensor: &mut Tensor<Ast>) -> Result<Self::Ok, Self::Err> {
-        self.push_scope(tensor.ids.clone(), tensor.ssa.clone());
-
         self.trav_ssa(&mut tensor.lb)?;
         self.trav_ssa(&mut tensor.ub)?;
         self.trav_ssa(&mut tensor.ret)?;
-
-        self.pop_scope();
-
         Self::DEFAULT
     }
 

@@ -1,6 +1,8 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, marker::PhantomData, mem};
 
-use crate::{arena::{Arena, SecondaryArena}, ast::*, scanparse::parse_ast};
+use slotmap::{DefaultKey, SecondaryMap, SlotMap};
+
+use crate::{ast::*, scanparse::parse_ast};
 
 pub fn convert_to_ssa(program: parse_ast::Program) -> Program<UntypedAst> {
     let fundefs = program.fundefs.into_iter()
@@ -11,42 +13,16 @@ pub fn convert_to_ssa(program: parse_ast::Program) -> Program<UntypedAst> {
 
 pub struct ConvertToSsa {
     uid: usize,
-    scopes: Vec<(Arena<Avis<UntypedAst>>, SecondaryArena<Expr<UntypedAst>>)>,
+    ids: SlotMap<DefaultKey, Avis<UntypedAst>>,
+    scopes: Vec<SecondaryMap<DefaultKey, Expr<UntypedAst>>>,
     name_to_key: Vec<HashMap<String, ArgOrVar>>,
-}
-
-impl Scoped<UntypedAst> for ConvertToSsa {
-    fn fargs(&self) -> &Vec<Avis<UntypedAst>> {
-        unreachable!()
-    }
-
-    fn set_fargs(&mut self, _fargs: Vec<Avis<UntypedAst>>) {
-        unreachable!()
-    }
-
-    fn pop_fargs(&mut self) -> Vec<Avis<UntypedAst>> {
-        unreachable!()
-    }
-
-    fn scopes(&self) -> &Vec<(Arena<Avis<UntypedAst>>, SecondaryArena<Expr<UntypedAst>>)> {
-        &self.scopes
-    }
-
-    fn push_scope(&mut self, ids: Arena<Avis<UntypedAst>>, ssa: SecondaryArena<Expr<UntypedAst>>) {
-        self.name_to_key.push(HashMap::new());
-        self.scopes.push((ids, ssa));
-    }
-
-    fn pop_scope(&mut self) -> (Arena<Avis<UntypedAst>>, SecondaryArena<Expr<UntypedAst>>) {
-        self.name_to_key.pop().unwrap();
-        self.scopes.pop().unwrap()
-    }
 }
 
 impl ConvertToSsa {
     fn new() -> Self {
         Self {
             uid: 0,
+            ids: SlotMap::with_key(),
             scopes: Vec::new(),
             name_to_key: Vec::new(),
         }
@@ -58,7 +34,7 @@ impl ConvertToSsa {
     }
 
     pub fn convert_fundef(&mut self, fundef: parse_ast::Fundef) -> Fundef<UntypedAst> {
-        self.push_scope(Arena::new(), SecondaryArena::new());
+        self.scopes.push(SecondaryMap::new());
 
         let mut args = Vec::new();
         for (i, (ty, id)) in fundef.args.into_iter().enumerate() {
@@ -71,11 +47,16 @@ impl ConvertToSsa {
         }
 
         let ret_value = self.convert_expr(fundef.ret_expr);
+
+        let mut ids = SlotMap::with_key();
+        mem::swap(&mut self.ids, &mut ids);
+
         if let ArgOrVar::Var(k) = ret_value {
-            self.scopes[0].0[k].ty = MaybeType(Some(fundef.ret_type));
+            ids[k].ty = MaybeType(Some(fundef.ret_type));
         }
 
-        let (ids, ssa) = self.pop_scope();
+        let ssa = self.scopes.pop().unwrap();
+        assert!(self.scopes.is_empty());
 
         Fundef {
             name: fundef.id,
@@ -101,18 +82,18 @@ impl ConvertToSsa {
                 let lb = self.convert_expr(*lb);
                 let ub = self.convert_expr(*ub);
 
-                self.push_scope(Arena::new(), SecondaryArena::new());
+                self.scopes.push(SecondaryMap::new());
 
-                let key = self.scopes.last_mut().unwrap().0.insert_with(|key| {
+                let key = self.ids.insert_with_key(|key| {
                     Avis::new(ArgOrVar::Iv(key), &iv, MaybeType(None))
                 });
                 self.name_to_key.last_mut().unwrap().insert(iv.clone(), ArgOrVar::Iv(key));
 
                 let ret = self.convert_expr(*expr);
 
-                let (ids, ssa) = self.pop_scope();
+                let ssa = self.scopes.pop().unwrap();
 
-                Expr::Tensor(Tensor { iv: key, lb, ub, ids, ssa, ret })
+                Expr::Tensor(Tensor { iv: key, lb, ub, ssa, ret, _phantom: PhantomData::default() })
             },
             parse_ast::Expr::Binary { l, r, op } => {
                 let l_key = self.convert_expr(*l);
@@ -140,11 +121,11 @@ impl ConvertToSsa {
         };
 
         let id = self.fresh_uid();
-        let key = self.scopes.last_mut().unwrap().0.insert_with(|key| {
+        let key = self.ids.insert_with_key(|key| {
             Avis::new(ArgOrVar::Var(key), &id, MaybeType(None))
         });
 
-        self.scopes.last_mut().unwrap().1.insert(key, e);
+        self.scopes.last_mut().unwrap().insert(key, e);
         ArgOrVar::Var(key)
     }
 }

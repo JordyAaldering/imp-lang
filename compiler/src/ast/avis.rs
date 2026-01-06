@@ -1,4 +1,4 @@
-use crate::arena::Key;
+use slotmap::DefaultKey;
 
 use super::AstConfig;
 
@@ -24,7 +24,7 @@ pub enum ArgOrVar {
     /// Function argument
     Arg(usize),
     /// Local variable
-    Var(Key),
+    Var(DefaultKey),
     /// Index vector
-    Iv(Key),
+    Iv(DefaultKey),
 }

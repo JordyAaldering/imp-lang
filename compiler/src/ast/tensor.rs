@@ -1,6 +1,8 @@
-use crate::arena::{Arena, Key, SecondaryArena};
+use std::marker::PhantomData;
 
-use super::{AstConfig, ArgOrVar, Avis, Expr};
+use slotmap::{DefaultKey, SecondaryMap};
+
+use super::{AstConfig, ArgOrVar, Expr};
 
 /// ```
 /// { iv + 1 | 0 <= iv < 3;
@@ -34,10 +36,11 @@ use super::{AstConfig, ArgOrVar, Avis, Expr};
 /// we might have to look through a number of scopes.
 #[derive(Clone, Debug)]
 pub struct Tensor<Ast: AstConfig> {
-    pub iv: Key,
+    pub iv: DefaultKey,
     pub lb: ArgOrVar,
     pub ub: ArgOrVar,
-    pub ids: Arena<Avis<Ast>>,
-    pub ssa: SecondaryArena<Expr<Ast>>,
+    // todo: Ast generic can be removed from Expr
+    pub _phantom: PhantomData<Ast>,
+    pub ssa: SecondaryMap<DefaultKey, Expr<Ast>>,
     pub ret: ArgOrVar,
 }

@@ -1,6 +1,8 @@
 use std::ops;
 
-use crate::{arena::{Arena, SecondaryArena}, ast::Expr};
+use slotmap::{DefaultKey, SecondaryMap, SlotMap};
+
+use crate::ast::Expr;
 
 use super::{ArgOrVar, AstConfig, Avis};
 
@@ -11,13 +13,13 @@ pub struct Fundef<Ast: AstConfig> {
     /// Function arguments
     pub args: Vec<Avis<Ast>>,
     /// Local identifiers
-    pub ids: Arena<Avis<Ast>>,
+    pub ids: SlotMap<DefaultKey, Avis<Ast>>,
     /// arena containing a mapping of variable keys to their ssa assignment expressions
     /// two options for multi-return:
     ///  1) also keep track of return index here
     ///  2) add tuple types, and insert extraction functions, then there is always only one lhs
     /// I am leaning towards option 1
-    pub ssa: SecondaryArena<Expr<Ast>>,
+    pub ssa: SecondaryMap<DefaultKey, Expr<Ast>>,
     /// Key of the return value
     pub ret: ArgOrVar,
 }

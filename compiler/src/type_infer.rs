@@ -1,4 +1,8 @@
-use crate::{arena::{Arena, SecondaryArena}, ast::*, traverse::Rewriter};
+use std::{collections::HashMap, marker::PhantomData, mem};
+
+use slotmap::{DefaultKey, SecondaryMap, SlotMap};
+
+use crate::{ast::*, traverse::Rewriter};
 
 pub fn type_infer(program: Program<UntypedAst>) -> Result<Program<TypedAst>, InferenceError> {
     let mut fundefs = Vec::new();
@@ -12,10 +16,13 @@ pub fn type_infer(program: Program<UntypedAst>) -> Result<Program<TypedAst>, Inf
 }
 
 pub struct TypeInfer {
-    new_ids: Vec<Arena<Avis<TypedAst>>>,
-    new_ssa: Vec<SecondaryArena<Expr<TypedAst>>>,
-    fargs: Vec<Avis<UntypedAst>>,
-    scopes: Vec<(Arena<Avis<UntypedAst>>, SecondaryArena<Expr<UntypedAst>>)>,
+    args: Vec<Avis<UntypedAst>>,
+    old_ids: SlotMap<DefaultKey, Avis<UntypedAst>>,
+    scopes: Vec<SecondaryMap<DefaultKey, Expr<UntypedAst>>>,
+    new_ids: SlotMap<DefaultKey, Avis<TypedAst>>,
+    new_ssa: Vec<SecondaryMap<DefaultKey, Expr<TypedAst>>>,
+    /// todo: use a different key for different AstConfig types
+    keymap: HashMap<DefaultKey, DefaultKey>,
 }
 
 #[derive(Debug)]
@@ -24,48 +31,22 @@ pub enum InferenceError {}
 impl TypeInfer {
     pub fn new() -> Self {
         Self {
-            new_ids: Vec::new(),
-            new_ssa: Vec::new(),
-            fargs: Vec::new(),
+            args: Vec::new(),
+            old_ids: SlotMap::new(),
             scopes: Vec::new(),
+            new_ids: SlotMap::new(),
+            new_ssa: Vec::new(),
+            keymap: HashMap::new(),
         }
     }
-}
 
-impl Scoped<UntypedAst, TypedAst> for TypeInfer {
-    fn fargs(&self) -> &Vec<Avis<UntypedAst>> {
-        &self.fargs
-    }
-
-    fn set_fargs(&mut self, fargs: Vec<Avis<UntypedAst>>) {
-        self.fargs = fargs
-    }
-
-    fn pop_fargs(&mut self) -> Vec<Avis<TypedAst>> {
-        let mut args = Vec::new();
-        for arg in &self.fargs {
-            let ty = arg.ty.clone().unwrap();
-            args.push(Avis::from(&arg, ty));
+    fn find_ssa(&self, key: DefaultKey) -> &Expr<UntypedAst> {
+        for scope in self.scopes.iter().rev() {
+            if let Some(expr) = scope.get(key) {
+                return expr;
+            }
         }
-        self.fargs.clear();
-        args
-    }
-
-    fn scopes(&self) -> &Vec<(Arena<Avis<UntypedAst>>, SecondaryArena<Expr<UntypedAst>>)> {
-        &self.scopes
-    }
-
-    fn push_scope(&mut self, ids: Arena<Avis<UntypedAst>>, ssa: SecondaryArena<Expr<UntypedAst>>) {
-        self.scopes.push((ids, ssa));
-        self.new_ids.push(Arena::new());
-        self.new_ssa.push(SecondaryArena::new());
-    }
-
-    fn pop_scope(&mut self) -> (Arena<Avis<TypedAst>>, SecondaryArena<Expr<TypedAst>>) {
-        self.scopes.pop().unwrap();
-        let ids = self.new_ids.pop().unwrap();
-        let ssa = self.new_ssa.pop().unwrap();
-        (ids, ssa)
+        unreachable!()
     }
 }
 
@@ -79,17 +60,30 @@ impl Rewriter for TypeInfer {
     type Err = InferenceError;
 
     fn trav_fundef(&mut self, fundef: Fundef<Self::InAst>) -> Result<(Type, Fundef<Self::OutAst>), InferenceError> {
-        self.set_fargs(fundef.args.clone());
-        self.push_scope(fundef.ids.clone(), fundef.ssa.clone());
+        self.args = fundef.args.clone();
+        self.old_ids = fundef.ids.clone();
+        self.scopes.push(fundef.ssa.clone());
+        self.new_ssa.push(SecondaryMap::new());
 
         let (ret_ty, ret) = self.trav_ssa(fundef.ret)?;
 
-        let (ids, ssa) = self.pop_scope();
-        let args = self.pop_fargs();
+        let mut new_args = Vec::new();
+        for arg in &self.args {
+            let ty = arg.ty.clone().unwrap();
+            new_args.push(Avis::from(&arg, ty));
+        }
+        self.args.clear();
+
+        let mut ids = SlotMap::with_key();
+        mem::swap(&mut self.new_ids, &mut ids);
+        self.scopes.pop().unwrap();
+        assert!(self.scopes.is_empty());
+        let ssa = self.new_ssa.pop().unwrap();
+        assert!(self.new_ssa.is_empty());
 
         Ok((ret_ty, Fundef {
             name: fundef.name,
-            args,
+            args: new_args,
             ids,
             ssa,
             ret,
@@ -97,52 +91,68 @@ impl Rewriter for TypeInfer {
     }
 
     fn trav_ssa(&mut self, id: ArgOrVar) -> Result<(Type, ArgOrVar), InferenceError> {
-        let ty = match id {
+        match id {
             ArgOrVar::Arg(i) => {
-                self.fargs[i].ty.clone().unwrap()
+                let ty = self.args[i].ty.clone().unwrap();
+                Ok((ty, ArgOrVar::Arg(i)))
             },
-            ArgOrVar::Var(key) => {
-                let old_avis = self.find_key(key).cloned().unwrap();
-                let old_expr = self.find_ssa(key).cloned().unwrap();
+            ArgOrVar::Var(old_key) => {
+                let old_expr = self.find_ssa(old_key).clone();
                 let (new_ty, new_expr) = self.trav_expr(old_expr)?;
 
-                let avis = Avis::from(&old_avis, new_ty.clone());
-                self.new_ids.last_mut().unwrap().insert_with_key(key, avis);
-                self.new_ssa.last_mut().unwrap().insert(key, new_expr);
-                new_ty
-            },
-            ArgOrVar::Iv(_) => {
-                Type::scalar(BaseType::U32)
-            },
-        };
+                let old_avis = &self.old_ids[old_key];
+                let new_key = self.new_ids.insert_with_key(|key| {
+                    Avis {
+                        key: ArgOrVar::Var(key),
+                        name: old_avis.name.clone(),
+                        ty: new_ty.clone(),
+                    }
+                });
+                self.keymap.insert(old_key, new_key);
+                self.new_ssa.last_mut().unwrap().insert(new_key, new_expr);
 
-        Ok((ty, id))
+                Ok((new_ty, ArgOrVar::Var(new_key)))
+            },
+            ArgOrVar::Iv(k) => {
+                let ty = Type::scalar(BaseType::U32);
+                let k = self.keymap[&k];
+                Ok((ty, ArgOrVar::Iv(k)))
+            },
+        }
     }
 
     fn trav_tensor(&mut self, tensor: Tensor<Self::InAst>) -> Result<(Type, Tensor<Self::OutAst>), InferenceError> {
-        self.push_scope(tensor.ids.clone(), tensor.ssa.clone());
+        self.scopes.push(tensor.ssa.clone());
+        self.new_ssa.push(SecondaryMap::new());
 
         let (_, lb) = self.trav_ssa(tensor.lb)?;
         let (_, ub) = self.trav_ssa(tensor.ub)?;
 
-        let old_avis = self.find_key(tensor.iv).cloned().unwrap();
-        let avis = Avis::from(&old_avis, Type::scalar(BaseType::U32));
-        self.new_ids.last_mut().unwrap().insert_with_key(tensor.iv, avis);
+        let old_avis = &self.old_ids[tensor.iv];
+        let new_key = self.new_ids.insert_with_key(|key| {
+            Avis {
+                key: ArgOrVar::Iv(key),
+                name: old_avis.name.clone(),
+                ty: Type::scalar(BaseType::U32),
+            }
+        });
+        self.keymap.insert(tensor.iv, new_key);
 
         let (ret_ty, ret) = self.trav_ssa(tensor.ret)?;
 
         let shp = if let Shape::Scalar = ret_ty.shp { "." } else { "*" };
         let tensor_ty = Type::vector(ret_ty.basetype, shp);
 
-        let (ids, ssa) = self.pop_scope();
+        self.scopes.pop().unwrap();
+        let ssa = self.new_ssa.pop().unwrap();
 
         Ok((tensor_ty, Tensor {
             iv: tensor.iv,
             lb,
             ub,
             ret,
-            ids,
             ssa,
+            _phantom: PhantomData::default(),
         }))
     }
 
