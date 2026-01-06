@@ -44,6 +44,16 @@ pub trait Rewriter {
 /// in practise the node we are visiting, even though it lives in a parent somewhere...
 ///
 /// Perhaps if we want to do this, we need to force a new entry to be created in the arena?
+///
+/// That's a huge pain. Perhaps all nodes but the fundef should be trivially easy,
+/// and then the fundef contains ALL scopes.
+/// Unsure how to then use this to figure out the ordering of the scopes though
+/// Perhaps just some sort of tree structure.
+/// Then everything that has a scope (such as the tensor comprehension) also has its own unique key,
+/// which we can use to determine which tree path to pick?
+/// And then whilst traversing the AST we move down into the tree when necessary?
+/// (But what is we have another key _within_ this tensor comprehension? For that one we do not know the scope...
+// / Maybe we need to keep track of the current scope index in the knapsack?)
 pub trait Traverse<Ast: AstConfig> {
     type Output;
 
