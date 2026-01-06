@@ -1,4 +1,3 @@
-//mod arena;
 pub mod ast;
 pub mod compile;
 pub mod convert_to_ssa;

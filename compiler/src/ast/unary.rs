@@ -1,8 +1,6 @@
 use std::fmt;
 
-use crate::ast::AstConfig;
-
-use super::ArgOrVar;
+use super::{ArgOrVar, AstConfig};
 
 #[derive(Clone, Debug)]
 pub struct Unary<Ast: AstConfig> {

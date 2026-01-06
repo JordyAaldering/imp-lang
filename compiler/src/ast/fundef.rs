@@ -2,9 +2,7 @@ use std::ops;
 
 use slotmap::{SecondaryMap, SlotMap};
 
-use crate::ast::Expr;
-
-use super::{ArgOrVar, AstConfig, Avis};
+use super::{ArgOrVar, AstConfig, Avis, Expr};
 
 #[derive(Clone, Debug)]
 pub struct Fundef<Ast: AstConfig> {

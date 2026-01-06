@@ -2,8 +2,8 @@ use super::AstConfig;
 
 #[derive(Clone, Debug)]
 pub struct Avis<Ast: AstConfig> {
-    pub key: ArgOrVar<Ast>,
     pub name: String,
+    pub key: ArgOrVar<Ast>,
     pub ty: Ast::ValueType,
 }
 
