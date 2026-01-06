@@ -25,7 +25,7 @@ impl Traversal<TypedAst> for CompileHeader {
         };
 
         let args = fundef.args.iter_mut().map(|arg| {
-            self.trav_farg(arg).unwrap()
+            format!("{}: {}", arg.name, to_rusttype(&arg.ty))
         }).collect::<Vec<_>>().join(", ");
 
         res.push_str("unsafe extern \"C\" {\n");
@@ -41,10 +41,6 @@ impl Traversal<TypedAst> for CompileHeader {
         res.push_str("}\n");
 
         Ok(res)
-    }
-
-    fn trav_farg(&mut self, arg: &mut Avis<TypedAst>) -> Result<Self::Ok, Self::Err> {
-        Ok(format!("{}: {}", arg.name, to_rusttype(&arg.ty)))
     }
 }
 

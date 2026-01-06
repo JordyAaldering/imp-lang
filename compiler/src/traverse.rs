@@ -51,18 +51,7 @@ pub trait Traversal<Ast: AstConfig> {
     }
 
     fn trav_fundef(&mut self, fundef: &mut Fundef<Ast>) -> Result<Self::Ok, Self::Err> {
-        for arg in &mut fundef.args {
-            self.trav_farg(arg)?;
-        }
         self.trav_ssa(&mut fundef.ret)?;
-        Self::DEFAULT
-    }
-
-    fn trav_farg(&mut self, _: &mut Avis<Ast>) -> Result<Self::Ok, Self::Err> {
-        Self::DEFAULT
-    }
-
-    fn trav_ssa(&mut self, _: &mut ArgOrVar<Ast>) -> Result<Self::Ok, Self::Err> {
         Self::DEFAULT
     }
 
@@ -75,6 +64,10 @@ pub trait Traversal<Ast: AstConfig> {
             Bool(n) => self.trav_bool(n)?,
             U32(n) => self.trav_u32(n)?,
         };
+        Self::DEFAULT
+    }
+
+    fn trav_ssa(&mut self, _: &mut ArgOrVar<Ast>) -> Result<Self::Ok, Self::Err> {
         Self::DEFAULT
     }
 
