@@ -53,7 +53,7 @@ pub trait Rewriter {
 /// which we can use to determine which tree path to pick?
 /// And then whilst traversing the AST we move down into the tree when necessary?
 /// (But what is we have another key _within_ this tensor comprehension? For that one we do not know the scope...
-// / Maybe we need to keep track of the current scope index in the knapsack?)
+/// Maybe we need to keep track of the current scope index in the knapsack?)
 pub trait Traverse<Ast: AstConfig> {
     type Output;
 
