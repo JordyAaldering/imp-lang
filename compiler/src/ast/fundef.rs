@@ -39,6 +39,20 @@ impl<'ast, Ast: AstConfig> ScopeEntry<'ast, Ast> {
 
 pub type SsaBlock<'ast, Ast> = Vec<ScopeEntry<'ast, Ast>>;
 
+pub fn find_local_in_scopes<'ast, Ast: AstConfig>(
+    scopes: &[SsaBlock<'ast, Ast>],
+    key: &'ast Avis<Ast>,
+) -> Option<LocalDef<'ast, Ast>> {
+    for scope in scopes.iter().rev() {
+        for entry in scope.iter().rev() {
+            if std::ptr::eq(entry.avis(), key) {
+                return Some(entry.def());
+            }
+        }
+    }
+    None
+}
+
 /// Maybe the whole thing is just overkill, and we should instead just use a refcell tree
 /// structure to store the ast, which also allows us to lookup parent nodes.
 /// https://github.com/0xSaksham/tree_data_structure
@@ -105,12 +119,6 @@ impl<'ast, Ast: AstConfig> Fundef<'ast, Ast> {
     }
 
     pub fn find_local_def(&self, key: &'ast Avis<Ast>) -> Option<LocalDef<'ast, Ast>> {
-        self.ssa.iter().rev().find_map(|entry| {
-            if std::ptr::eq(entry.avis(), key) {
-                Some(entry.def())
-            } else {
-                None
-            }
-        })
+        find_local_in_scopes(std::slice::from_ref(&self.ssa), key)
     }
 }

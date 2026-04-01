@@ -11,7 +11,7 @@ pub mod undo_ssa;
 
 // use llvm_sys::core::LLVMPrintModuleToFile;
 
-use crate::{ast::*, traverse::Traverse};
+use crate::{ast::*, traverse::AstPass};
 
 pub fn compile(src: &str) -> Program<'static, TypedAst> {
     let ast = scanparse::scanparse(&src).unwrap();
@@ -21,8 +21,9 @@ pub fn compile(src: &str) -> Program<'static, TypedAst> {
 }
 
 pub fn emit_header(ast: &mut Program<'static, TypedAst>, outfile: &str) {
-    let res = compile::codegen_header::CompileHeader::new().trav_program(ast);
-    std::fs::write(outfile, res).unwrap();
+    let mut cg = compile::codegen_header::CompileHeader::new();
+    let _ = cg.pass_program(ast.clone()).unwrap();
+    std::fs::write(outfile, cg.finish()).unwrap();
 }
 
 // pub fn emit_llvm(ast: &Program<'static, TypedAst>, outfile: &str) {
@@ -36,6 +37,7 @@ pub fn emit_header(ast: &mut Program<'static, TypedAst>, outfile: &str) {
 // }
 
 pub fn emit_c(ast: &mut Program<'static, TypedAst>, outfile: &str) {
-    let c_code = compile::codegen_c::CodegenContext::new().trav_program(ast);
-    std::fs::write(outfile, c_code).unwrap();
+    let mut cg = compile::codegen_c::CodegenContext::new();
+    let _ = cg.pass_program(ast.clone()).unwrap();
+    std::fs::write(outfile, cg.finish()).unwrap();
 }
