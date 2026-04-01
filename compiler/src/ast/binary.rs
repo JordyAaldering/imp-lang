@@ -11,7 +11,7 @@ pub struct Binary<'ast, Ast: AstConfig> {
 
 #[derive(Clone, Copy, Debug)]
 pub enum Bop {
-    Add, Sub, Mul, Div, Eq, Ne, Lt, Le, Gt, Ge,
+    Add, Sub, Mul, Div, Lt, Le, Gt, Ge, Eq, Ne,
 }
 
 impl fmt::Display for Bop {
@@ -22,12 +22,12 @@ impl fmt::Display for Bop {
             Sub => write!(f, "-"),
             Mul => write!(f, "*"),
             Div => write!(f, "/"),
-            Eq => write!(f, "=="),
-            Ne => write!(f, "!="),
             Lt => write!(f, "<"),
             Le => write!(f, "<="),
             Gt => write!(f, ">"),
             Ge => write!(f, ">="),
+            Eq => write!(f, "=="),
+            Ne => write!(f, "!="),
         }
     }
 }

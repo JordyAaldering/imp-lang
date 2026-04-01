@@ -32,6 +32,8 @@ pub trait Traverse<'ast> {
 
     fn trav_farg(&mut self, arg: &'ast Avis<Self::InAst>) -> &'ast Avis<Self::OutAst>;
 
+    fn trav_vardec(&mut self, decl: &'ast Avis<Self::InAst>) -> &'ast Avis<Self::OutAst>;
+
     ///
     /// Statements
     ///
@@ -101,11 +103,30 @@ pub trait Visit<'ast> {
     }
 
     fn visit_fundef(&mut self, fundef: Fundef<'ast, Self::Ast>) -> Fundef<'ast, Self::Ast> {
-        fundef
+        let mut args = Vec::with_capacity(fundef.args.len());
+        for arg in fundef.args {
+            args.push(self.visit_farg(arg));
+        }
+
+        let mut decls = Vec::with_capacity(fundef.decls.len());
+        for vardec in fundef.decls {
+            decls.push(self.visit_vardec(vardec));
+        }
+
+        let mut body = Vec::new();
+        for stmt in fundef.body {
+            body.push(self.visit_stmt(stmt));
+        }
+
+        Fundef { name: fundef.name, args, decls, body }
     }
 
     fn visit_farg(&mut self, arg: &'ast Avis<Self::Ast>) -> &'ast Avis<Self::Ast> {
         arg
+    }
+
+    fn visit_vardec(&mut self, vardec: &'ast Avis<Self::Ast>) -> &'ast Avis<Self::Ast> {
+        vardec
     }
 
     ///
@@ -200,6 +221,10 @@ where
 
     fn trav_farg(&mut self, arg: &'ast Avis<Self::InAst>) -> &'ast Avis<Self::OutAst> {
         Visit::visit_farg(self, arg)
+    }
+
+    fn trav_vardec(&mut self, vardec: &'ast Avis<Self::InAst>) -> &'ast Avis<Self::OutAst> {
+        Visit::visit_vardec(self, vardec)
     }
 
     ///
