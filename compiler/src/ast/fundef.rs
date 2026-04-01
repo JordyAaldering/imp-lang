@@ -1,5 +1,3 @@
-use slotmap::{SecondaryMap, SlotMap};
-
 use super::{ArgOrVar, AstConfig, Avis, Expr};
 
 /// Maybe the whole thing is just overkill, and we should instead just use a refcell tree
@@ -17,37 +15,41 @@ use super::{ArgOrVar, AstConfig, Avis, Expr};
 /// But how to link from this declarations map to the corresponding nodes?
 /// Can the reference be used as a key?
 #[derive(Clone, Debug)]
-pub struct Fundef<Ast: AstConfig> {
+pub struct Fundef<'ast, Ast: AstConfig> {
     /// User-defined function name
     pub name: String,
     /// Function arguments
-    pub args: Vec<Avis<Ast>>,
+    pub args: Vec<&'ast Avis<'ast, Ast>>,
     /// Local identifiers
-    pub ids: SlotMap<Ast::SlotKey, Avis<Ast>>,
+    pub ids: Vec<&'ast Avis<'ast, Ast>>,
     /// arena containing a mapping of variable keys to their ssa assignment expressions
     /// two options for multi-return:
     ///  1) also keep track of return index here
     ///  2) add tuple types, and insert extraction functions, then there is always only one lhs
     /// I am leaning towards option 1
-    pub ssa: SecondaryMap<Ast::SlotKey, Expr<Ast>>,
+    pub ssa: Vec<(&'ast Avis<'ast, Ast>, &'ast Expr<'ast, Ast>)>,
     /// Key of the return value
-    pub ret: ArgOrVar<Ast>,
+    pub ret: ArgOrVar<'ast, Ast>,
 }
 
-impl<Ast: AstConfig> Fundef<Ast> {
-    pub fn nameof(&self, k: ArgOrVar<Ast>) -> &str {
+impl<'ast, Ast: AstConfig> Fundef<'ast, Ast> {
+    pub fn nameof(&self, k: ArgOrVar<'ast, Ast>) -> &str {
         match k {
             ArgOrVar::Arg(i) => &self.args[i].name,
-            ArgOrVar::Var(k) => &self.ids[k].name,
-            ArgOrVar::Iv(k) => &self.ids[k].name,
+            ArgOrVar::Var(v) => &v.name,
+            ArgOrVar::Iv(v) => &v.name,
         }
     }
 
-    pub fn typof(&self, k: ArgOrVar<Ast>) -> &Ast::ValueType {
+    pub fn typof(&self, k: ArgOrVar<'ast, Ast>) -> &Ast::ValueType {
         match k {
             ArgOrVar::Arg(i) => &self.args[i].ty,
-            ArgOrVar::Var(k) => &self.ids[k].ty,
-            ArgOrVar::Iv(k) => &self.ids[k].ty,
+            ArgOrVar::Var(v) => &v.ty,
+            ArgOrVar::Iv(v) => &v.ty,
         }
+    }
+
+    pub fn find_ssa(&self, key: &'ast Avis<'ast, Ast>) -> Option<&'ast Expr<'ast, Ast>> {
+        self.ssa.iter().find_map(|(id, expr)| if std::ptr::eq(*id, key) { Some(*expr) } else { None })
     }
 }

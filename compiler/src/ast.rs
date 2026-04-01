@@ -19,8 +19,6 @@ pub use typ::*;
 use std::fmt;
 
 pub trait AstConfig: Clone + Copy + fmt::Debug {
-    type SlotKey: slotmap::Key;
-
     type ValueType: Clone + fmt::Debug + fmt::Display;
 }
 
@@ -30,11 +28,7 @@ pub trait AstConfig: Clone + Copy + fmt::Debug {
 #[derive(Clone, Copy, Debug)]
 pub struct UntypedAst;
 
-slotmap::new_key_type! { pub struct UntypedKey; }
-
 impl AstConfig for UntypedAst {
-    type SlotKey = UntypedKey;
-
     type ValueType = MaybeType;
 }
 
@@ -44,10 +38,6 @@ impl AstConfig for UntypedAst {
 #[derive(Clone, Copy, Debug)]
 pub struct TypedAst;
 
-slotmap::new_key_type! { pub struct TypedKey; }
-
 impl AstConfig for TypedAst {
-    type SlotKey = TypedKey;
-
     type ValueType = Type;
 }

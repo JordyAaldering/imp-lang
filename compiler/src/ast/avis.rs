@@ -1,18 +1,18 @@
 use super::AstConfig;
 
 #[derive(Clone, Debug)]
-pub struct Avis<Ast: AstConfig> {
+pub struct Avis<'ast, Ast: AstConfig> {
     pub name: String,
-    pub key: ArgOrVar<Ast>,
     pub ty: Ast::ValueType,
+    pub _marker: std::marker::PhantomData<&'ast Ast>,
 }
 
 #[derive(Clone, Copy, Debug)]
-pub enum ArgOrVar<Ast: AstConfig> {
+pub enum ArgOrVar<'ast, Ast: AstConfig> {
     /// Function argument
     Arg(usize),
     /// Local variable
-    Var(Ast::SlotKey),
+    Var(&'ast Avis<'ast, Ast>),
     /// Index vector
-    Iv(Ast::SlotKey),
+    Iv(&'ast Avis<'ast, Ast>),
 }

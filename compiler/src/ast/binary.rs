@@ -3,9 +3,9 @@ use std::fmt;
 use super::{ArgOrVar, AstConfig};
 
 #[derive(Clone, Debug)]
-pub struct Binary<Ast: AstConfig> {
-    pub l: ArgOrVar<Ast>,
-    pub r: ArgOrVar<Ast>,
+pub struct Binary<'ast, Ast: AstConfig> {
+    pub l: ArgOrVar<'ast, Ast>,
+    pub r: ArgOrVar<'ast, Ast>,
     pub op: Bop,
 }
 

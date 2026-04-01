@@ -1,6 +1,4 @@
-use slotmap::SecondaryMap;
-
-use super::{AstConfig, ArgOrVar, Expr};
+use super::{AstConfig, ArgOrVar, Avis, Expr};
 
 /// ```
 /// { iv + 1 | 0 <= iv < 3;
@@ -33,10 +31,10 @@ use super::{AstConfig, ArgOrVar, Expr};
 /// The naive approach of passing the fundef to traversal functions in not enough
 /// we might have to look through a number of scopes.
 #[derive(Clone, Debug)]
-pub struct Tensor<Ast: AstConfig> {
-    pub ssa: SecondaryMap<Ast::SlotKey, Expr<Ast>>,
-    pub iv: Ast::SlotKey,
-    pub lb: ArgOrVar<Ast>,
-    pub ub: ArgOrVar<Ast>,
-    pub ret: ArgOrVar<Ast>,
+pub struct Tensor<'ast, Ast: AstConfig> {
+    pub ssa: Vec<(&'ast Avis<'ast, Ast>, &'ast Expr<'ast, Ast>)>,
+    pub iv: &'ast Avis<'ast, Ast>,
+    pub lb: ArgOrVar<'ast, Ast>,
+    pub ub: ArgOrVar<'ast, Ast>,
+    pub ret: ArgOrVar<'ast, Ast>,
 }

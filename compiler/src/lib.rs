@@ -13,19 +13,19 @@ pub mod undo_ssa;
 
 use crate::{ast::*, traverse::Traverse};
 
-pub fn compile(src: &str) -> Program<TypedAst> {
+pub fn compile(src: &str) -> Program<'static, TypedAst> {
     let ast = scanparse::scanparse(&src).unwrap();
     let ast = convert_to_ssa::convert_to_ssa(ast);
     let ast = type_infer::type_infer(ast).unwrap();
     ast
 }
 
-pub fn emit_header(ast: &mut Program<TypedAst>, outfile: &str) {
+pub fn emit_header(ast: &mut Program<'static, TypedAst>, outfile: &str) {
     let res = compile::codegen_header::CompileHeader::new().trav_program(ast);
     std::fs::write(outfile, res).unwrap();
 }
 
-// pub fn emit_llvm(ast: &Program<TypedAst>, outfile: &str) {
+// pub fn emit_llvm(ast: &Program<'static, TypedAst>, outfile: &str) {
 //     let ast = &ast.fundefs[0];
 //     unsafe {
 //         let cg = compile::codegen_llvm::CodegenContext::new("my_module");
@@ -35,7 +35,7 @@ pub fn emit_header(ast: &mut Program<TypedAst>, outfile: &str) {
 //     }
 // }
 
-pub fn emit_c(ast: &mut Program<TypedAst>, outfile: &str) {
+pub fn emit_c(ast: &mut Program<'static, TypedAst>, outfile: &str) {
     let c_code = compile::codegen_c::CodegenContext::new().trav_program(ast);
     std::fs::write(outfile, c_code).unwrap();
 }
