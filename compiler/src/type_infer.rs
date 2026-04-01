@@ -12,10 +12,10 @@ pub fn type_infer<'ast>(program: Program<'ast, UntypedAst>) -> Result<Program<'a
 
 pub struct TypeInfer<'ast> {
     args: Vec<&'ast Avis<UntypedAst>>,
-    scopes: Vec<SsaBlock<'ast, UntypedAst>>,
+    scopes: Vec<ScopeBlock<'ast, UntypedAst>>,
     idmap: HashMap<*const Avis<UntypedAst>, &'ast Avis<TypedAst>>,
     new_ids: Vec<&'ast Avis<TypedAst>>,
-    new_ssa: Vec<SsaBlock<'ast, TypedAst>>,
+    new_ssa: Vec<ScopeBlock<'ast, TypedAst>>,
 }
 
 #[derive(Debug)]
@@ -59,7 +59,12 @@ impl<'ast> AstPass<'ast> for TypeInfer<'ast> {
 
     fn pass_fundef(&mut self, fundef: Fundef<'ast, Self::InAst>) -> Fundef<'ast, Self::OutAst> {
         self.args = fundef.args.clone();
-        self.scopes.push(fundef.body.clone());
+        let fundef_scope = fundef
+            .body
+            .iter()
+            .filter_map(|stmt| (*stmt).as_scope_entry())
+            .collect::<ScopeBlock<'ast, UntypedAst>>();
+        self.scopes.push(fundef_scope);
         self.new_ssa.push(Vec::new());
         self.idmap.clear();
         self.new_ids.clear();
@@ -71,8 +76,17 @@ impl<'ast> AstPass<'ast> for TypeInfer<'ast> {
         }).collect::<Vec<_>>();
 
         self.scopes.pop().unwrap();
-        let mut body = self.new_ssa.pop().unwrap();
-        body.push(Stmt::Return { id: ret });
+        let mut body = self
+            .new_ssa
+            .pop()
+            .unwrap()
+            .into_iter()
+            .filter_map(|entry| match entry {
+                ScopeEntry::Assign { avis, expr } => Some(Stmt::Assign(Assign { avis, expr })),
+                ScopeEntry::IndexRange { .. } => None,
+            })
+            .collect::<Vec<_>>();
+        body.push(Stmt::Return(Return { id: ret }));
 
         Fundef {
             name: fundef.name,
@@ -84,16 +98,45 @@ impl<'ast> AstPass<'ast> for TypeInfer<'ast> {
 
     fn pass_stmt(&mut self, stmt: Stmt<'ast, Self::InAst>) -> Stmt<'ast, Self::OutAst> {
         match stmt {
-            Stmt::Assign { avis, .. } | Stmt::Index { avis, .. } => {
+            Stmt::Assign(assign) => Stmt::Assign(self.pass_assign(assign)),
+            Stmt::Return(ret) => Stmt::Return(self.pass_return(ret)),
+        }
+    }
+
+    fn pass_assign(&mut self, assign: Assign<'ast, Self::InAst>) -> Assign<'ast, Self::OutAst> {
+        let before_len = self.new_ssa.last().map_or(0, |ssa| ssa.len());
+        let _ = self.pass_id(ArgOrVar::Var(assign.avis));
+        let ssa = self.new_ssa.last().expect("missing output scope in type inference");
+        assert!(ssa.len() > before_len, "statement conversion did not emit output");
+        let last = *ssa.last().expect("missing emitted statement");
+        match last {
+            ScopeEntry::Assign { avis, expr } => Assign { avis, expr },
+            ScopeEntry::IndexRange { .. } => panic!("expected assignment scope entry"),
+        }
+    }
+
+    fn pass_return(&mut self, ret: Return<'ast, Self::InAst>) -> Return<'ast, Self::OutAst> {
+        Return { id: self.pass_id(ret.id) }
+    }
+
+    fn pass_scope_entry(&mut self, entry: ScopeEntry<'ast, Self::InAst>) -> ScopeEntry<'ast, Self::OutAst> {
+        match entry {
+            ScopeEntry::Assign { avis, expr } => {
+                let assign = self.pass_assign(Assign { avis, expr });
+                ScopeEntry::Assign {
+                    avis: assign.avis,
+                    expr: assign.expr,
+                }
+            }
+            ScopeEntry::IndexRange { avis, .. } => {
                 let before_len = self.new_ssa.last().map_or(0, |ssa| ssa.len());
                 let _ = self.pass_id(ArgOrVar::Var(avis));
                 let ssa = self.new_ssa.last().expect("missing output scope in type inference");
-                assert!(ssa.len() > before_len, "statement conversion did not emit output");
-                *ssa.last().expect("missing emitted statement")
-            }
-            Stmt::Return { id } => {
-                let id = self.pass_id(id);
-                Stmt::Return { id }
+                assert!(ssa.len() > before_len, "scope entry conversion did not emit output");
+                match *ssa.last().expect("missing emitted scope entry") {
+                    ScopeEntry::IndexRange { avis, lb, ub } => ScopeEntry::IndexRange { avis, lb, ub },
+                    ScopeEntry::Assign { .. } => panic!("expected index range scope entry"),
+                }
             }
         }
     }
@@ -116,7 +159,7 @@ impl<'ast> AstPass<'ast> for TypeInfer<'ast> {
                         self.new_ids.push(new_id);
 
                         let expr_ref = self.alloc_expr(new_expr);
-                        self.new_ssa.last_mut().unwrap().push(Stmt::Assign {
+                        self.new_ssa.last_mut().unwrap().push(ScopeEntry::Assign {
                             avis: new_id,
                             expr: expr_ref,
                         });
@@ -130,7 +173,7 @@ impl<'ast> AstPass<'ast> for TypeInfer<'ast> {
                         let new_id = self.alloc_avis(old.name.clone(), Type::scalar(BaseType::U32));
                         self.idmap.insert(old as *const _, new_id);
                         self.new_ids.push(new_id);
-                        self.new_ssa.last_mut().unwrap().push(Stmt::Index {
+                        self.new_ssa.last_mut().unwrap().push(ScopeEntry::IndexRange {
                             avis: new_id,
                             lb,
                             ub,
@@ -164,7 +207,7 @@ impl<'ast> AstPass<'ast> for TypeInfer<'ast> {
         let iv_new = self.alloc_avis(tensor.iv.name.clone(), Type::scalar(BaseType::U32));
         self.idmap.insert(tensor.iv as *const _, iv_new);
         self.new_ids.push(iv_new);
-        self.new_ssa.last_mut().unwrap().push(Stmt::Index {
+        self.new_ssa.last_mut().unwrap().push(ScopeEntry::IndexRange {
             avis: iv_new,
             lb,
             ub,

@@ -11,7 +11,7 @@ use crate::{ast::{self, ArgOrVar, Avis, TypedAst}, compile::compile_ast::*};
 /// uses manual traversal rather than AstPass (which is designed for same-AST transforms).
 pub struct UndoSsa<'ast> {
     args: Vec<&'ast Avis<TypedAst>>,
-    scopes: Vec<ast::SsaBlock<'ast, TypedAst>>,
+    scopes: Vec<ast::ScopeBlock<'ast, TypedAst>>,
 }
 
 impl<'ast> UndoSsa<'ast> {
@@ -37,7 +37,12 @@ impl<'ast> UndoSsa<'ast> {
 
     fn trav_fundef(&mut self, fundef: &ast::Fundef<'ast, TypedAst>) -> Fundef {
         self.args = fundef.args.clone();
-        self.scopes.push(fundef.body.clone());
+        let scope = fundef
+            .body
+            .iter()
+            .filter_map(|stmt| (*stmt).as_scope_entry())
+            .collect::<ast::ScopeBlock<'ast, TypedAst>>();
+        self.scopes.push(scope);
 
         let args = fundef.args.iter().map(|a| (a.ty.clone(), a.name.clone())).collect();
 

@@ -85,16 +85,15 @@ impl<'ast, Ast: AstConfig + 'ast> AstVisit<'ast> for Show<'ast, Ast> {
 
         for stmt in &fundef.body {
             match stmt {
-                Stmt::Assign { avis, expr } => {
+                Stmt::Assign(Assign { avis, expr }) => {
                     self.pass_expr((**expr).clone());
                     self.output
                         .push_str(&format!("    {} = <expr>;\n", avis.name));
                 }
-                Stmt::Return { id } => {
+                Stmt::Return(Return { id }) => {
                     self.output
                         .push_str(&format!("    return {};\n", self.name_of(*id)));
                 }
-                Stmt::Index { .. } => {}
             }
         }
 
