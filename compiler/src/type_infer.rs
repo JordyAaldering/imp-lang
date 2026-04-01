@@ -2,6 +2,10 @@ use std::collections::HashMap;
 
 use crate::{ast::*, traverse::AstPass};
 
+/// Type inference pass: transforms UntypedAst to TypedAst.
+///
+/// Walks the AST computing types for all expressions, variables, and function returns.
+/// Creates new Avis entries for each SSA binding with properly inferred types.
 pub fn type_infer<'ast>(program: Program<'ast, UntypedAst>) -> Result<Program<'ast, TypedAst>, InferenceError> {
     Ok(TypeInfer::new().pass_program(program))
 }
@@ -39,38 +43,19 @@ impl<'ast> TypeInfer<'ast> {
     fn find_local_def(&self, key: &'ast Avis<UntypedAst>) -> LocalDef<'ast, UntypedAst> {
         find_local_in_scopes(&self.scopes, key).expect("missing local definition in type inference")
     }
+
+    /// Get the type of an SSA value (must be TypedAst after pass_ssa).
+    fn type_of(&self, id: ArgOrVar<'ast, TypedAst>) -> Type {
+        match id {
+            ArgOrVar::Arg(i) => self.args[i].ty.clone().unwrap(),
+            ArgOrVar::Var(v) => v.ty.clone(),
+        }
+    }
 }
 
 impl<'ast> AstPass<'ast> for TypeInfer<'ast> {
     type InAst = UntypedAst;
     type OutAst = TypedAst;
-    type ExprOk = Type;
-
-    fn pass_expr(&mut self, expr: Expr<'ast, Self::InAst>) -> (Self::ExprOk, Self::ExprOut) {
-        use Expr::*;
-        match expr {
-            Tensor(n) => {
-                let (x, n) = self.pass_tensor(n);
-                (x, Tensor(n))
-            }
-            Binary(n) => {
-                let (x, n) = self.pass_binary(n);
-                (x, Binary(n))
-            }
-            Unary(n) => {
-                let (x, n) = self.pass_unary(n);
-                (x, Unary(n))
-            }
-            Bool(n) => {
-                let (x, n) = self.pass_bool(n);
-                (x, Bool(n))
-            }
-            U32(n) => {
-                let (x, n) = self.pass_u32(n);
-                (x, U32(n))
-            }
-        }
-    }
 
     fn pass_fundef(&mut self, fundef: Fundef<'ast, Self::InAst>) -> Fundef<'ast, Self::OutAst> {
         self.args = fundef.args.clone();
@@ -79,7 +64,7 @@ impl<'ast> AstPass<'ast> for TypeInfer<'ast> {
         self.idmap.clear();
         self.new_ids.clear();
 
-        let (_, ret) = self.pass_ssa(fundef.ret_id());
+        let ret = self.pass_ssa(fundef.ret_id());
 
         let new_args = self.args.iter().map(|arg| {
             self.alloc_avis(arg.name.clone(), arg.ty.clone().unwrap())
@@ -97,22 +82,20 @@ impl<'ast> AstPass<'ast> for TypeInfer<'ast> {
         }
     }
 
-    fn pass_ssa(&mut self, id: ArgOrVar<'ast, Self::InAst>) -> (Self::ExprOk, ArgOrVar<'ast, Self::OutAst>) {
+    fn pass_ssa(&mut self, id: ArgOrVar<'ast, Self::InAst>) -> ArgOrVar<'ast, Self::OutAst> {
         match id {
-            ArgOrVar::Arg(i) => {
-                let ty = self.args[i].ty.clone().unwrap();
-                (ty, ArgOrVar::Arg(i))
-            }
+            ArgOrVar::Arg(i) => ArgOrVar::Arg(i),
             ArgOrVar::Var(old) => {
                 if let Some(new_id) = self.idmap.get(&(old as *const _)) {
-                    return (new_id.ty.clone(), ArgOrVar::Var(*new_id));
+                    return ArgOrVar::Var(*new_id);
                 }
 
                 match self.find_local_def(old) {
                     LocalDef::Assign(old_expr) => {
-                        let (new_ty, new_expr) = self.pass_expr(old_expr.clone());
+                        let new_expr = self.pass_expr(old_expr.clone());
+                        let new_ty = self.type_of_expr(&new_expr);
 
-                        let new_id = self.alloc_avis(old.name.clone(), new_ty.clone());
+                        let new_id = self.alloc_avis(old.name.clone(), new_ty);
                         self.idmap.insert(old as *const _, new_id);
                         self.new_ids.push(new_id);
 
@@ -122,11 +105,11 @@ impl<'ast> AstPass<'ast> for TypeInfer<'ast> {
                             expr: expr_ref,
                         });
 
-                        (new_ty, ArgOrVar::Var(new_id))
+                        ArgOrVar::Var(new_id)
                     }
                     LocalDef::IndexRange { lb, ub } => {
-                        let (_, lb) = self.pass_ssa(lb);
-                        let (_, ub) = self.pass_ssa(ub);
+                        let lb = self.pass_ssa(lb);
+                        let ub = self.pass_ssa(ub);
 
                         let new_id = self.alloc_avis(old.name.clone(), Type::scalar(BaseType::U32));
                         self.idmap.insert(old as *const _, new_id);
@@ -137,19 +120,30 @@ impl<'ast> AstPass<'ast> for TypeInfer<'ast> {
                             ub,
                         });
 
-                        (Type::scalar(BaseType::U32), ArgOrVar::Var(new_id))
+                        ArgOrVar::Var(new_id)
                     }
                 }
             }
         }
     }
 
-    fn pass_tensor(&mut self, tensor: Tensor<'ast, Self::InAst>) -> (Self::ExprOk, Tensor<'ast, Self::OutAst>) {
+    fn pass_expr(&mut self, expr: Expr<'ast, Self::InAst>) -> Expr<'ast, Self::OutAst> {
+        use Expr::*;
+        match expr {
+            Tensor(n) => Tensor(self.pass_tensor(n)),
+            Binary(n) => Binary(self.pass_binary(n)),
+            Unary(n) => Unary(self.pass_unary(n)),
+            Bool(n) => Bool(self.pass_bool(n)),
+            U32(n) => U32(self.pass_u32(n)),
+        }
+    }
+
+    fn pass_tensor(&mut self, tensor: Tensor<'ast, Self::InAst>) -> Tensor<'ast, Self::OutAst> {
         self.scopes.push(tensor.ssa.clone());
         self.new_ssa.push(Vec::new());
 
-        let (_, lb) = self.pass_ssa(tensor.lb);
-        let (_, ub) = self.pass_ssa(tensor.ub);
+        let lb = self.pass_ssa(tensor.lb);
+        let ub = self.pass_ssa(tensor.ub);
 
         let iv_new = self.alloc_avis(tensor.iv.name.clone(), Type::scalar(BaseType::U32));
         self.idmap.insert(tensor.iv as *const _, iv_new);
@@ -160,50 +154,66 @@ impl<'ast> AstPass<'ast> for TypeInfer<'ast> {
             ub,
         });
 
-        let (ret_ty, ret) = self.pass_ssa(tensor.ret);
-        let shp = if let Shape::Scalar = ret_ty.shp { "." } else { "*" };
-        let tensor_ty = Type::vector(ret_ty.basetype, shp);
+        let ret = self.pass_ssa(tensor.ret);
 
         self.scopes.pop().unwrap();
         let ssa = self.new_ssa.pop().unwrap();
 
-        (tensor_ty, Tensor { iv: iv_new, lb, ub, ret, ssa })
+        Tensor { iv: iv_new, lb, ub, ret, ssa }
     }
 
-    fn pass_binary(&mut self, binary: Binary<'ast, Self::InAst>) -> (Self::ExprOk, Binary<'ast, Self::OutAst>) {
-        let (lty, l) = self.pass_ssa(binary.l);
-        let (rty, r) = self.pass_ssa(binary.r);
+    fn pass_binary(&mut self, binary: Binary<'ast, Self::InAst>) -> Binary<'ast, Self::OutAst> {
+        let l = self.pass_ssa(binary.l);
+        let r = self.pass_ssa(binary.r);
 
-        let ty = unifies(lty, rty).unwrap();
-
-        use Bop::*;
-        let ty = match binary.op {
-            Add | Sub | Mul | Div => Type { basetype: BaseType::U32, shp: ty.shp },
-            Eq | Ne => Type { basetype: BaseType::Bool, shp: ty.shp },
-            Lt | Le | Gt | Ge => Type { basetype: BaseType::Bool, shp: ty.shp },
-        };
-
-        (ty, Binary { l, r, op: binary.op })
+        Binary { l, r, op: binary.op }
     }
 
-    fn pass_unary(&mut self, unary: Unary<'ast, Self::InAst>) -> (Self::ExprOk, Unary<'ast, Self::OutAst>) {
-        let (rty, r) = self.pass_ssa(unary.r);
-
-        use Uop::*;
-        let ty = match unary.op {
-            Neg => Type { basetype: BaseType::U32, shp: rty.shp },
-            Not => Type { basetype: BaseType::Bool, shp: rty.shp },
-        };
-
-        (ty, Unary { r, op: unary.op })
+    fn pass_unary(&mut self, unary: Unary<'ast, Self::InAst>) -> Unary<'ast, Self::OutAst> {
+        let r = self.pass_ssa(unary.r);
+        Unary { r, op: unary.op }
     }
 
-    fn pass_bool(&mut self, value: bool) -> (Self::ExprOk, bool) {
-        (Type::scalar(BaseType::Bool), value)
+    fn pass_bool(&mut self, value: bool) -> bool {
+        value
     }
 
-    fn pass_u32(&mut self, value: u32) -> (Self::ExprOk, u32) {
-        (Type::scalar(BaseType::U32), value)
+    fn pass_u32(&mut self, value: u32) -> u32 {
+        value
+    }
+}
+
+impl<'ast> TypeInfer<'ast> {
+    /// Compute the type of a typed expression.
+    fn type_of_expr(&self, expr: &Expr<'ast, TypedAst>) -> Type {
+        match expr {
+            Expr::Tensor(_) => {
+                // Tensor type shape is determined at render time
+                Type::vector(BaseType::U32, ".")
+            }
+            Expr::Binary(Binary { l, r, op }) => {
+                let lty = self.type_of(*l);
+                let rty = self.type_of(*r);
+                let basety = unifies(lty, rty).unwrap();
+
+                use Bop::*;
+                match op {
+                    Add | Sub | Mul | Div => Type { basetype: BaseType::U32, shp: basety.shp },
+                    Eq | Ne => Type { basetype: BaseType::Bool, shp: basety.shp },
+                    Lt | Le | Gt | Ge => Type { basetype: BaseType::Bool, shp: basety.shp },
+                }
+            }
+            Expr::Unary(Unary { r, op }) => {
+                let rty = self.type_of(*r);
+                use Uop::*;
+                match op {
+                    Neg => Type { basetype: BaseType::U32, shp: rty.shp },
+                    Not => Type { basetype: BaseType::Bool, shp: rty.shp },
+                }
+            }
+            Expr::Bool(_) => Type::scalar(BaseType::Bool),
+            Expr::U32(_) => Type::scalar(BaseType::U32),
+        }
     }
 }
 

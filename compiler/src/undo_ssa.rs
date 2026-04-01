@@ -1,5 +1,14 @@
 use crate::{ast::{self, ArgOrVar, Avis, TypedAst}, compile::compile_ast::*};
 
+/// Convert SSA IR back to simple sequential IR.
+///
+/// Transforms ast::Program (SSA form with scoped bindings) to
+/// compile_ast::Program (simple sequential statements with string identifiers).
+/// This reverses the SSA transformation, inlining variable definitions to
+/// create a flat, statement-based program suitable for undo_ssa.
+///
+/// Note: This is a cross-AST conversion (ast::* -> compile_ast::*) and thus
+/// uses manual traversal rather than AstPass (which is designed for same-AST transforms).
 pub struct UndoSsa<'ast> {
     args: Vec<&'ast Avis<TypedAst>>,
     scopes: Vec<ast::SsaBlock<'ast, TypedAst>>,

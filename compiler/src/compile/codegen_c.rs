@@ -2,6 +2,11 @@ use std::{collections::HashSet, mem};
 
 use crate::{ast::*, traverse::AstPass};
 
+/// C code generation pass using AstPass traversal.
+///
+/// Emits C99 code for a TypedAst program. Tracks which locals have been emitted
+/// to avoid re-emission. Expression rendering handles tensor loops by temporarily
+/// extending the function scope.
 pub struct CodegenContext {
     emitted: HashSet<*const Avis<TypedAst>>,
     stmts: Vec<String>,
@@ -100,7 +105,6 @@ impl CodegenContext {
 impl<'ast> AstPass<'ast> for CodegenContext {
     type InAst = TypedAst;
     type OutAst = TypedAst;
-    type ExprOk = ();
 
     fn pass_program(&mut self, program: Program<'ast, TypedAst>) -> Program<'ast, TypedAst> {
         self.output.clear();
@@ -143,32 +147,32 @@ impl<'ast> AstPass<'ast> for CodegenContext {
         fundef
     }
 
-    fn pass_expr(&mut self, expr: Expr<'ast, Self::InAst>) -> (Self::ExprOk, Self::ExprOut) {
-        ((), expr)
+    fn pass_expr(&mut self, expr: Expr<'ast, Self::InAst>) -> Self::ExprOut {
+        expr
     }
 
-    fn pass_ssa(&mut self, id: ArgOrVar<'ast, TypedAst>) -> (Self::ExprOk, ArgOrVar<'ast, TypedAst>) {
-        ((), id)
+    fn pass_ssa(&mut self, id: ArgOrVar<'ast, TypedAst>) -> ArgOrVar<'ast, TypedAst> {
+        id
     }
 
-    fn pass_tensor(&mut self, tensor: Tensor<'ast, TypedAst>) -> (Self::ExprOk, Tensor<'ast, TypedAst>) {
-        ((), tensor)
+    fn pass_tensor(&mut self, tensor: Tensor<'ast, TypedAst>) -> Tensor<'ast, TypedAst> {
+        tensor
     }
 
-    fn pass_binary(&mut self, binary: Binary<'ast, TypedAst>) -> (Self::ExprOk, Binary<'ast, TypedAst>) {
-        ((), binary)
+    fn pass_binary(&mut self, binary: Binary<'ast, TypedAst>) -> Binary<'ast, TypedAst> {
+        binary
     }
 
-    fn pass_unary(&mut self, unary: Unary<'ast, TypedAst>) -> (Self::ExprOk, Unary<'ast, TypedAst>) {
-        ((), unary)
+    fn pass_unary(&mut self, unary: Unary<'ast, TypedAst>) -> Unary<'ast, TypedAst> {
+        unary
     }
 
-    fn pass_bool(&mut self, value: bool) -> (Self::ExprOk, bool) {
-        ((), value)
+    fn pass_bool(&mut self, value: bool) -> bool {
+        value
     }
 
-    fn pass_u32(&mut self, value: u32) -> (Self::ExprOk, u32) {
-        ((), value)
+    fn pass_u32(&mut self, value: u32) -> u32 {
+        value
     }
 }
 

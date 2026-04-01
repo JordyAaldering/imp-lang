@@ -1,5 +1,11 @@
 use crate::{ast::*, traverse::AstPass};
 
+/// Rust header generation pass using AstPass traversal.
+///
+/// Emits Rust extern FFI bindings and wrappers for TypedAst functions.
+/// For each DSL function, generates:
+/// - unsafe extern "C" binding to compiled C symbol
+/// - safe Rust wrapper that calls the FFI function
 pub struct CompileHeader {
     output: String,
 }
@@ -19,7 +25,6 @@ impl CompileHeader {
 impl<'ast> AstPass<'ast> for CompileHeader {
     type InAst = TypedAst;
     type OutAst = TypedAst;
-    type ExprOk = ();
 
     fn pass_program(&mut self, program: Program<'ast, TypedAst>) -> Program<'ast, TypedAst> {
         self.output.clear();
@@ -58,32 +63,32 @@ impl<'ast> AstPass<'ast> for CompileHeader {
         fundef
     }
 
-    fn pass_expr(&mut self, expr: Expr<'ast, Self::InAst>) -> (Self::ExprOk, Self::ExprOut) {
-        ((), expr)
+    fn pass_expr(&mut self, expr: Expr<'ast, Self::InAst>) -> Self::ExprOut {
+        expr
     }
 
-    fn pass_ssa(&mut self, id: ArgOrVar<'ast, TypedAst>) -> (Self::ExprOk, ArgOrVar<'ast, TypedAst>) {
-        ((), id)
+    fn pass_ssa(&mut self, id: ArgOrVar<'ast, TypedAst>) -> ArgOrVar<'ast, TypedAst> {
+        id
     }
 
-    fn pass_tensor(&mut self, tensor: Tensor<'ast, TypedAst>) -> (Self::ExprOk, Tensor<'ast, TypedAst>) {
-        ((), tensor)
+    fn pass_tensor(&mut self, tensor: Tensor<'ast, TypedAst>) -> Tensor<'ast, TypedAst> {
+        tensor
     }
 
-    fn pass_binary(&mut self, binary: Binary<'ast, TypedAst>) -> (Self::ExprOk, Binary<'ast, TypedAst>) {
-        ((), binary)
+    fn pass_binary(&mut self, binary: Binary<'ast, TypedAst>) -> Binary<'ast, TypedAst> {
+        binary
     }
 
-    fn pass_unary(&mut self, unary: Unary<'ast, TypedAst>) -> (Self::ExprOk, Unary<'ast, TypedAst>) {
-        ((), unary)
+    fn pass_unary(&mut self, unary: Unary<'ast, TypedAst>) -> Unary<'ast, TypedAst> {
+        unary
     }
 
-    fn pass_bool(&mut self, value: bool) -> (Self::ExprOk, bool) {
-        ((), value)
+    fn pass_bool(&mut self, value: bool) -> bool {
+        value
     }
 
-    fn pass_u32(&mut self, value: u32) -> (Self::ExprOk, u32) {
-        ((), value)
+    fn pass_u32(&mut self, value: u32) -> u32 {
+        value
     }
 }
 

@@ -1,5 +1,9 @@
 use crate::{ast::*, traverse::AstPass};
 
+/// Pretty-print an AST back to source code.
+///
+/// Uses AstPass to recursively render the AST. Works on any AST variant
+/// (UntypedAst, TypedAst, etc.) and outputs formatted code.
 pub fn show<'ast, Ast: AstConfig>(program: &Program<'ast, Ast>) -> String {
     let mut shower = Show::<'ast, Ast>::new();
     shower.pass_program(program.clone());
@@ -42,7 +46,6 @@ impl<'ast, Ast: AstConfig> Show<'ast, Ast> {
 impl<'ast, Ast: AstConfig> AstPass<'ast> for Show<'ast, Ast> {
     type InAst = Ast;
     type OutAst = Ast;
-    type ExprOk = String;
 
     fn pass_program(&mut self, program: Program<'ast, Ast>) -> Program<'ast, Ast> {
         let mut fundefs = Vec::with_capacity(program.fundefs.len());
@@ -84,9 +87,9 @@ impl<'ast, Ast: AstConfig> AstPass<'ast> for Show<'ast, Ast> {
         for stmt in &fundef.body {
             match stmt {
                 Stmt::Assign { avis, expr } => {
-                    let (expr_str, _) = self.pass_expr((**expr).clone());
+                    self.pass_expr((**expr).clone());
                     self.output
-                        .push_str(&format!("    {} = {};\n", avis.name, expr_str));
+                        .push_str(&format!("    {} = <expr>;\n", avis.name));
                 }
                 Stmt::Return { id } => {
                     self.output
@@ -100,37 +103,15 @@ impl<'ast, Ast: AstConfig> AstPass<'ast> for Show<'ast, Ast> {
         fundef
     }
 
-    fn pass_expr(&mut self, expr: Expr<'ast, Ast>) -> (String, Expr<'ast, Ast>) {
-        use Expr::*;
-        match expr {
-            Tensor(n) => {
-                let (s, n) = self.pass_tensor(n);
-                (s, Tensor(n))
-            }
-            Binary(n) => {
-                let (s, n) = self.pass_binary(n);
-                (s, Binary(n))
-            }
-            Unary(n) => {
-                let (s, n) = self.pass_unary(n);
-                (s, Unary(n))
-            }
-            Bool(n) => {
-                let (s, n) = self.pass_bool(n);
-                (s, Bool(n))
-            }
-            U32(n) => {
-                let (s, n) = self.pass_u32(n);
-                (s, U32(n))
-            }
-        }
+    fn pass_expr(&mut self, expr: Expr<'ast, Ast>) -> Expr<'ast, Ast> {
+        expr
     }
 
-    fn pass_ssa(&mut self, id: ArgOrVar<'ast, Ast>) -> (String, ArgOrVar<'ast, Ast>) {
-        (self.name_of(id), id)
+    fn pass_ssa(&mut self, id: ArgOrVar<'ast, Ast>) -> ArgOrVar<'ast, Ast> {
+        id
     }
 
-    fn pass_tensor(&mut self, tensor: Tensor<'ast, Ast>) -> (String, Tensor<'ast, Ast>) {
+    fn pass_tensor(&mut self, tensor: Tensor<'ast, Ast>) -> Tensor<'ast, Ast> {
         let mut out = String::new();
         self.level += 1;
         let indent = self.indent();
@@ -139,41 +120,35 @@ impl<'ast, Ast: AstConfig> AstPass<'ast> for Show<'ast, Ast> {
 
         for stmt in &tensor.ssa {
             if let Stmt::Assign { avis, expr } = stmt {
-                let (expr_str, _) = self.pass_expr((**expr).clone());
-                out.push_str(&format!("{}{} = {};\n", indent, avis.name, expr_str));
+                self.pass_expr((**expr).clone());
+                out.push_str(&format!("{}{} = <expr>;\n", indent, avis.name));
             }
         }
 
-        let (ret_str, _) = self.pass_ssa(tensor.ret);
-        out.push_str(&format!("{}return {};\n", indent, ret_str));
+        out.push_str(&format!("{}return <val>;\n", indent));
 
-        let (lb_str, _) = self.pass_ssa(tensor.lb);
-        let (ub_str, _) = self.pass_ssa(tensor.ub);
         out.push_str(&format!(
             "{}| {} <= {} < {} }}",
-            indent, lb_str, tensor.iv.name, ub_str
+            indent, "<lb>", tensor.iv.name, "<ub>"
         ));
 
         self.level -= 1;
-        (out, tensor)
+        tensor
     }
 
-    fn pass_binary(&mut self, binary: Binary<'ast, Ast>) -> (String, Binary<'ast, Ast>) {
-        let (l_str, _) = self.pass_ssa(binary.l);
-        let (r_str, _) = self.pass_ssa(binary.r);
-        (format!("{} {} {}", l_str, binary.op, r_str), binary)
+    fn pass_binary(&mut self, binary: Binary<'ast, Ast>) -> Binary<'ast, Ast> {
+        binary
     }
 
-    fn pass_unary(&mut self, unary: Unary<'ast, Ast>) -> (String, Unary<'ast, Ast>) {
-        let (r_str, _) = self.pass_ssa(unary.r);
-        (format!("{} {}", unary.op, r_str), unary)
+    fn pass_unary(&mut self, unary: Unary<'ast, Ast>) -> Unary<'ast, Ast> {
+        unary
     }
 
-    fn pass_bool(&mut self, value: bool) -> (String, bool) {
-        (value.to_string(), value)
+    fn pass_bool(&mut self, value: bool) -> bool {
+        value
     }
 
-    fn pass_u32(&mut self, value: u32) -> (String, u32) {
-        (value.to_string(), value)
+    fn pass_u32(&mut self, value: u32) -> u32 {
+        value
     }
 }
