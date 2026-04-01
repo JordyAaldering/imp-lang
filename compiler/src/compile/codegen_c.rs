@@ -1,4 +1,4 @@
-use std::{collections::HashSet, convert::Infallible, mem};
+use std::{collections::HashSet, mem};
 
 use crate::{ast::*, traverse::AstPass};
 
@@ -34,7 +34,9 @@ impl CodegenContext {
             return fundef.args[i].name.clone();
         }
 
-        let avis = id.as_local().unwrap();
+        let Some(avis) = id.as_local() else {
+            return fundef.nameof(id).to_owned();
+        };
         match fundef.find_local_def(avis) {
             Some(LocalDef::Assign(expr)) => {
                 self.ensure_local(avis, expr, fundef);
@@ -48,21 +50,32 @@ impl CodegenContext {
         match expr {
             Expr::Tensor(Tensor { iv, lb, ub, ret, ssa }) => {
                 let mut forloop = String::new();
-                let ty = to_ctype(fundef.typof(*ret));
-                let iv_name = iv.name.clone();
-                let lb_name = self.expr_for(*lb, fundef);
-                let ub_name = self.expr_for(*ub, fundef);
-
-                forloop.push_str(&format!("for (size_t {} = {}; {} < {}; {} += 1) {{\n", iv_name, lb_name, iv_name, ub_name, iv_name));
                 let mut scope = fundef.ssa.clone();
                 scope.extend(ssa.iter().copied());
-                let expr_code = self.expr_for(*ret, &Fundef {
+                let tensor_fundef = Fundef {
                     name: fundef.name.clone(),
                     args: fundef.args.clone(),
                     ids: fundef.ids.clone(),
                     ssa: scope,
                     ret: *ret,
-                });
+                };
+
+                let ty = to_ctype(tensor_fundef.typof(*ret));
+                let iv_name = iv.name.clone();
+                let lb_name = self.expr_for(*lb, &tensor_fundef);
+                let ub_name = self.expr_for(*ub, &tensor_fundef);
+
+                let mut outer_stmts = Vec::new();
+                mem::swap(&mut outer_stmts, &mut self.stmts);
+                let expr_code = self.expr_for(*ret, &tensor_fundef);
+                let mut body_stmts = Vec::new();
+                mem::swap(&mut body_stmts, &mut self.stmts);
+                self.stmts = outer_stmts;
+
+                forloop.push_str(&format!("for (size_t {} = {}; {} < {}; {} += 1) {{\n", iv_name, lb_name, iv_name, ub_name, iv_name));
+                for stmt in body_stmts {
+                    forloop.push_str(&format!("        {}\n", stmt));
+                }
                 forloop.push_str(&format!("        res[{}] = {};\n", iv_name, expr_code));
                 forloop.push_str("    }");
                 self.stmts.push(format!("{} *res = ({} *)malloc({} * sizeof({}));", ty, ty, ub_name, ty));
@@ -87,10 +100,9 @@ impl CodegenContext {
 impl<'ast> AstPass<'ast> for CodegenContext {
     type InAst = TypedAst;
     type OutAst = TypedAst;
-    type Ok = ();
-    type Err = Infallible;
+    type ExprOk = ();
 
-    fn pass_program(&mut self, program: Program<'ast, TypedAst>) -> Result<(Self::Ok, Program<'ast, TypedAst>), Self::Err> {
+    fn pass_program(&mut self, program: Program<'ast, TypedAst>) -> Program<'ast, TypedAst> {
         self.output.clear();
         let mut out = String::new();
         out.push_str("#include <stdlib.h>\n");
@@ -99,16 +111,16 @@ impl<'ast> AstPass<'ast> for CodegenContext {
 
         let mut fundefs = Vec::with_capacity(program.fundefs.len());
         for fundef in program.fundefs {
-            let (_, fundef) = self.pass_fundef(fundef)?;
+            let fundef = self.pass_fundef(fundef);
             out.push('\n');
             fundefs.push(fundef);
         }
 
         self.output = format!("{}{}", out, self.output);
-        Ok(((), Program { fundefs }))
+        Program { fundefs }
     }
 
-    fn pass_fundef(&mut self, fundef: Fundef<'ast, TypedAst>) -> Result<(Self::Ok, Fundef<'ast, TypedAst>), Self::Err> {
+    fn pass_fundef(&mut self, fundef: Fundef<'ast, TypedAst>) -> Fundef<'ast, TypedAst> {
         let mut res = String::new();
         self.emitted.clear();
         let args: Vec<String> = fundef.args.iter().map(|avis| format!("{} {}", to_ctype(&avis.ty), avis.name)).collect();
@@ -127,31 +139,35 @@ impl<'ast> AstPass<'ast> for CodegenContext {
         res.push_str("}\n");
 
         self.output.push_str(&res);
-        Ok(((), fundef))
+        fundef
     }
 
-    fn pass_ssa(&mut self, id: ArgOrVar<'ast, TypedAst>) -> Result<(Self::Ok, ArgOrVar<'ast, TypedAst>), Self::Err> {
-        Ok(((), id))
+    fn pass_expr(&mut self, expr: Expr<'ast, Self::InAst>) -> (Self::ExprOk, Self::ExprOut) {
+        ((), expr)
     }
 
-    fn pass_tensor(&mut self, tensor: Tensor<'ast, TypedAst>) -> Result<(Self::Ok, Tensor<'ast, TypedAst>), Self::Err> {
-        Ok(((), tensor))
+    fn pass_ssa(&mut self, id: ArgOrVar<'ast, TypedAst>) -> (Self::ExprOk, ArgOrVar<'ast, TypedAst>) {
+        ((), id)
     }
 
-    fn pass_binary(&mut self, binary: Binary<'ast, TypedAst>) -> Result<(Self::Ok, Binary<'ast, TypedAst>), Self::Err> {
-        Ok(((), binary))
+    fn pass_tensor(&mut self, tensor: Tensor<'ast, TypedAst>) -> (Self::ExprOk, Tensor<'ast, TypedAst>) {
+        ((), tensor)
     }
 
-    fn pass_unary(&mut self, unary: Unary<'ast, TypedAst>) -> Result<(Self::Ok, Unary<'ast, TypedAst>), Self::Err> {
-        Ok(((), unary))
+    fn pass_binary(&mut self, binary: Binary<'ast, TypedAst>) -> (Self::ExprOk, Binary<'ast, TypedAst>) {
+        ((), binary)
     }
 
-    fn pass_bool(&mut self, value: bool) -> Result<(Self::Ok, bool), Self::Err> {
-        Ok(((), value))
+    fn pass_unary(&mut self, unary: Unary<'ast, TypedAst>) -> (Self::ExprOk, Unary<'ast, TypedAst>) {
+        ((), unary)
     }
 
-    fn pass_u32(&mut self, value: u32) -> Result<(Self::Ok, u32), Self::Err> {
-        Ok(((), value))
+    fn pass_bool(&mut self, value: bool) -> (Self::ExprOk, bool) {
+        ((), value)
+    }
+
+    fn pass_u32(&mut self, value: u32) -> (Self::ExprOk, u32) {
+        ((), value)
     }
 }
 
