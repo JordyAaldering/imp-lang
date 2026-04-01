@@ -114,7 +114,21 @@ pub trait AstVisit<'ast> {
     }
 
     fn pass_tensor(&mut self, tensor: Tensor<'ast, Self::Ast>) -> Tensor<'ast, Self::Ast> {
-        tensor
+        let body = tensor
+            .body
+            .into_iter()
+            .map(|stmt| self.pass_stmt(stmt))
+            .collect();
+        let lb = self.pass_id(tensor.lb);
+        let ub = self.pass_id(tensor.ub);
+        let ret = self.pass_id(tensor.ret);
+        Tensor {
+            body,
+            iv: tensor.iv,
+            lb,
+            ub,
+            ret,
+        }
     }
 
     fn pass_binary(&mut self, binary: Binary<'ast, Self::Ast>) -> Binary<'ast, Self::Ast> {
