@@ -1,4 +1,4 @@
-use crate::{ast::{self, ArgOrVar, Avis, TypedAst}, compile::compile_ast::*};
+use crate::{ast::{self, Id, Avis, TypedAst}, compile::compile_ast::*};
 
 /// Convert SSA IR back to simple sequential IR.
 ///
@@ -19,10 +19,10 @@ impl<'ast> UndoSsa<'ast> {
         Self { args: Vec::new(), scopes: Vec::new() }
     }
 
-    fn find(&self, key: ArgOrVar<'ast, TypedAst>) -> &'ast Avis<TypedAst> {
+    fn find(&self, key: Id<'ast, TypedAst>) -> &'ast Avis<TypedAst> {
         match key {
-            ArgOrVar::Arg(i) => self.args[i],
-            ArgOrVar::Var(v) => v,
+            Id::Arg(i) => self.args[i],
+            Id::Var(v) => v,
         }
     }
 
@@ -56,16 +56,16 @@ impl<'ast> UndoSsa<'ast> {
         }
     }
 
-    fn generate_assignment(&mut self, id: ArgOrVar<'ast, TypedAst>, fundef: &ast::Fundef<'ast, TypedAst>) -> Stmt {
+    fn generate_assignment(&mut self, id: Id<'ast, TypedAst>, fundef: &ast::Fundef<'ast, TypedAst>) -> Stmt {
         let lhs = self.find(id).name.clone();
         let expr = self.inline_expr(id, fundef);
         Stmt::Assign { lhs, expr }
     }
 
-    fn inline_expr(&mut self, id: ArgOrVar<'ast, TypedAst>, fundef: &ast::Fundef<'ast, TypedAst>) -> Expr {
+    fn inline_expr(&mut self, id: Id<'ast, TypedAst>, fundef: &ast::Fundef<'ast, TypedAst>) -> Expr {
         match id {
-            ArgOrVar::Arg(i) => Expr::Identifier(fundef.args[i].name.clone()),
-            ArgOrVar::Var(k) => {
+            Id::Arg(i) => Expr::Identifier(fundef.args[i].name.clone()),
+            Id::Var(k) => {
                 match self.find_local_def(k) {
                     ast::LocalDef::Assign(expr) => {
                         match expr.clone() {

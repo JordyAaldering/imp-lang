@@ -31,7 +31,7 @@ pub mod traverse;
 pub mod type_infer;
 pub mod undo_ssa;
 
-use crate::{ast::*, traverse::AstPass};
+use crate::{ast::*, traverse::Traverse};
 
 /// Parse and fully compile source code.
 ///

@@ -1,4 +1,4 @@
-use compiler::{traverse::AstPass, *};
+use compiler::{traverse::Traverse, *};
 
 use std::{env, fs};
 
