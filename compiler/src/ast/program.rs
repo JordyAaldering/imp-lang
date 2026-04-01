@@ -1,11 +1,11 @@
 use super::{AstConfig, Fundef};
 
 #[derive(Clone, Debug)]
-pub struct Program<Ast: AstConfig> {
-    pub fundefs: Vec<Fundef<Ast>>,
+pub struct Program<'ast, Ast: AstConfig> {
+    pub fundefs: Vec<Fundef<'ast, Ast>>,
 }
 
-impl<Ast: AstConfig> Program<Ast> {
+impl<'ast, Ast: AstConfig> Program<'ast, Ast> {
     pub fn new() -> Self {
         Self {
             fundefs: Vec::new(),

@@ -3,8 +3,8 @@ use std::fmt;
 use super::{ArgOrVar, AstConfig};
 
 #[derive(Clone, Debug)]
-pub struct Unary<Ast: AstConfig> {
-    pub r: ArgOrVar<Ast>,
+pub struct Unary<'ast, Ast: AstConfig> {
+    pub r: ArgOrVar<'ast, Ast>,
     pub op: Uop,
 }
 

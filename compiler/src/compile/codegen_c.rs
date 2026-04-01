@@ -1,54 +1,68 @@
 use std::mem;
 
-use slotmap::{SecondaryMap, SlotMap};
-
 use crate::{ast::*, traverse::Traverse};
 
-// TODO: we probably want an undo-ssa traversal before code generation
-// to share computation where possible, or push scope-local computations inside their scope
 pub struct CodegenContext {
-    args: Vec<Avis<TypedAst>>,
-    ids: SlotMap<TypedKey, Avis<TypedAst>>,
-    scopes: Vec<SecondaryMap<TypedKey, Expr<TypedAst>>>,
     stmts: Vec<String>,
 }
 
 impl CodegenContext {
     pub fn new() -> Self {
-        Self {
-            args: Vec::new(),
-            ids: SlotMap::with_key(),
-            scopes: Vec::new(),
-            stmts: Vec::new(),
+        Self { stmts: Vec::new() }
+    }
+
+    fn expr_for<'ast>(&mut self, id: ArgOrVar<'ast, TypedAst>, fundef: &Fundef<'ast, TypedAst>) -> String {
+        match id {
+            ArgOrVar::Arg(i) => fundef.args[i].name.clone(),
+            ArgOrVar::Var(v) => self.trav_expr(&mut fundef.find_ssa(v).unwrap().clone(), fundef),
+            ArgOrVar::Iv(v) => v.name.clone(),
         }
     }
 
-    fn find(&self, key: ArgOrVar<TypedAst>) -> &Avis<TypedAst> {
-        match key {
-            ArgOrVar::Arg(i) => &self.args[i],
-            ArgOrVar::Var(k) => &self.ids[k],
-            ArgOrVar::Iv(k) => &self.ids[k],
-        }
-    }
+    fn trav_expr<'ast>(&mut self, expr: &mut Expr<'ast, TypedAst>, fundef: &Fundef<'ast, TypedAst>) -> String {
+        match expr {
+            Expr::Tensor(Tensor { iv, lb, ub, ret, ssa }) => {
+                let mut forloop = String::new();
+                let ty = to_ctype(fundef.typof(*ret));
+                let iv_name = iv.name.clone();
+                let lb_name = fundef.nameof(*lb).to_owned();
+                let ub_name = fundef.nameof(*ub).to_owned();
 
-    fn find_ssa(&self, key: TypedKey) -> &Expr<TypedAst> {
-        for scope in self.scopes.iter().rev() {
-            if let Some(expr) = scope.get(key) {
-                return expr;
+                forloop.push_str(&format!("for (size_t {} = {}; {} < {}; {} += 1) {{\n", iv_name, lb_name, iv_name, ub_name, iv_name));
+                let expr_code = self.expr_for(*ret, &Fundef {
+                    name: fundef.name.clone(),
+                    args: fundef.args.clone(),
+                    ids: fundef.ids.clone(),
+                    ssa: ssa.clone(),
+                    ret: *ret,
+                });
+                forloop.push_str(&format!("        res[{}] = {};\n", iv_name, expr_code));
+                forloop.push_str("    }");
+                self.stmts.insert(0, forloop);
+                self.stmts.push(format!("{} *res = ({} *)malloc({} * sizeof({}));", ty, ty, ub_name, ty));
+                "res".to_owned()
             }
+            Expr::Binary(Binary { l, r, op }) => {
+                let l = self.expr_for(*l, fundef);
+                let r = self.expr_for(*r, fundef);
+                format!("{} {} {}", l, op, r)
+            }
+            Expr::Unary(Unary { r, op }) => {
+                let r = self.expr_for(*r, fundef);
+                format!("{} {}", op, r)
+            }
+            Expr::Bool(v) => if *v { "true".to_owned() } else { "false".to_owned() },
+            Expr::U32(v) => format!("{}", *v),
         }
-        unreachable!()
     }
 }
 
-impl Traverse<TypedAst> for CodegenContext {
+impl<'ast> Traverse<'ast, TypedAst> for CodegenContext {
     type Output = String;
-
     const DEFAULT: String = String::new();
 
-    fn trav_program(&mut self, program: &mut Program<TypedAst>) -> String {
+    fn trav_program(&mut self, program: &mut Program<'ast, TypedAst>) -> String {
         let mut res = String::new();
-
         res.push_str("#include <stdlib.h>\n");
         res.push_str("#include <stdbool.h>\n");
         res.push_str("#include <stdint.h>\n");
@@ -57,31 +71,16 @@ impl Traverse<TypedAst> for CodegenContext {
             res.push('\n');
             res.push_str(&self.trav_fundef(fundef));
         }
-
         res
     }
 
-    fn trav_fundef(&mut self, fundef: &mut Fundef<TypedAst>) -> String {
-        self.args = fundef.args.clone();
-        self.ids = fundef.ids.clone();
-        self.scopes.push(fundef.ssa.clone());
+    fn trav_fundef(&mut self, fundef: &mut Fundef<'ast, TypedAst>) -> String {
         let mut res = String::new();
-
-        // Function signature
+        let args: Vec<String> = fundef.args.iter().map(|avis| format!("{} {}", to_ctype(&avis.ty), avis.name)).collect();
         let ret_type = fundef.typof(fundef.ret);
-
-        let args: Vec<String> = fundef.args.iter().map(|avis| {
-            let ty_str = to_ctype(&avis.ty);
-            format!("{} {}", ty_str, avis.name)
-        }).collect();
-
         res.push_str(&format!("{} DSL_{}({}) {{\n", ret_type, fundef.name, args.join(", ")));
 
-        let ret_code = match fundef.ret {
-            ArgOrVar::Arg(i) => fundef.args[i].name.to_owned(),
-            ArgOrVar::Var(k) => self.trav_expr(&mut fundef.ssa[k]),
-            ArgOrVar::Iv(_) => unreachable!(),
-        };
+        let ret_code = self.expr_for(fundef.ret, fundef);
 
         let mut stmts = Vec::new();
         mem::swap(&mut stmts, &mut self.stmts);
@@ -90,82 +89,7 @@ impl Traverse<TypedAst> for CodegenContext {
         }
 
         res.push_str(&format!("    return {};\n", ret_code));
-
         res.push_str("}\n");
-
-        self.scopes.pop().unwrap();
-        assert!(self.scopes.is_empty());
-        res
-    }
-
-    fn trav_expr(&mut self, expr: &mut Expr<TypedAst>) -> String {
-        let mut res = String::new();
-
-        match expr {
-            Expr::Tensor(Tensor { iv, lb, ub, ret, ssa }) => {
-                self.scopes.push(ssa.clone());
-
-                let mut forloop = String::new();
-
-                let ty = to_ctype(&self.find(*ret).ty);
-                let iv_name = self.ids[*iv].name.clone();
-                let lb_name = self.find(*lb).name.clone();
-                let ub_name = self.find(*ub).name.clone();
-
-                forloop.push_str(&format!("for (size_t {} = {}; {} < {}; {} += 1) {{\n", iv_name, lb_name, iv_name, ub_name, iv_name));
-
-                if let ArgOrVar::Var(k) = ret {
-                    let expr_code = self.trav_expr(&mut self.find_ssa(*k).clone());
-                    forloop.push_str(&format!("        res[{}] = {};\n", iv_name, expr_code));
-                }
-
-                forloop.push_str("    }");
-                self.stmts.insert(0, forloop);
-
-                self.stmts.push(format!("{} *res = ({} *)malloc({} * sizeof({}));", ty, ty, ub_name, ty));
-
-                if let ArgOrVar::Var(k) = ub {
-                    let l_code = self.trav_expr(&mut self.find_ssa(*k).clone());
-                    self.stmts.push(format!("{} {} = {};", to_ctype(&self.ids[*k].ty), self.ids[*k].name, l_code));
-                }
-
-                if let ArgOrVar::Var(k) = lb {
-                    let l_code = self.trav_expr(&mut self.find_ssa(*k).clone());
-                    self.stmts.push(format!("{} {} = {};", to_ctype(&self.ids[*k].ty), self.ids[*k].name, l_code));
-                }
-
-                res.push_str("res");
-                self.scopes.pop().unwrap();
-            }
-            Expr::Binary(Binary { l, r, op }) => {
-                if let ArgOrVar::Var(k) = l {
-                    let l_code = self.trav_expr(&mut self.find_ssa(*k).clone());
-                    self.stmts.push(format!("{} {} = {};", to_ctype(&self.ids[*k].ty), self.ids[*k].name, l_code));
-                }
-
-                if let ArgOrVar::Var(k) = r {
-                    let r_code = self.trav_expr(&mut self.find_ssa(*k).clone());
-                    self.stmts.push(format!("{} {} = {};", to_ctype(&self.ids[*k].ty), self.ids[*k].name, r_code));
-                }
-
-                res.push_str(&format!("{} {} {}", self.find(*l).name, op, self.find(*r).name));
-            },
-            Expr::Unary(Unary { r, op }) => {
-                if let ArgOrVar::Var(k) = r {
-                    let r_code = self.trav_expr(&mut self.find_ssa(*k).clone());
-                    self.stmts.push(format!("{} {} = {};", to_ctype(&self.ids[*k].ty), self.ids[*k].name, r_code));
-                }
-
-                res.push_str(&format!("{} {}", op, self.find(*r).name));
-            },
-            Expr::Bool(v) => {
-                res.push_str(if *v { "true" } else { "false" });
-            },
-            Expr::U32(v) => {
-                res.push_str(&format!("{}", *v));
-            },
-        }
-
         res
     }
 }

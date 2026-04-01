@@ -1,6 +1,6 @@
 use crate::ast::*;
 
-pub trait Rewriter {
+pub trait Rewriter<'ast> {
     type InAst: AstConfig;
 
     type OutAst: AstConfig;
@@ -9,12 +9,12 @@ pub trait Rewriter {
 
     type Err;
 
-    fn trav_fundef(&mut self, fundef: Fundef<Self::InAst>) -> Result<(Self::Ok, Fundef<Self::OutAst>), Self::Err>;
+    fn trav_fundef(&mut self, fundef: Fundef<'ast, Self::InAst>) -> Result<(Self::Ok, Fundef<'ast, Self::OutAst>), Self::Err>;
 
     /// Recursively traverse the single static assignment of an identifier
-    fn trav_ssa(&mut self, id: ArgOrVar<Self::InAst>) -> Result<(Self::Ok, ArgOrVar<Self::OutAst>), Self::Err>;
+    fn trav_ssa(&mut self, id: ArgOrVar<'ast, Self::InAst>) -> Result<(Self::Ok, ArgOrVar<'ast, Self::OutAst>), Self::Err>;
 
-    fn trav_expr(&mut self, expr: Expr<Self::InAst>) -> Result<(Self::Ok, Expr<Self::OutAst>), Self::Err> {
+    fn trav_expr(&mut self, expr: Expr<'ast, Self::InAst>) -> Result<(Self::Ok, Expr<'ast, Self::OutAst>), Self::Err> {
         use Expr::*;
         match expr {
             Tensor(n) => self.trav_tensor(n).map(|(x,n)| (x, Tensor(n))),
@@ -25,11 +25,11 @@ pub trait Rewriter {
         }
     }
 
-    fn trav_tensor(&mut self, tensor: Tensor<Self::InAst>) -> Result<(Self::Ok, Tensor<Self::OutAst>), Self::Err>;
+    fn trav_tensor(&mut self, tensor: Tensor<'ast, Self::InAst>) -> Result<(Self::Ok, Tensor<'ast, Self::OutAst>), Self::Err>;
 
-    fn trav_binary(&mut self, binary: Binary<Self::InAst>) -> Result<(Self::Ok, Binary<Self::OutAst>), Self::Err>;
+    fn trav_binary(&mut self, binary: Binary<'ast, Self::InAst>) -> Result<(Self::Ok, Binary<'ast, Self::OutAst>), Self::Err>;
 
-    fn trav_unary(&mut self, unary: Unary<Self::InAst>) -> Result<(Self::Ok, Unary<Self::OutAst>), Self::Err>;
+    fn trav_unary(&mut self, unary: Unary<'ast, Self::InAst>) -> Result<(Self::Ok, Unary<'ast, Self::OutAst>), Self::Err>;
 
     fn trav_bool(&mut self, value: bool) -> Result<(Self::Ok, bool), Self::Err>;
 
@@ -54,19 +54,19 @@ pub trait Rewriter {
 /// And then whilst traversing the AST we move down into the tree when necessary?
 /// (But what is we have another key _within_ this tensor comprehension? For that one we do not know the scope...
 /// Maybe we need to keep track of the current scope index in the knapsack?)
-pub trait Traverse<Ast: AstConfig> {
+pub trait Traverse<'ast, Ast: AstConfig> {
     type Output;
 
     const DEFAULT: Self::Output;
 
-    fn trav_program(&mut self, program: &mut Program<Ast>) -> Self::Output {
+    fn trav_program(&mut self, program: &mut Program<'ast, Ast>) -> Self::Output {
         for fundef in &mut program.fundefs {
             self.trav_fundef(fundef);
         }
         Self::DEFAULT
     }
 
-    fn trav_fundef(&mut self, fundef: &mut Fundef<Ast>) -> Self::Output {
+    fn trav_fundef(&mut self, fundef: &mut Fundef<'ast, Ast>) -> Self::Output {
         for arg in &mut fundef.args {
             self.trav_arg(arg);
         }
@@ -74,18 +74,18 @@ pub trait Traverse<Ast: AstConfig> {
         Self::DEFAULT
     }
 
-    fn trav_arg(&mut self, _arg: &mut Avis<Ast>) -> Self::Output {
+    fn trav_arg(&mut self, _arg: &mut &'ast Avis<'ast, Ast>) -> Self::Output {
         Self::DEFAULT
     }
 
     /// An identifier was encountered in an expression position.
     ///
     /// Recursively traverse the single static assignment of the identifier.
-    fn trav_ssa(&mut self, _id: &mut ArgOrVar<Ast>) -> Self::Output {
+    fn trav_ssa(&mut self, _id: &mut ArgOrVar<'ast, Ast>) -> Self::Output {
         Self::DEFAULT
     }
 
-    fn trav_expr(&mut self, expr: &mut Expr<Ast>) -> Self::Output {
+    fn trav_expr(&mut self, expr: &mut Expr<'ast, Ast>) -> Self::Output {
         use Expr::*;
         match expr {
             Tensor(n) => self.trav_tensor(n),
@@ -96,20 +96,20 @@ pub trait Traverse<Ast: AstConfig> {
         }
     }
 
-    fn trav_tensor(&mut self, tensor: &mut Tensor<Ast>) -> Self::Output {
+    fn trav_tensor(&mut self, tensor: &mut Tensor<'ast, Ast>) -> Self::Output {
         self.trav_ssa(&mut tensor.lb);
         self.trav_ssa(&mut tensor.ub);
         self.trav_ssa(&mut tensor.ret);
         Self::DEFAULT
     }
 
-    fn trav_binary(&mut self, binary: &mut Binary<Ast>) -> Self::Output {
+    fn trav_binary(&mut self, binary: &mut Binary<'ast, Ast>) -> Self::Output {
         self.trav_ssa(&mut binary.r);
         self.trav_ssa(&mut binary.r);
         Self::DEFAULT
     }
 
-    fn trav_unary(&mut self, unary: &mut Unary<Ast>) -> Self::Output {
+    fn trav_unary(&mut self, unary: &mut Unary<'ast, Ast>) -> Self::Output {
         self.trav_ssa(&mut unary.r);
         Self::DEFAULT
     }
