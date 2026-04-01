@@ -2,6 +2,11 @@ use std::collections::HashMap;
 
 use crate::{ast::*, scanparse::parse_ast};
 
+/// Parse AST to SSA IR conversion.
+///
+/// Transforms the parse_ast::Program (simple variable tracking) into an SSA-like
+/// ast::Program where each variable reference is traced to its SSA assignment, and
+/// fresh UIDs are created for each intermediate value.
 pub fn convert_to_ssa<'ast>(program: parse_ast::Program) -> Program<'ast, UntypedAst> {
     let fundefs = program.fundefs.into_iter()
         .map(|f| ConvertToSsa::new().convert_fundef(f))

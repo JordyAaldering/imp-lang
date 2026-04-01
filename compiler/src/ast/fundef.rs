@@ -1,4 +1,4 @@
-use super::{ArgOrVar, AstConfig, Avis, Expr, LocalDef, Stmt};
+use super::{ArgOrVar, AstConfig, Avis, LocalDef, Stmt};
 
 pub type SsaBlock<'ast, Ast> = Vec<Stmt<'ast, Ast>>;
 
@@ -11,7 +11,9 @@ pub struct Fundef<'ast, Ast: AstConfig> {
 }
 
 impl<'ast, Ast: AstConfig> Fundef<'ast, Ast> {
-    pub fn avis_of(&self, key: ArgOrVar<'ast, Ast>) -> &'ast Avis<Ast> {
+    /// Get the Avis for an ArgOrVar (for internal use only).
+    #[inline]
+    fn avis_of(&self, key: ArgOrVar<'ast, Ast>) -> &'ast Avis<Ast> {
         match key {
             ArgOrVar::Arg(i) => self.args[i],
             ArgOrVar::Var(v) => v,
@@ -43,16 +45,7 @@ impl<'ast, Ast: AstConfig> Fundef<'ast, Ast> {
         }
     }
 
-    pub fn find_ssa(&self, key: &'ast Avis<Ast>) -> Option<&'ast Expr<'ast, Ast>> {
-        self.find_local_def(key).and_then(|def| {
-            if let LocalDef::Assign(expr) = def {
-                Some(expr)
-            } else {
-                None
-            }
-        })
-    }
-
+    /// Find the definition of a local variable by searching through body scopes.
     pub fn find_local_def(&self, key: &'ast Avis<Ast>) -> Option<LocalDef<'ast, Ast>> {
         find_local_in_scopes(std::slice::from_ref(&self.body), key)
     }
