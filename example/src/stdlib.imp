@@ -1,0 +1,22 @@
+// In a perfect world, we end up with something like this.
+// 'Traits', or whatever we end up calling them, would only be implemented for scalars.
+// The standard library then extends this to arrays.
+
+impl + for T[d:shp]
+    where T: +
+{
+    fn +(T[d:shp] a, T[d:shp] b) -> T[d:shp] {
+        return { a[iv] + b[iv] | iv < shp };
+    }
+}
+
+fn genarray(usize[n] shp, T[i:ishp] arr) -> T[n:shp,i:ishp] {
+    return { arr | iv < shp };
+}
+
+fn take(usize[n] shp, T[n:oshp,i:ishp] arr) -> T[n:shp]
+    where T: default
+{
+    return { arr[iv]                    | iv < min(shp,oshp);
+             genarray(default(T), ishp) | iv < oshp };
+}

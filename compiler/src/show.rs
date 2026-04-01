@@ -1,4 +1,4 @@
-use crate::{ast::*, traverse::AstPass};
+use crate::{ast::*, traverse::AstVisit};
 
 /// Pretty-print an AST back to source code.
 ///
@@ -43,9 +43,8 @@ impl<'ast, Ast: AstConfig> Show<'ast, Ast> {
     }
 }
 
-impl<'ast, Ast: AstConfig> AstPass<'ast> for Show<'ast, Ast> {
-    type InAst = Ast;
-    type OutAst = Ast;
+impl<'ast, Ast: AstConfig + 'ast> AstVisit<'ast> for Show<'ast, Ast> {
+    type Ast = Ast;
 
     fn pass_program(&mut self, program: Program<'ast, Ast>) -> Program<'ast, Ast> {
         let mut fundefs = Vec::with_capacity(program.fundefs.len());
@@ -103,52 +102,4 @@ impl<'ast, Ast: AstConfig> AstPass<'ast> for Show<'ast, Ast> {
         fundef
     }
 
-    fn pass_expr(&mut self, expr: Expr<'ast, Ast>) -> Expr<'ast, Ast> {
-        expr
-    }
-
-    fn pass_ssa(&mut self, id: ArgOrVar<'ast, Ast>) -> ArgOrVar<'ast, Ast> {
-        id
-    }
-
-    fn pass_tensor(&mut self, tensor: Tensor<'ast, Ast>) -> Tensor<'ast, Ast> {
-        let mut out = String::new();
-        self.level += 1;
-        let indent = self.indent();
-
-        out.push_str("{\n");
-
-        for stmt in &tensor.ssa {
-            if let Stmt::Assign { avis, expr } = stmt {
-                self.pass_expr((**expr).clone());
-                out.push_str(&format!("{}{} = <expr>;\n", indent, avis.name));
-            }
-        }
-
-        out.push_str(&format!("{}return <val>;\n", indent));
-
-        out.push_str(&format!(
-            "{}| {} <= {} < {} }}",
-            indent, "<lb>", tensor.iv.name, "<ub>"
-        ));
-
-        self.level -= 1;
-        tensor
-    }
-
-    fn pass_binary(&mut self, binary: Binary<'ast, Ast>) -> Binary<'ast, Ast> {
-        binary
-    }
-
-    fn pass_unary(&mut self, unary: Unary<'ast, Ast>) -> Unary<'ast, Ast> {
-        unary
-    }
-
-    fn pass_bool(&mut self, value: bool) -> bool {
-        value
-    }
-
-    fn pass_u32(&mut self, value: u32) -> u32 {
-        value
-    }
 }

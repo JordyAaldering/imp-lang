@@ -1,6 +1,6 @@
 use std::{collections::HashSet, mem};
 
-use crate::{ast::*, traverse::AstPass};
+use crate::{ast::*, traverse::AstVisit};
 
 /// C code generation pass using AstPass traversal.
 ///
@@ -102,9 +102,8 @@ impl CodegenContext {
     }
 }
 
-impl<'ast> AstPass<'ast> for CodegenContext {
-    type InAst = TypedAst;
-    type OutAst = TypedAst;
+impl<'ast> AstVisit<'ast> for CodegenContext {
+    type Ast = TypedAst;
 
     fn pass_program(&mut self, program: Program<'ast, TypedAst>) -> Program<'ast, TypedAst> {
         self.output.clear();
@@ -147,33 +146,6 @@ impl<'ast> AstPass<'ast> for CodegenContext {
         fundef
     }
 
-    fn pass_expr(&mut self, expr: Expr<'ast, Self::InAst>) -> Self::ExprOut {
-        expr
-    }
-
-    fn pass_ssa(&mut self, id: ArgOrVar<'ast, TypedAst>) -> ArgOrVar<'ast, TypedAst> {
-        id
-    }
-
-    fn pass_tensor(&mut self, tensor: Tensor<'ast, TypedAst>) -> Tensor<'ast, TypedAst> {
-        tensor
-    }
-
-    fn pass_binary(&mut self, binary: Binary<'ast, TypedAst>) -> Binary<'ast, TypedAst> {
-        binary
-    }
-
-    fn pass_unary(&mut self, unary: Unary<'ast, TypedAst>) -> Unary<'ast, TypedAst> {
-        unary
-    }
-
-    fn pass_bool(&mut self, value: bool) -> bool {
-        value
-    }
-
-    fn pass_u32(&mut self, value: u32) -> u32 {
-        value
-    }
 }
 
 fn to_ctype(ty: &Type) -> String {
