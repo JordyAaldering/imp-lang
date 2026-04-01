@@ -1,66 +1,6 @@
-use super::{ArgOrVar, AstConfig, Avis, Expr};
-
-#[derive(Clone, Copy, Debug)]
-pub enum LocalDef<'ast, Ast: AstConfig> {
-    Assign(&'ast Expr<'ast, Ast>),
-    IndexRange {
-        lb: ArgOrVar<'ast, Ast>,
-        ub: ArgOrVar<'ast, Ast>,
-    },
-}
-
-#[derive(Clone, Copy, Debug)]
-pub enum Stmt<'ast, Ast: AstConfig> {
-    Assign {
-        avis: &'ast Avis<Ast>,
-        expr: &'ast Expr<'ast, Ast>,
-    },
-    Index {
-        avis: &'ast Avis<Ast>,
-        lb: ArgOrVar<'ast, Ast>,
-        ub: ArgOrVar<'ast, Ast>,
-    },
-    Return {
-        id: ArgOrVar<'ast, Ast>,
-    },
-}
-
-impl<'ast, Ast: AstConfig> Stmt<'ast, Ast> {
-    pub fn avis(self) -> Option<&'ast Avis<Ast>> {
-        match self {
-            Self::Assign { avis, .. } | Self::Index { avis, .. } => Some(avis),
-            Self::Return { .. } => None,
-        }
-    }
-
-    pub fn def(self) -> Option<LocalDef<'ast, Ast>> {
-        match self {
-            Self::Assign { expr, .. } => Some(LocalDef::Assign(expr)),
-            Self::Index { lb, ub, .. } => Some(LocalDef::IndexRange { lb, ub }),
-            Self::Return { .. } => None,
-        }
-    }
-}
+use super::{ArgOrVar, AstConfig, Avis, Expr, LocalDef, Stmt};
 
 pub type SsaBlock<'ast, Ast> = Vec<Stmt<'ast, Ast>>;
-
-pub fn find_local_in_scopes<'ast, Ast: AstConfig>(
-    scopes: &[SsaBlock<'ast, Ast>],
-    key: &'ast Avis<Ast>,
-) -> Option<LocalDef<'ast, Ast>> {
-    for scope in scopes.iter().rev() {
-        for stmt in scope.iter().rev() {
-            let Some(avis) = stmt.avis() else {
-                continue;
-            };
-
-            if std::ptr::eq(avis, key) {
-                return stmt.def();
-            }
-        }
-    }
-    None
-}
 
 #[derive(Clone, Debug)]
 pub struct Fundef<'ast, Ast: AstConfig> {
@@ -116,4 +56,22 @@ impl<'ast, Ast: AstConfig> Fundef<'ast, Ast> {
     pub fn find_local_def(&self, key: &'ast Avis<Ast>) -> Option<LocalDef<'ast, Ast>> {
         find_local_in_scopes(std::slice::from_ref(&self.body), key)
     }
+}
+
+pub fn find_local_in_scopes<'ast, Ast: AstConfig>(
+    scopes: &[SsaBlock<'ast, Ast>],
+    key: &'ast Avis<Ast>,
+) -> Option<LocalDef<'ast, Ast>> {
+    for scope in scopes.iter().rev() {
+        for stmt in scope.iter().rev() {
+            let Some(avis) = stmt.avis() else {
+                continue;
+            };
+
+            if std::ptr::eq(avis, key) {
+                return stmt.def();
+            }
+        }
+    }
+    None
 }
