@@ -4,7 +4,7 @@ use super::{Id, AstConfig, Avis, LocalDef, ScopeBlock, Stmt};
 pub struct Fundef<'ast, Ast: AstConfig> {
     pub name: String,
     pub args: Vec<&'ast Avis<Ast>>,
-    pub ids: Vec<&'ast Avis<Ast>>,
+    pub decls: Vec<&'ast Avis<Ast>>,
     pub body: Vec<Stmt<'ast, Ast>>,
 }
 

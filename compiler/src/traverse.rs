@@ -18,17 +18,19 @@ pub trait Traverse<'ast> {
     /// Declarations
     ///
 
-    fn pass_program(&mut self, program: Program<'ast, Self::InAst>) -> Program<'ast, Self::OutAst> {
+    fn trav_program(&mut self, program: Program<'ast, Self::InAst>) -> Program<'ast, Self::OutAst> {
         let mut fundefs = Vec::with_capacity(program.fundefs.len());
         for fundef in program.fundefs {
-            let fundef = self.pass_fundef(fundef);
+            let fundef = self.trav_fundef(fundef);
             fundefs.push(fundef);
         }
 
         Program { fundefs }
     }
 
-    fn pass_fundef(&mut self, fundef: Fundef<'ast, Self::InAst>) -> Fundef<'ast, Self::OutAst>;
+    fn trav_fundef(&mut self, fundef: Fundef<'ast, Self::InAst>) -> Fundef<'ast, Self::OutAst>;
+
+    fn trav_farg(&mut self, arg: &'ast Avis<Self::InAst>) -> &'ast Avis<Self::OutAst>;
 
     ///
     /// Statements
@@ -36,19 +38,15 @@ pub trait Traverse<'ast> {
 
     type StmtOut = Stmt<'ast, Self::OutAst>;
 
-    fn pass_stmt(&mut self, stmt: Stmt<'ast, Self::InAst>) -> Self::StmtOut;
+    fn trav_stmt(&mut self, stmt: Stmt<'ast, Self::InAst>) -> Self::StmtOut;
 
     type AssignOut = Assign<'ast, Self::OutAst>;
 
-    fn pass_assign(&mut self, assign: Assign<'ast, Self::InAst>) -> Self::AssignOut;
+    fn trav_assign(&mut self, assign: Assign<'ast, Self::InAst>) -> Self::AssignOut;
 
     type ReturnOut = Return<'ast, Self::OutAst>;
 
-    fn pass_return(&mut self, ret: Return<'ast, Self::InAst>) -> Self::ReturnOut;
-
-    type ScopeEntryOut = ScopeEntry<'ast, Self::OutAst>;
-
-    fn pass_scope_entry(&mut self, entry: ScopeEntry<'ast, Self::InAst>) -> Self::ScopeEntryOut;
+    fn trav_return(&mut self, ret: Return<'ast, Self::InAst>) -> Self::ReturnOut;
 
     ///
     /// Expressions
@@ -94,58 +92,58 @@ pub trait Visit<'ast> {
     /// Declarations
     ///
 
-    fn pass_program(&mut self, program: Program<'ast, Self::Ast>) -> Program<'ast, Self::Ast> {
+    fn visit_program(&mut self, program: Program<'ast, Self::Ast>) -> Program<'ast, Self::Ast> {
         let mut fundefs = Vec::with_capacity(program.fundefs.len());
         for fundef in program.fundefs {
-            fundefs.push(self.pass_fundef(fundef));
+            fundefs.push(self.visit_fundef(fundef));
         }
         Program { fundefs }
     }
 
-    fn pass_fundef(&mut self, fundef: Fundef<'ast, Self::Ast>) -> Fundef<'ast, Self::Ast> {
+    fn visit_fundef(&mut self, fundef: Fundef<'ast, Self::Ast>) -> Fundef<'ast, Self::Ast> {
         fundef
+    }
+
+    fn visit_farg(&mut self, arg: &'ast Avis<Self::Ast>) -> &'ast Avis<Self::Ast> {
+        arg
     }
 
     ///
     /// Statements
     ///
 
-    fn pass_stmt(&mut self, stmt: Stmt<'ast, Self::Ast>) -> Stmt<'ast, Self::Ast> {
+    fn visit_stmt(&mut self, stmt: Stmt<'ast, Self::Ast>) -> Stmt<'ast, Self::Ast> {
         match stmt {
-            Stmt::Assign(assign) => Stmt::Assign(self.pass_assign(assign)),
-            Stmt::Return(ret) => Stmt::Return(self.pass_return(ret)),
+            Stmt::Assign(assign) => Stmt::Assign(self.visit_assign(assign)),
+            Stmt::Return(ret) => Stmt::Return(self.visit_return(ret)),
         }
     }
 
-    fn pass_assign(&mut self, assign: Assign<'ast, Self::Ast>) -> Assign<'ast, Self::Ast> {
+    fn visit_assign(&mut self, assign: Assign<'ast, Self::Ast>) -> Assign<'ast, Self::Ast> {
         assign
     }
 
-    fn pass_return(&mut self, ret: Return<'ast, Self::Ast>) -> Return<'ast, Self::Ast> {
+    fn visit_return(&mut self, ret: Return<'ast, Self::Ast>) -> Return<'ast, Self::Ast> {
         ret
-    }
-
-    fn pass_scope_entry(&mut self, entry: ScopeEntry<'ast, Self::Ast>) -> ScopeEntry<'ast, Self::Ast> {
-        entry
     }
 
     ///
     /// Expressions
     ///
 
-    fn pass_expr(&mut self, expr: Expr<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
+    fn visit_expr(&mut self, expr: Expr<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
         expr
     }
 
-    fn pass_tensor(&mut self, tensor: Tensor<'ast, Self::Ast>) -> Tensor<'ast, Self::Ast> {
+    fn visit_tensor(&mut self, tensor: Tensor<'ast, Self::Ast>) -> Tensor<'ast, Self::Ast> {
         let body = tensor
             .body
             .into_iter()
-            .map(|stmt| self.pass_stmt(stmt))
+            .map(|stmt| self.visit_stmt(stmt))
             .collect();
-        let lb = self.pass_id(tensor.lb);
-        let ub = self.pass_id(tensor.ub);
-        let ret = self.pass_id(tensor.ret);
+        let lb = self.visit_id(tensor.lb);
+        let ub = self.visit_id(tensor.ub);
+        let ret = self.visit_id(tensor.ret);
         Tensor {
             body,
             iv: tensor.iv,
@@ -155,11 +153,11 @@ pub trait Visit<'ast> {
         }
     }
 
-    fn pass_binary(&mut self, binary: Binary<'ast, Self::Ast>) -> Binary<'ast, Self::Ast> {
+    fn visit_binary(&mut self, binary: Binary<'ast, Self::Ast>) -> Binary<'ast, Self::Ast> {
         binary
     }
 
-    fn pass_unary(&mut self, unary: Unary<'ast, Self::Ast>) -> Unary<'ast, Self::Ast> {
+    fn visit_unary(&mut self, unary: Unary<'ast, Self::Ast>) -> Unary<'ast, Self::Ast> {
         unary
     }
 
@@ -167,15 +165,15 @@ pub trait Visit<'ast> {
     /// Terminals
     ///
 
-    fn pass_id(&mut self, id: Id<'ast, Self::Ast>) -> Id<'ast, Self::Ast> {
+    fn visit_id(&mut self, id: Id<'ast, Self::Ast>) -> Id<'ast, Self::Ast> {
         id
     }
 
-    fn pass_bool(&mut self, value: bool) -> bool {
+    fn visit_bool(&mut self, value: bool) -> bool {
         value
     }
 
-    fn pass_u32(&mut self, value: u32) -> u32 {
+    fn visit_u32(&mut self, value: u32) -> u32 {
         value
     }
 }
@@ -192,32 +190,32 @@ where
     /// Declarations
     ///
 
-    fn pass_program(&mut self, program: Program<'ast, Self::InAst>) -> Program<'ast, Self::OutAst> {
-        Visit::pass_program(self, program)
+    fn trav_program(&mut self, program: Program<'ast, Self::InAst>) -> Program<'ast, Self::OutAst> {
+        Visit::visit_program(self, program)
     }
 
-    fn pass_fundef(&mut self, fundef: Fundef<'ast, Self::InAst>) -> Fundef<'ast, Self::OutAst> {
-        Visit::pass_fundef(self, fundef)
+    fn trav_fundef(&mut self, fundef: Fundef<'ast, Self::InAst>) -> Fundef<'ast, Self::OutAst> {
+        Visit::visit_fundef(self, fundef)
+    }
+
+    fn trav_farg(&mut self, arg: &'ast Avis<Self::InAst>) -> &'ast Avis<Self::OutAst> {
+        Visit::visit_farg(self, arg)
     }
 
     ///
     /// Statements
     ///
 
-    fn pass_stmt(&mut self, stmt: Stmt<'ast, Self::InAst>) -> Self::StmtOut {
-        Visit::pass_stmt(self, stmt)
+    fn trav_stmt(&mut self, stmt: Stmt<'ast, Self::InAst>) -> Self::StmtOut {
+        Visit::visit_stmt(self, stmt)
     }
 
-    fn pass_assign(&mut self, assign: Assign<'ast, Self::InAst>) -> Self::AssignOut {
-        Visit::pass_assign(self, assign)
+    fn trav_assign(&mut self, assign: Assign<'ast, Self::InAst>) -> Self::AssignOut {
+        Visit::visit_assign(self, assign)
     }
 
-    fn pass_return(&mut self, ret: Return<'ast, Self::InAst>) -> Self::ReturnOut {
-        Visit::pass_return(self, ret)
-    }
-
-    fn pass_scope_entry(&mut self, entry: ScopeEntry<'ast, Self::InAst>) -> Self::ScopeEntryOut {
-        Visit::pass_scope_entry(self, entry)
+    fn trav_return(&mut self, ret: Return<'ast, Self::InAst>) -> Self::ReturnOut {
+        Visit::visit_return(self, ret)
     }
 
     ///
@@ -225,19 +223,19 @@ where
     ///
 
     fn trav_expr(&mut self, expr: Expr<'ast, Self::InAst>) -> Self::ExprOut {
-        Visit::pass_expr(self, expr)
+        Visit::visit_expr(self, expr)
     }
 
     fn trav_tensor(&mut self, tensor: Tensor<'ast, Self::InAst>) -> Self::TensorOut {
-        Visit::pass_tensor(self, tensor)
+        Visit::visit_tensor(self, tensor)
     }
 
     fn trav_binary(&mut self, binary: Binary<'ast, Self::InAst>) -> Self::BinaryOut {
-        Visit::pass_binary(self, binary)
+        Visit::visit_binary(self, binary)
     }
 
     fn trav_unary(&mut self, unary: Unary<'ast, Self::InAst>) -> Self::UnaryOut {
-        Visit::pass_unary(self, unary)
+        Visit::visit_unary(self, unary)
     }
 
     ///
@@ -245,14 +243,14 @@ where
     ///
 
     fn trav_id(&mut self, id: Id<'ast, Self::InAst>) -> Self::IdOut {
-        Visit::pass_id(self, id)
+        Visit::visit_id(self, id)
     }
 
     fn trav_bool(&mut self, value: bool) -> Self::BoolOut {
-        Visit::pass_bool(self, value)
+        Visit::visit_bool(self, value)
     }
 
     fn trav_u32(&mut self, value: u32) -> Self::U32Out {
-        Visit::pass_u32(self, value)
+        Visit::visit_u32(self, value)
     }
 }
