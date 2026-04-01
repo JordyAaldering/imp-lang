@@ -37,11 +37,7 @@ impl<'ast> UndoSsa<'ast> {
 
     fn trav_fundef(&mut self, fundef: &ast::Fundef<'ast, TypedAst>) -> Fundef {
         self.args = fundef.args.clone();
-        let scope = fundef
-            .body
-            .iter()
-            .filter_map(|stmt| (*stmt).as_scope_entry())
-            .collect::<ast::ScopeBlock<'ast, TypedAst>>();
+        let scope = fundef.scope_block();
         self.scopes.push(scope);
 
         let args = fundef.args.iter().map(|a| (a.ty.clone(), a.name.clone())).collect();

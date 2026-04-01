@@ -1,5 +1,8 @@
 use super::{ArgOrVar, Assign, AstConfig, Avis, Return};
 
+pub type ScopeBlock<'ast, Ast> = Vec<ScopeEntry<'ast, Ast>>;
+pub type ScopeStack<'ast, Ast> = Vec<ScopeBlock<'ast, Ast>>;
+
 #[derive(Clone, Copy, Debug)]
 pub enum Stmt<'ast, Ast: AstConfig> {
     Assign(Assign<'ast, Ast>),

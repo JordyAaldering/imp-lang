@@ -41,11 +41,7 @@ impl CodegenContext {
     }
 
     fn body_scope<'ast>(&self, fundef: &Fundef<'ast, TypedAst>) -> ScopeBlock<'ast, TypedAst> {
-        fundef
-            .body
-            .iter()
-            .filter_map(|stmt| (*stmt).as_scope_entry())
-            .collect()
+        fundef.scope_block()
     }
 
     fn expr_for<'ast>(
