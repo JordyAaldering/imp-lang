@@ -1,6 +1,4 @@
-use super::{ArgOrVar, AstConfig, Avis, LocalDef, ScopeEntry, Stmt};
-
-pub type ScopeBlock<'ast, Ast> = Vec<ScopeEntry<'ast, Ast>>;
+use super::{ArgOrVar, AstConfig, Avis, LocalDef, ScopeBlock, Stmt};
 
 #[derive(Clone, Debug)]
 pub struct Fundef<'ast, Ast: AstConfig> {
@@ -45,13 +43,16 @@ impl<'ast, Ast: AstConfig> Fundef<'ast, Ast> {
         }
     }
 
-    /// Find the definition of a local variable by searching through body scopes.
-    pub fn find_local_def(&self, key: &'ast Avis<Ast>) -> Option<LocalDef<'ast, Ast>> {
-        let body_scope = self
-            .body
+    pub fn scope_block(&self) -> ScopeBlock<'ast, Ast> {
+        self.body
             .iter()
             .filter_map(|stmt| (*stmt).as_scope_entry())
-            .collect::<ScopeBlock<'ast, Ast>>();
+            .collect()
+    }
+
+    /// Find the definition of a local variable by searching through body scopes.
+    pub fn find_local_def(&self, key: &'ast Avis<Ast>) -> Option<LocalDef<'ast, Ast>> {
+        let body_scope = self.scope_block();
         find_local_in_scopes(std::slice::from_ref(&body_scope), key)
     }
 }

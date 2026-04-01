@@ -59,11 +59,7 @@ impl<'ast> AstPass<'ast> for TypeInfer<'ast> {
 
     fn pass_fundef(&mut self, fundef: Fundef<'ast, Self::InAst>) -> Fundef<'ast, Self::OutAst> {
         self.args = fundef.args.clone();
-        let fundef_scope = fundef
-            .body
-            .iter()
-            .filter_map(|stmt| (*stmt).as_scope_entry())
-            .collect::<ScopeBlock<'ast, UntypedAst>>();
+        let fundef_scope = fundef.scope_block();
         self.scopes.push(fundef_scope);
         self.new_ssa.push(Vec::new());
         self.idmap.clear();
