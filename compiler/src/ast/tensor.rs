@@ -40,7 +40,6 @@ pub struct Tensor<'ast, Ast: AstConfig> {
 }
 
 impl<'ast, Ast: AstConfig> Tensor<'ast, Ast> {
-    /// Build the internal scope entries visible while resolving names in this tensor.
     pub fn scope_block(&self) -> ScopeBlock<'ast, Ast> {
         let mut scope = Vec::with_capacity(1 + self.body.len());
         scope.push(ScopeEntry::IndexRange {

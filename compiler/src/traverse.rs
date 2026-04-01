@@ -1,14 +1,5 @@
 use crate::ast::*;
 
-/// AST traversal and transformation pass trait.
-///
-/// Implementations define how to walk and potentially transform an AST.
-/// Each pass has an input AST type (InAst) and output AST type (OutAst).
-///
-/// Associated type defaults allow flexible expression output transformations:
-/// - If a pass doesn't transform a node type, the default is an identity output
-/// - Passes can override specific output types to enable rewrites
-///   (e.g., constant folding Binary -> U32)
 pub trait Traverse<'ast> {
     type InAst: AstConfig;
 
@@ -108,8 +99,8 @@ pub trait Visit<'ast> {
             args.push(self.visit_farg(arg));
         }
 
-        let mut decls = Vec::with_capacity(fundef.decls.len());
-        for vardec in fundef.decls {
+        let mut decls = Vec::with_capacity(fundef.decs.len());
+        for vardec in fundef.decs {
             decls.push(self.visit_vardec(vardec));
         }
 
@@ -118,7 +109,7 @@ pub trait Visit<'ast> {
             body.push(self.visit_stmt(stmt));
         }
 
-        Fundef { name: fundef.name, args, decls, body }
+        Fundef { name: fundef.name, args, decs: decls, body }
     }
 
     fn visit_farg(&mut self, arg: &'ast Avis<Self::Ast>) -> &'ast Avis<Self::Ast> {
