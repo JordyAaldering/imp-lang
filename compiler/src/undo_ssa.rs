@@ -73,12 +73,12 @@ impl<'ast> UndoSsa<'ast> {
                 match self.find_local_def(k) {
                     ast::LocalDef::Assign(expr) => {
                         match expr.clone() {
-                            ast::Expr::Tensor(ast::Tensor { iv, lb, ub, ret, ssa }) => {
-                                self.scopes.push(ssa.clone());
-                                let iv = iv.name.clone();
-                                let expr = self.inline_expr(ret, fundef);
-                                let lb = self.inline_expr(lb, fundef);
-                                let ub = self.inline_expr(ub, fundef);
+                            ast::Expr::Tensor(tensor) => {
+                                self.scopes.push(tensor.scope_block());
+                                let iv = tensor.iv.name.clone();
+                                let expr = self.inline_expr(tensor.ret, fundef);
+                                let lb = self.inline_expr(tensor.lb, fundef);
+                                let ub = self.inline_expr(tensor.ub, fundef);
                                 self.scopes.pop().unwrap();
                                 Expr::Tensor { iv, expr: Box::new(expr), lb: Box::new(lb), ub: Box::new(ub) }
                             }

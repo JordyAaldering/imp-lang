@@ -82,19 +82,19 @@ impl CodegenContext {
         extra_scopes: &[ScopeBlock<'ast, TypedAst>],
     ) -> String {
         match expr {
-            Expr::Tensor(Tensor { iv, lb, ub, ret, ssa }) => {
+            Expr::Tensor(tensor) => {
                 let mut forloop = String::new();
                 let mut tensor_scopes = extra_scopes.to_vec();
-                tensor_scopes.push(ssa.clone());
+                tensor_scopes.push(tensor.scope_block());
 
-                let ty = to_ctype(fundef.typof(*ret));
-                let iv_name = iv.name.clone();
-                let lb_name = self.expr_for(*lb, fundef, &tensor_scopes);
-                let ub_name = self.expr_for(*ub, fundef, &tensor_scopes);
+                let ty = to_ctype(fundef.typof(tensor.ret));
+                let iv_name = tensor.iv.name.clone();
+                let lb_name = self.expr_for(tensor.lb, fundef, &tensor_scopes);
+                let ub_name = self.expr_for(tensor.ub, fundef, &tensor_scopes);
 
                 let mut outer_stmts = Vec::new();
                 mem::swap(&mut outer_stmts, &mut self.stmts);
-                let expr_code = self.expr_for(*ret, fundef, &tensor_scopes);
+                let expr_code = self.expr_for(tensor.ret, fundef, &tensor_scopes);
                 let mut body_stmts = Vec::new();
                 mem::swap(&mut body_stmts, &mut self.stmts);
                 self.stmts = outer_stmts;

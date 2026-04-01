@@ -198,7 +198,7 @@ impl<'ast> AstPass<'ast> for TypeInfer<'ast> {
     }
 
     fn pass_tensor(&mut self, tensor: Tensor<'ast, Self::InAst>) -> Tensor<'ast, Self::OutAst> {
-        self.scopes.push(tensor.ssa.clone());
+        self.scopes.push(tensor.scope_block());
         self.new_ssa.push(Vec::new());
 
         let lb = self.pass_id(tensor.lb);
@@ -216,9 +216,18 @@ impl<'ast> AstPass<'ast> for TypeInfer<'ast> {
         let ret = self.pass_id(tensor.ret);
 
         self.scopes.pop().unwrap();
-        let ssa = self.new_ssa.pop().unwrap();
+        let body = self
+            .new_ssa
+            .pop()
+            .unwrap()
+            .into_iter()
+            .filter_map(|entry| match entry {
+                ScopeEntry::Assign { avis, expr } => Some(Stmt::Assign(Assign { avis, expr })),
+                ScopeEntry::IndexRange { .. } => None,
+            })
+            .collect::<Vec<_>>();
 
-        Tensor { iv: iv_new, lb, ub, ret, ssa }
+        Tensor { iv: iv_new, lb, ub, ret, body }
     }
 
     fn pass_binary(&mut self, binary: Binary<'ast, Self::InAst>) -> Binary<'ast, Self::OutAst> {

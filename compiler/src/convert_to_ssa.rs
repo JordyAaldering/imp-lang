@@ -109,10 +109,17 @@ impl<'ast> ConvertToSsa<'ast> {
                     ub,
                 }]);
                 let ret = self.convert_expr(*expr);
-                let ssa = self.scopes.pop().unwrap();
+                let scope = self.scopes.pop().unwrap();
                 self.name_to_id.pop().unwrap();
 
-                Expr::Tensor(Tensor { iv: iv_avis, lb, ub, ret, ssa })
+                let mut body = Vec::new();
+                for entry in scope {
+                    if let ScopeEntry::Assign { avis, expr } = entry {
+                        body.push(Stmt::Assign(Assign { avis, expr }));
+                    }
+                }
+
+                Expr::Tensor(Tensor { iv: iv_avis, lb, ub, ret, body })
             }
             parse_ast::Expr::Binary { l, r, op } => {
                 let l = self.convert_expr(*l);
