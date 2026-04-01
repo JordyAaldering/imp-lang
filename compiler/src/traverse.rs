@@ -26,6 +26,10 @@ pub trait AstPass<'ast> {
 
     fn pass_fundef(&mut self, fundef: Fundef<'ast, Self::InAst>) -> Fundef<'ast, Self::OutAst>;
 
+    type StmtOut = Stmt<'ast, Self::OutAst>;
+
+    fn pass_stmt(&mut self, stmt: Stmt<'ast, Self::InAst>) -> Self::StmtOut;
+
     type SsaOut = ArgOrVar<'ast, Self::OutAst>;
 
     fn pass_id(&mut self, id: ArgOrVar<'ast, Self::InAst>) -> Self::SsaOut;
@@ -74,6 +78,10 @@ pub trait AstVisit<'ast> {
         fundef
     }
 
+    fn pass_stmt(&mut self, stmt: Stmt<'ast, Self::Ast>) -> Stmt<'ast, Self::Ast> {
+        stmt
+    }
+
     fn pass_expr(&mut self, expr: Expr<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
         expr
     }
@@ -117,6 +125,10 @@ where
 
     fn pass_fundef(&mut self, fundef: Fundef<'ast, Self::InAst>) -> Fundef<'ast, Self::OutAst> {
         AstVisit::pass_fundef(self, fundef)
+    }
+
+    fn pass_stmt(&mut self, stmt: Stmt<'ast, Self::InAst>) -> Self::StmtOut {
+        AstVisit::pass_stmt(self, stmt)
     }
 
     fn pass_expr(&mut self, expr: Expr<'ast, Self::InAst>) -> Self::ExprOut {

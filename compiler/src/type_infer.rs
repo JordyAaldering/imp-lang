@@ -82,6 +82,22 @@ impl<'ast> AstPass<'ast> for TypeInfer<'ast> {
         }
     }
 
+    fn pass_stmt(&mut self, stmt: Stmt<'ast, Self::InAst>) -> Stmt<'ast, Self::OutAst> {
+        match stmt {
+            Stmt::Assign { avis, .. } | Stmt::Index { avis, .. } => {
+                let before_len = self.new_ssa.last().map_or(0, |ssa| ssa.len());
+                let _ = self.pass_id(ArgOrVar::Var(avis));
+                let ssa = self.new_ssa.last().expect("missing output scope in type inference");
+                assert!(ssa.len() > before_len, "statement conversion did not emit output");
+                *ssa.last().expect("missing emitted statement")
+            }
+            Stmt::Return { id } => {
+                let id = self.pass_id(id);
+                Stmt::Return { id }
+            }
+        }
+    }
+
     fn pass_id(&mut self, id: ArgOrVar<'ast, Self::InAst>) -> ArgOrVar<'ast, Self::OutAst> {
         match id {
             ArgOrVar::Arg(i) => ArgOrVar::Arg(i),
