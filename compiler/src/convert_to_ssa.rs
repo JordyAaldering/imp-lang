@@ -17,7 +17,7 @@ pub fn convert_to_ssa<'ast>(program: parse_ast::Program) -> Program<'ast, Untype
 pub struct ConvertToSsa<'ast> {
     uid: usize,
     ids: Vec<&'ast Avis<UntypedAst>>,
-    scopes: Vec<SsaBlock<'ast, UntypedAst>>,
+    scopes: Vec<ScopeBlock<'ast, UntypedAst>>,
     name_to_id: Vec<HashMap<String, ArgOrVar<'ast, UntypedAst>>>,
 }
 
@@ -63,8 +63,14 @@ impl<'ast> ConvertToSsa<'ast> {
         }
 
         let ret = self.convert_expr(fundef.ret_expr);
-        let mut body = self.scopes.pop().unwrap();
-        body.push(Stmt::Return { id: ret });
+        let scope = self.scopes.pop().unwrap();
+        let mut body = Vec::new();
+        for entry in scope {
+            if let ScopeEntry::Assign { avis, expr } = entry {
+                body.push(Stmt::Assign(Assign { avis, expr }));
+            }
+        }
+        body.push(Stmt::Return(Return { id: ret }));
         self.name_to_id.clear();
 
         Fundef {
@@ -97,7 +103,7 @@ impl<'ast> ConvertToSsa<'ast> {
                 scope.insert(iv, ArgOrVar::Var(iv_avis));
 
                 self.name_to_id.push(scope);
-                self.scopes.push(vec![Stmt::Index {
+                self.scopes.push(vec![ScopeEntry::IndexRange {
                     avis: iv_avis,
                     lb,
                     ub,
@@ -133,7 +139,7 @@ impl<'ast> ConvertToSsa<'ast> {
         let avis = self.alloc_avis(name, MaybeType(None));
         self.ids.push(avis);
         let expr_ref = self.alloc_expr(built);
-        self.scopes.last_mut().unwrap().push(Stmt::Assign {
+        self.scopes.last_mut().unwrap().push(ScopeEntry::Assign {
             avis,
             expr: expr_ref,
         });

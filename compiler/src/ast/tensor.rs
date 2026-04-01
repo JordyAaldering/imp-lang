@@ -1,4 +1,4 @@
-use super::{AstConfig, ArgOrVar, Avis, SsaBlock};
+use super::{ArgOrVar, AstConfig, Avis, ScopeBlock};
 
 /// ```
 /// { iv + 1 | 0 <= iv < 3;
@@ -16,13 +16,13 @@ use super::{AstConfig, ArgOrVar, Avis, SsaBlock};
 /// fn scope(int ub) -> int[ub] {
 ///     one = 1;
 ///     two = 2;
-///     ret = { a = { jv + one | jv < ub };
-///             b = { jv + two | jv < ub };
+///     a = whatever;
+///     ret = { a = { jv + one | jv < ub }; // This should shadow `a` from the outer scope
+///             b = { jv + two | jv < ub }; // This should match the local jv, not the one from the previous scope
 ///             ub + one + a[iv] + b[iv]    // a and b can be found in the first scope
 ///                                         // one cannot be found, so go one scope up
 ///                                         // even there, ub cannot be found, so go up again and check args
-///           | iv < ub
-///     };
+///           | 0 <= iv < ub };
 ///     return ret;
 /// }
 /// ```
@@ -33,7 +33,7 @@ use super::{AstConfig, ArgOrVar, Avis, SsaBlock};
 #[derive(Clone, Debug)]
 pub struct Tensor<'ast, Ast: AstConfig> {
     /// Scope entries visible inside the tensor body, including the index range binding.
-    pub ssa: SsaBlock<'ast, Ast>,
+    pub ssa: ScopeBlock<'ast, Ast>,
     pub iv: &'ast Avis<Ast>,
     pub lb: ArgOrVar<'ast, Ast>,
     pub ub: ArgOrVar<'ast, Ast>,

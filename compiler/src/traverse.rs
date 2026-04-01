@@ -30,6 +30,18 @@ pub trait AstPass<'ast> {
 
     fn pass_stmt(&mut self, stmt: Stmt<'ast, Self::InAst>) -> Self::StmtOut;
 
+    type AssignOut = Assign<'ast, Self::OutAst>;
+
+    fn pass_assign(&mut self, assign: Assign<'ast, Self::InAst>) -> Self::AssignOut;
+
+    type ReturnOut = Return<'ast, Self::OutAst>;
+
+    fn pass_return(&mut self, ret: Return<'ast, Self::InAst>) -> Self::ReturnOut;
+
+    type ScopeEntryOut = ScopeEntry<'ast, Self::OutAst>;
+
+    fn pass_scope_entry(&mut self, entry: ScopeEntry<'ast, Self::InAst>) -> Self::ScopeEntryOut;
+
     type SsaOut = ArgOrVar<'ast, Self::OutAst>;
 
     fn pass_id(&mut self, id: ArgOrVar<'ast, Self::InAst>) -> Self::SsaOut;
@@ -79,7 +91,22 @@ pub trait AstVisit<'ast> {
     }
 
     fn pass_stmt(&mut self, stmt: Stmt<'ast, Self::Ast>) -> Stmt<'ast, Self::Ast> {
-        stmt
+        match stmt {
+            Stmt::Assign(assign) => Stmt::Assign(self.pass_assign(assign)),
+            Stmt::Return(ret) => Stmt::Return(self.pass_return(ret)),
+        }
+    }
+
+    fn pass_assign(&mut self, assign: Assign<'ast, Self::Ast>) -> Assign<'ast, Self::Ast> {
+        assign
+    }
+
+    fn pass_return(&mut self, ret: Return<'ast, Self::Ast>) -> Return<'ast, Self::Ast> {
+        ret
+    }
+
+    fn pass_scope_entry(&mut self, entry: ScopeEntry<'ast, Self::Ast>) -> ScopeEntry<'ast, Self::Ast> {
+        entry
     }
 
     fn pass_expr(&mut self, expr: Expr<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
@@ -129,6 +156,18 @@ where
 
     fn pass_stmt(&mut self, stmt: Stmt<'ast, Self::InAst>) -> Self::StmtOut {
         AstVisit::pass_stmt(self, stmt)
+    }
+
+    fn pass_assign(&mut self, assign: Assign<'ast, Self::InAst>) -> Self::AssignOut {
+        AstVisit::pass_assign(self, assign)
+    }
+
+    fn pass_return(&mut self, ret: Return<'ast, Self::InAst>) -> Self::ReturnOut {
+        AstVisit::pass_return(self, ret)
+    }
+
+    fn pass_scope_entry(&mut self, entry: ScopeEntry<'ast, Self::InAst>) -> Self::ScopeEntryOut {
+        AstVisit::pass_scope_entry(self, entry)
     }
 
     fn pass_expr(&mut self, expr: Expr<'ast, Self::InAst>) -> Self::ExprOut {

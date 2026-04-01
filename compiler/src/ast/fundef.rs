@@ -1,13 +1,13 @@
-use super::{ArgOrVar, AstConfig, Avis, LocalDef, Stmt};
+use super::{ArgOrVar, AstConfig, Avis, LocalDef, ScopeEntry, Stmt};
 
-pub type SsaBlock<'ast, Ast> = Vec<Stmt<'ast, Ast>>;
+pub type ScopeBlock<'ast, Ast> = Vec<ScopeEntry<'ast, Ast>>;
 
 #[derive(Clone, Debug)]
 pub struct Fundef<'ast, Ast: AstConfig> {
     pub name: String,
     pub args: Vec<&'ast Avis<Ast>>,
     pub ids: Vec<&'ast Avis<Ast>>,
-    pub body: SsaBlock<'ast, Ast>,
+    pub body: Vec<Stmt<'ast, Ast>>,
 }
 
 impl<'ast, Ast: AstConfig> Fundef<'ast, Ast> {
@@ -30,8 +30,8 @@ impl<'ast, Ast: AstConfig> Fundef<'ast, Ast> {
 
     pub fn ret_id(&self) -> ArgOrVar<'ast, Ast> {
         for stmt in self.body.iter().rev() {
-            if let Stmt::Return { id } = *stmt {
-                return id;
+            if let Stmt::Return(ret) = *stmt {
+                return ret.id;
             }
         }
 
@@ -47,20 +47,22 @@ impl<'ast, Ast: AstConfig> Fundef<'ast, Ast> {
 
     /// Find the definition of a local variable by searching through body scopes.
     pub fn find_local_def(&self, key: &'ast Avis<Ast>) -> Option<LocalDef<'ast, Ast>> {
-        find_local_in_scopes(std::slice::from_ref(&self.body), key)
+        let body_scope = self
+            .body
+            .iter()
+            .filter_map(|stmt| (*stmt).as_scope_entry())
+            .collect::<ScopeBlock<'ast, Ast>>();
+        find_local_in_scopes(std::slice::from_ref(&body_scope), key)
     }
 }
 
 pub fn find_local_in_scopes<'ast, Ast: AstConfig>(
-    scopes: &[SsaBlock<'ast, Ast>],
+    scopes: &[ScopeBlock<'ast, Ast>],
     key: &'ast Avis<Ast>,
 ) -> Option<LocalDef<'ast, Ast>> {
     for scope in scopes.iter().rev() {
         for stmt in scope.iter().rev() {
-            let Some(avis) = stmt.avis() else {
-                continue;
-            };
-
+            let avis = stmt.avis();
             if std::ptr::eq(avis, key) {
                 return stmt.def();
             }

@@ -26,15 +26,34 @@ impl CodegenContext {
         self.output
     }
 
-    fn ensure_local<'ast>(&mut self, avis: &'ast Avis<TypedAst>, expr: &Expr<'ast, TypedAst>, fundef: &Fundef<'ast, TypedAst>) {
+    fn ensure_local<'ast>(
+        &mut self,
+        avis: &'ast Avis<TypedAst>,
+        expr: &Expr<'ast, TypedAst>,
+        fundef: &Fundef<'ast, TypedAst>,
+        extra_scopes: &[ScopeBlock<'ast, TypedAst>],
+    ) {
         let key = avis as *const _;
         if self.emitted.insert(key) {
-            let rhs = self.render_expr(expr, fundef);
+            let rhs = self.render_expr(expr, fundef, extra_scopes);
             self.stmts.push(format!("{} {} = {};", to_ctype(&avis.ty), avis.name, rhs));
         }
     }
 
-    fn expr_for<'ast>(&mut self, id: ArgOrVar<'ast, TypedAst>, fundef: &Fundef<'ast, TypedAst>) -> String {
+    fn body_scope<'ast>(&self, fundef: &Fundef<'ast, TypedAst>) -> ScopeBlock<'ast, TypedAst> {
+        fundef
+            .body
+            .iter()
+            .filter_map(|stmt| (*stmt).as_scope_entry())
+            .collect()
+    }
+
+    fn expr_for<'ast>(
+        &mut self,
+        id: ArgOrVar<'ast, TypedAst>,
+        fundef: &Fundef<'ast, TypedAst>,
+        extra_scopes: &[ScopeBlock<'ast, TypedAst>],
+    ) -> String {
         if let Some(i) = fundef.arg_index(id) {
             return fundef.args[i].name.clone();
         }
@@ -42,37 +61,40 @@ impl CodegenContext {
         let Some(avis) = id.as_local() else {
             return fundef.nameof(id).to_owned();
         };
-        match fundef.find_local_def(avis) {
+
+        let mut scopes = Vec::with_capacity(1 + extra_scopes.len());
+        scopes.push(self.body_scope(fundef));
+        scopes.extend(extra_scopes.iter().cloned());
+
+        match find_local_in_scopes(&scopes, avis) {
             Some(LocalDef::Assign(expr)) => {
-                self.ensure_local(avis, expr, fundef);
+                self.ensure_local(avis, expr, fundef, extra_scopes);
                 avis.name.clone()
             }
             Some(LocalDef::IndexRange { .. }) | None => avis.name.clone(),
         }
     }
 
-    fn render_expr<'ast>(&mut self, expr: &Expr<'ast, TypedAst>, fundef: &Fundef<'ast, TypedAst>) -> String {
+    fn render_expr<'ast>(
+        &mut self,
+        expr: &Expr<'ast, TypedAst>,
+        fundef: &Fundef<'ast, TypedAst>,
+        extra_scopes: &[ScopeBlock<'ast, TypedAst>],
+    ) -> String {
         match expr {
             Expr::Tensor(Tensor { iv, lb, ub, ret, ssa }) => {
                 let mut forloop = String::new();
-                let mut scope = fundef.body.clone();
-                scope.extend(ssa.iter().copied());
-                scope.push(Stmt::Return { id: *ret });
-                let tensor_fundef = Fundef {
-                    name: fundef.name.clone(),
-                    args: fundef.args.clone(),
-                    ids: fundef.ids.clone(),
-                    body: scope,
-                };
+                let mut tensor_scopes = extra_scopes.to_vec();
+                tensor_scopes.push(ssa.clone());
 
-                let ty = to_ctype(tensor_fundef.typof(*ret));
+                let ty = to_ctype(fundef.typof(*ret));
                 let iv_name = iv.name.clone();
-                let lb_name = self.expr_for(*lb, &tensor_fundef);
-                let ub_name = self.expr_for(*ub, &tensor_fundef);
+                let lb_name = self.expr_for(*lb, fundef, &tensor_scopes);
+                let ub_name = self.expr_for(*ub, fundef, &tensor_scopes);
 
                 let mut outer_stmts = Vec::new();
                 mem::swap(&mut outer_stmts, &mut self.stmts);
-                let expr_code = self.expr_for(*ret, &tensor_fundef);
+                let expr_code = self.expr_for(*ret, fundef, &tensor_scopes);
                 let mut body_stmts = Vec::new();
                 mem::swap(&mut body_stmts, &mut self.stmts);
                 self.stmts = outer_stmts;
@@ -88,12 +110,12 @@ impl CodegenContext {
                 "res".to_owned()
             }
             Expr::Binary(Binary { l, r, op }) => {
-                let l = self.expr_for(*l, fundef);
-                let r = self.expr_for(*r, fundef);
+                let l = self.expr_for(*l, fundef, extra_scopes);
+                let r = self.expr_for(*r, fundef, extra_scopes);
                 format!("{} {} {}", l, op, r)
             }
             Expr::Unary(Unary { r, op }) => {
-                let r = self.expr_for(*r, fundef);
+                let r = self.expr_for(*r, fundef, extra_scopes);
                 format!("{} {}", op, r)
             }
             Expr::Bool(v) => if *v { "true".to_owned() } else { "false".to_owned() },
@@ -131,7 +153,7 @@ impl<'ast> AstVisit<'ast> for CodegenContext {
         let ret_type = fundef.typof(ret);
         res.push_str(&format!("{} DSL_{}({}) {{\n", to_ctype(ret_type), fundef.name, args.join(", ")));
 
-        let ret_code = self.expr_for(ret, &fundef);
+        let ret_code = self.expr_for(ret, &fundef, &[]);
 
         let mut stmts = Vec::new();
         mem::swap(&mut stmts, &mut self.stmts);
