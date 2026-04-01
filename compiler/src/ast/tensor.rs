@@ -1,4 +1,4 @@
-use super::{ArgOrVar, AstConfig, Avis, ScopeBlock, ScopeEntry, Stmt};
+use super::{Id, AstConfig, Avis, ScopeBlock, ScopeEntry, Stmt};
 
 /// ```
 /// { iv + 1 | 0 <= iv < 3;
@@ -32,15 +32,11 @@ use super::{ArgOrVar, AstConfig, Avis, ScopeBlock, ScopeEntry, Stmt};
 /// we might have to look through a number of scopes.
 #[derive(Clone, Debug)]
 pub struct Tensor<'ast, Ast: AstConfig> {
-    /// User-level statements in the tensor body.
-    ///
-    /// This supports nested constructs (including nested tensor comprehensions)
-    /// while index-range bindings remain internal scope entries.
     pub body: Vec<Stmt<'ast, Ast>>,
+    pub ret: Id<'ast, Ast>,
     pub iv: &'ast Avis<Ast>,
-    pub lb: ArgOrVar<'ast, Ast>,
-    pub ub: ArgOrVar<'ast, Ast>,
-    pub ret: ArgOrVar<'ast, Ast>,
+    pub lb: Id<'ast, Ast>,
+    pub ub: Id<'ast, Ast>,
 }
 
 impl<'ast, Ast: AstConfig> Tensor<'ast, Ast> {
@@ -48,7 +44,7 @@ impl<'ast, Ast: AstConfig> Tensor<'ast, Ast> {
     pub fn scope_block(&self) -> ScopeBlock<'ast, Ast> {
         let mut scope = Vec::with_capacity(1 + self.body.len());
         scope.push(ScopeEntry::IndexRange {
-            avis: self.iv,
+            iv: self.iv,
             lb: self.lb,
             ub: self.ub,
         });

@@ -1,6 +1,7 @@
-use super::{ArgOrVar, Assign, AstConfig, Avis, Return};
+use super::{Id, Assign, AstConfig, Avis, Return};
 
 pub type ScopeBlock<'ast, Ast> = Vec<ScopeEntry<'ast, Ast>>;
+
 pub type ScopeStack<'ast, Ast> = Vec<ScopeBlock<'ast, Ast>>;
 
 #[derive(Clone, Copy, Debug)]
@@ -9,10 +10,6 @@ pub enum Stmt<'ast, Ast: AstConfig> {
     Return(Return<'ast, Ast>),
 }
 
-/// Internal scope entries used for definition lookup during lowering and codegen.
-///
-/// Unlike `Stmt`, this includes index range bindings that do not represent
-/// user-level statements.
 #[derive(Clone, Copy, Debug)]
 pub enum ScopeEntry<'ast, Ast: AstConfig> {
     Assign {
@@ -20,9 +17,9 @@ pub enum ScopeEntry<'ast, Ast: AstConfig> {
         expr: &'ast super::Expr<'ast, Ast>,
     },
     IndexRange {
-        avis: &'ast Avis<Ast>,
-        lb: ArgOrVar<'ast, Ast>,
-        ub: ArgOrVar<'ast, Ast>,
+        iv: &'ast Avis<Ast>,
+        lb: Id<'ast, Ast>,
+        ub: Id<'ast, Ast>,
     },
 }
 
@@ -30,8 +27,8 @@ pub enum ScopeEntry<'ast, Ast: AstConfig> {
 pub enum LocalDef<'ast, Ast: AstConfig> {
     Assign(&'ast super::Expr<'ast, Ast>),
     IndexRange {
-        lb: ArgOrVar<'ast, Ast>,
-        ub: ArgOrVar<'ast, Ast>,
+        lb: Id<'ast, Ast>,
+        ub: Id<'ast, Ast>,
     },
 }
 
@@ -47,7 +44,7 @@ impl<'ast, Ast: AstConfig> Stmt<'ast, Ast> {
 impl<'ast, Ast: AstConfig> ScopeEntry<'ast, Ast> {
     pub fn avis(self) -> &'ast Avis<Ast> {
         match self {
-            Self::Assign { avis, .. } | Self::IndexRange { avis, .. } => avis,
+            Self::Assign { avis, .. } | Self::IndexRange { iv: avis, .. } => avis,
         }
     }
 

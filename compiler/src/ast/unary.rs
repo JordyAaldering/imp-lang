@@ -1,10 +1,10 @@
 use std::fmt;
 
-use super::{ArgOrVar, AstConfig};
+use super::{Id, AstConfig};
 
 #[derive(Clone, Debug)]
 pub struct Unary<'ast, Ast: AstConfig> {
-    pub r: ArgOrVar<'ast, Ast>,
+    pub r: Id<'ast, Ast>,
     pub op: Uop,
 }
 
@@ -16,9 +16,9 @@ pub enum Uop {
 impl fmt::Display for Uop {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use Uop::*;
-        write!(f, "{}", match self {
-            Neg => "-",
-            Not => "!",
-        })
+        match self {
+            Neg => write!(f, "-"),
+            Not => write!(f, "!"),
+        }
     }
 }

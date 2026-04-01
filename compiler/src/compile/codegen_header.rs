@@ -1,4 +1,4 @@
-use crate::{ast::*, traverse::AstVisit};
+use crate::{ast::*, traverse::Visit};
 
 /// Rust header generation pass using AstPass traversal.
 ///
@@ -22,7 +22,7 @@ impl CompileHeader {
     }
 }
 
-impl<'ast> AstVisit<'ast> for CompileHeader {
+impl<'ast> Visit<'ast> for CompileHeader {
     type Ast = TypedAst;
 
     fn pass_program(&mut self, program: Program<'ast, TypedAst>) -> Program<'ast, TypedAst> {

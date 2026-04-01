@@ -18,7 +18,7 @@ pub struct ConvertToSsa<'ast> {
     uid: usize,
     ids: Vec<&'ast Avis<UntypedAst>>,
     scopes: Vec<ScopeBlock<'ast, UntypedAst>>,
-    name_to_id: Vec<HashMap<String, ArgOrVar<'ast, UntypedAst>>>,
+    name_to_id: Vec<HashMap<String, Id<'ast, UntypedAst>>>,
 }
 
 impl<'ast> ConvertToSsa<'ast> {
@@ -51,7 +51,7 @@ impl<'ast> ConvertToSsa<'ast> {
         for (i, (ty, name)) in fundef.args.into_iter().enumerate() {
             let avis = self.alloc_avis(name.clone(), MaybeType(Some(ty)));
             args.push(avis);
-            arg_scope.insert(name, ArgOrVar::Arg(i));
+            arg_scope.insert(name, Id::Arg(i));
         }
 
         self.ids.clear();
@@ -90,7 +90,7 @@ impl<'ast> ConvertToSsa<'ast> {
         }
     }
 
-    pub fn convert_expr(&mut self, expr: parse_ast::Expr) -> ArgOrVar<'ast, UntypedAst> {
+    pub fn convert_expr(&mut self, expr: parse_ast::Expr) -> Id<'ast, UntypedAst> {
         let built = match expr {
             parse_ast::Expr::Tensor { expr, iv, lb, ub } => {
                 let lb = self.convert_expr(*lb);
@@ -100,11 +100,11 @@ impl<'ast> ConvertToSsa<'ast> {
                 self.ids.push(iv_avis);
 
                 let mut scope = HashMap::new();
-                scope.insert(iv, ArgOrVar::Var(iv_avis));
+                scope.insert(iv, Id::Var(iv_avis));
 
                 self.name_to_id.push(scope);
                 self.scopes.push(vec![ScopeEntry::IndexRange {
-                    avis: iv_avis,
+                    iv: iv_avis,
                     lb,
                     ub,
                 }]);
@@ -150,6 +150,6 @@ impl<'ast> ConvertToSsa<'ast> {
             avis,
             expr: expr_ref,
         });
-        ArgOrVar::Var(avis)
+        Id::Var(avis)
     }
 }

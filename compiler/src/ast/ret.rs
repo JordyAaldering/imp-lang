@@ -1,6 +1,6 @@
-use super::{ArgOrVar, AstConfig};
+use super::{Id, AstConfig};
 
 #[derive(Clone, Copy, Debug)]
 pub struct Return<'ast, Ast: AstConfig> {
-    pub id: ArgOrVar<'ast, Ast>,
+    pub id: Id<'ast, Ast>,
 }

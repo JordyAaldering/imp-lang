@@ -1,4 +1,4 @@
-use super::{ArgOrVar, AstConfig, Avis, LocalDef, ScopeBlock, Stmt};
+use super::{Id, AstConfig, Avis, LocalDef, ScopeBlock, Stmt};
 
 #[derive(Clone, Debug)]
 pub struct Fundef<'ast, Ast: AstConfig> {
@@ -9,24 +9,22 @@ pub struct Fundef<'ast, Ast: AstConfig> {
 }
 
 impl<'ast, Ast: AstConfig> Fundef<'ast, Ast> {
-    /// Get the Avis for an ArgOrVar (for internal use only).
-    #[inline]
-    fn avis_of(&self, key: ArgOrVar<'ast, Ast>) -> &'ast Avis<Ast> {
+    fn avis_of(&self, key: Id<'ast, Ast>) -> &'ast Avis<Ast> {
         match key {
-            ArgOrVar::Arg(i) => self.args[i],
-            ArgOrVar::Var(v) => v,
+            Id::Arg(i) => self.args[i],
+            Id::Var(v) => v,
         }
     }
 
-    pub fn nameof(&self, k: ArgOrVar<'ast, Ast>) -> &str {
+    pub fn nameof(&self, k: Id<'ast, Ast>) -> &str {
         &self.avis_of(k).name
     }
 
-    pub fn typof(&self, k: ArgOrVar<'ast, Ast>) -> &Ast::ValueType {
+    pub fn typof(&self, k: Id<'ast, Ast>) -> &Ast::ValueType {
         &self.avis_of(k).ty
     }
 
-    pub fn ret_id(&self) -> ArgOrVar<'ast, Ast> {
+    pub fn ret_id(&self) -> Id<'ast, Ast> {
         for stmt in self.body.iter().rev() {
             if let Stmt::Return(ret) = *stmt {
                 return ret.id;
@@ -36,10 +34,10 @@ impl<'ast, Ast: AstConfig> Fundef<'ast, Ast> {
         panic!("fundef body must end in a return statement")
     }
 
-    pub fn arg_index(&self, key: ArgOrVar<'ast, Ast>) -> Option<usize> {
+    pub fn arg_index(&self, key: Id<'ast, Ast>) -> Option<usize> {
         match key {
-            ArgOrVar::Arg(i) => Some(i),
-            ArgOrVar::Var(_) => None,
+            Id::Arg(i) => Some(i),
+            Id::Var(_) => None,
         }
     }
 
@@ -57,10 +55,7 @@ impl<'ast, Ast: AstConfig> Fundef<'ast, Ast> {
     }
 }
 
-pub fn find_local_in_scopes<'ast, Ast: AstConfig>(
-    scopes: &[ScopeBlock<'ast, Ast>],
-    key: &'ast Avis<Ast>,
-) -> Option<LocalDef<'ast, Ast>> {
+pub fn find_local_in_scopes<'ast, Ast: AstConfig>(scopes: &[ScopeBlock<'ast, Ast>], key: &'ast Avis<Ast>) -> Option<LocalDef<'ast, Ast>> {
     for scope in scopes.iter().rev() {
         for stmt in scope.iter().rev() {
             let avis = stmt.avis();

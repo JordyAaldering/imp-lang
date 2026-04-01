@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{ast::*, traverse::AstPass};
+use crate::{ast::*, traverse::Traverse};
 
 /// Type inference pass: transforms UntypedAst to TypedAst.
 ///
@@ -45,15 +45,15 @@ impl<'ast> TypeInfer<'ast> {
     }
 
     /// Get the type of an SSA value (must be TypedAst after pass_id).
-    fn type_of(&self, id: ArgOrVar<'ast, TypedAst>) -> Type {
+    fn type_of(&self, id: Id<'ast, TypedAst>) -> Type {
         match id {
-            ArgOrVar::Arg(i) => self.args[i].ty.clone().unwrap(),
-            ArgOrVar::Var(v) => v.ty.clone(),
+            Id::Arg(i) => self.args[i].ty.clone().unwrap(),
+            Id::Var(v) => v.ty.clone(),
         }
     }
 }
 
-impl<'ast> AstPass<'ast> for TypeInfer<'ast> {
+impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
     type InAst = UntypedAst;
     type OutAst = TypedAst;
 
@@ -65,7 +65,7 @@ impl<'ast> AstPass<'ast> for TypeInfer<'ast> {
         self.idmap.clear();
         self.new_ids.clear();
 
-        let ret = self.pass_id(fundef.ret_id());
+        let ret = self.trav_id(fundef.ret_id());
 
         let new_args = self.args.iter().map(|arg| {
             self.alloc_avis(arg.name.clone(), arg.ty.clone().unwrap())
@@ -101,7 +101,7 @@ impl<'ast> AstPass<'ast> for TypeInfer<'ast> {
 
     fn pass_assign(&mut self, assign: Assign<'ast, Self::InAst>) -> Assign<'ast, Self::OutAst> {
         let before_len = self.new_ssa.last().map_or(0, |ssa| ssa.len());
-        let _ = self.pass_id(ArgOrVar::Var(assign.avis));
+        let _ = self.trav_id(Id::Var(assign.avis));
         let ssa = self.new_ssa.last().expect("missing output scope in type inference");
         assert!(ssa.len() > before_len, "statement conversion did not emit output");
         let last = *ssa.last().expect("missing emitted statement");
@@ -112,7 +112,7 @@ impl<'ast> AstPass<'ast> for TypeInfer<'ast> {
     }
 
     fn pass_return(&mut self, ret: Return<'ast, Self::InAst>) -> Return<'ast, Self::OutAst> {
-        Return { id: self.pass_id(ret.id) }
+        Return { id: self.trav_id(ret.id) }
     }
 
     fn pass_scope_entry(&mut self, entry: ScopeEntry<'ast, Self::InAst>) -> ScopeEntry<'ast, Self::OutAst> {
@@ -124,30 +124,30 @@ impl<'ast> AstPass<'ast> for TypeInfer<'ast> {
                     expr: assign.expr,
                 }
             }
-            ScopeEntry::IndexRange { avis, .. } => {
+            ScopeEntry::IndexRange { iv: avis, .. } => {
                 let before_len = self.new_ssa.last().map_or(0, |ssa| ssa.len());
-                let _ = self.pass_id(ArgOrVar::Var(avis));
+                let _ = self.trav_id(Id::Var(avis));
                 let ssa = self.new_ssa.last().expect("missing output scope in type inference");
                 assert!(ssa.len() > before_len, "scope entry conversion did not emit output");
                 match *ssa.last().expect("missing emitted scope entry") {
-                    ScopeEntry::IndexRange { avis, lb, ub } => ScopeEntry::IndexRange { avis, lb, ub },
+                    ScopeEntry::IndexRange { iv: avis, lb, ub } => ScopeEntry::IndexRange { iv: avis, lb, ub },
                     ScopeEntry::Assign { .. } => panic!("expected index range scope entry"),
                 }
             }
         }
     }
 
-    fn pass_id(&mut self, id: ArgOrVar<'ast, Self::InAst>) -> ArgOrVar<'ast, Self::OutAst> {
+    fn trav_id(&mut self, id: Id<'ast, Self::InAst>) -> Id<'ast, Self::OutAst> {
         match id {
-            ArgOrVar::Arg(i) => ArgOrVar::Arg(i),
-            ArgOrVar::Var(old) => {
+            Id::Arg(i) => Id::Arg(i),
+            Id::Var(old) => {
                 if let Some(new_id) = self.idmap.get(&(old as *const _)) {
-                    return ArgOrVar::Var(*new_id);
+                    return Id::Var(*new_id);
                 }
 
                 match self.find_local_def(old) {
                     LocalDef::Assign(old_expr) => {
-                        let new_expr = self.pass_expr(old_expr.clone());
+                        let new_expr = self.trav_expr(old_expr.clone());
                         let new_ty = self.type_of_expr(&new_expr);
 
                         let new_id = self.alloc_avis(old.name.clone(), new_ty);
@@ -160,56 +160,56 @@ impl<'ast> AstPass<'ast> for TypeInfer<'ast> {
                             expr: expr_ref,
                         });
 
-                        ArgOrVar::Var(new_id)
+                        Id::Var(new_id)
                     }
                     LocalDef::IndexRange { lb, ub } => {
-                        let lb = self.pass_id(lb);
-                        let ub = self.pass_id(ub);
+                        let lb = self.trav_id(lb);
+                        let ub = self.trav_id(ub);
 
                         let new_id = self.alloc_avis(old.name.clone(), Type::scalar(BaseType::U32));
                         self.idmap.insert(old as *const _, new_id);
                         self.new_ids.push(new_id);
                         self.new_ssa.last_mut().unwrap().push(ScopeEntry::IndexRange {
-                            avis: new_id,
+                            iv: new_id,
                             lb,
                             ub,
                         });
 
-                        ArgOrVar::Var(new_id)
+                        Id::Var(new_id)
                     }
                 }
             }
         }
     }
 
-    fn pass_expr(&mut self, expr: Expr<'ast, Self::InAst>) -> Expr<'ast, Self::OutAst> {
+    fn trav_expr(&mut self, expr: Expr<'ast, Self::InAst>) -> Expr<'ast, Self::OutAst> {
         use Expr::*;
         match expr {
-            Tensor(n) => Tensor(self.pass_tensor(n)),
-            Binary(n) => Binary(self.pass_binary(n)),
-            Unary(n) => Unary(self.pass_unary(n)),
-            Bool(n) => Bool(self.pass_bool(n)),
-            U32(n) => U32(self.pass_u32(n)),
+            Tensor(n) => Tensor(self.trav_tensor(n)),
+            Binary(n) => Binary(self.trav_binary(n)),
+            Unary(n) => Unary(self.trav_unary(n)),
+            Bool(n) => Bool(self.trav_bool(n)),
+            U32(n) => U32(self.trav_u32(n)),
         }
     }
 
-    fn pass_tensor(&mut self, tensor: Tensor<'ast, Self::InAst>) -> Tensor<'ast, Self::OutAst> {
+    fn trav_tensor(&mut self, tensor: Tensor<'ast, Self::InAst>) -> Tensor<'ast, Self::OutAst> {
         self.scopes.push(tensor.scope_block());
         self.new_ssa.push(Vec::new());
 
-        let lb = self.pass_id(tensor.lb);
-        let ub = self.pass_id(tensor.ub);
+        let lb = self.trav_id(tensor.lb);
+        let ub = self.trav_id(tensor.ub);
 
         let iv_new = self.alloc_avis(tensor.iv.name.clone(), Type::scalar(BaseType::U32));
         self.idmap.insert(tensor.iv as *const _, iv_new);
         self.new_ids.push(iv_new);
         self.new_ssa.last_mut().unwrap().push(ScopeEntry::IndexRange {
-            avis: iv_new,
+            iv: iv_new,
             lb,
             ub,
         });
 
-        let ret = self.pass_id(tensor.ret);
+        let ret = self.trav_id(tensor.ret);
 
         self.scopes.pop().unwrap();
         let body = self
@@ -226,23 +226,23 @@ impl<'ast> AstPass<'ast> for TypeInfer<'ast> {
         Tensor { iv: iv_new, lb, ub, ret, body }
     }
 
-    fn pass_binary(&mut self, binary: Binary<'ast, Self::InAst>) -> Binary<'ast, Self::OutAst> {
-        let l = self.pass_id(binary.l);
-        let r = self.pass_id(binary.r);
+    fn trav_binary(&mut self, binary: Binary<'ast, Self::InAst>) -> Binary<'ast, Self::OutAst> {
+        let l = self.trav_id(binary.l);
+        let r = self.trav_id(binary.r);
 
         Binary { l, r, op: binary.op }
     }
 
-    fn pass_unary(&mut self, unary: Unary<'ast, Self::InAst>) -> Unary<'ast, Self::OutAst> {
-        let r = self.pass_id(unary.r);
+    fn trav_unary(&mut self, unary: Unary<'ast, Self::InAst>) -> Unary<'ast, Self::OutAst> {
+        let r = self.trav_id(unary.r);
         Unary { r, op: unary.op }
     }
 
-    fn pass_bool(&mut self, value: bool) -> bool {
+    fn trav_bool(&mut self, value: bool) -> bool {
         value
     }
 
-    fn pass_u32(&mut self, value: u32) -> u32 {
+    fn trav_u32(&mut self, value: u32) -> u32 {
         value
     }
 }

@@ -1,4 +1,4 @@
-use crate::{ast::*, traverse::AstVisit};
+use crate::{ast::*, traverse::Visit};
 
 /// Pretty-print an AST back to source code.
 ///
@@ -29,10 +29,10 @@ impl<'ast, Ast: AstConfig> Show<'ast, Ast> {
         self.output
     }
 
-    fn name_of(&self, id: ArgOrVar<'ast, Ast>) -> String {
+    fn name_of(&self, id: Id<'ast, Ast>) -> String {
         match id {
-            ArgOrVar::Arg(i) => self.args[i].name.clone(),
-            ArgOrVar::Var(v) => v.name.clone(),
+            Id::Arg(i) => self.args[i].name.clone(),
+            Id::Var(v) => v.name.clone(),
         }
     }
 
@@ -85,7 +85,7 @@ impl<'ast, Ast: AstConfig> Show<'ast, Ast> {
     }
 }
 
-impl<'ast, Ast: AstConfig + 'ast> AstVisit<'ast> for Show<'ast, Ast> {
+impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
     type Ast = Ast;
 
     fn pass_program(&mut self, program: Program<'ast, Ast>) -> Program<'ast, Ast> {
@@ -142,5 +142,4 @@ impl<'ast, Ast: AstConfig + 'ast> AstVisit<'ast> for Show<'ast, Ast> {
         self.output.push_str("}");
         fundef
     }
-
 }

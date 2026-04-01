@@ -1,6 +1,6 @@
 use std::{collections::HashSet, mem};
 
-use crate::{ast::*, traverse::AstVisit};
+use crate::{ast::*, traverse::Visit};
 
 /// C code generation pass using AstPass traversal.
 ///
@@ -46,7 +46,7 @@ impl CodegenContext {
 
     fn expr_for<'ast>(
         &mut self,
-        id: ArgOrVar<'ast, TypedAst>,
+        id: Id<'ast, TypedAst>,
         fundef: &Fundef<'ast, TypedAst>,
         extra_scopes: &[ScopeBlock<'ast, TypedAst>],
     ) -> String {
@@ -120,7 +120,7 @@ impl CodegenContext {
     }
 }
 
-impl<'ast> AstVisit<'ast> for CodegenContext {
+impl<'ast> Visit<'ast> for CodegenContext {
     type Ast = TypedAst;
 
     fn pass_program(&mut self, program: Program<'ast, TypedAst>) -> Program<'ast, TypedAst> {

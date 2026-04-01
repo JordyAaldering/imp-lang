@@ -1,36 +1,33 @@
 use std::fmt;
 
-use super::{ArgOrVar, AstConfig};
+use super::{Id, AstConfig};
 
 #[derive(Clone, Debug)]
 pub struct Binary<'ast, Ast: AstConfig> {
-    pub l: ArgOrVar<'ast, Ast>,
-    pub r: ArgOrVar<'ast, Ast>,
+    pub l: Id<'ast, Ast>,
+    pub r: Id<'ast, Ast>,
     pub op: Bop,
 }
 
 #[derive(Clone, Copy, Debug)]
 pub enum Bop {
-    // Arithmetic
-    Add, Sub, Mul, Div,
-    // Comparison
-    Eq, Ne, Lt, Le, Gt, Ge,
+    Add, Sub, Mul, Div, Eq, Ne, Lt, Le, Gt, Ge,
 }
 
 impl fmt::Display for Bop {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use Bop::*;
-        write!(f, "{}", match self {
-            Add => "+",
-            Sub => "-",
-            Mul => "*",
-            Div => "/",
-            Eq => "==",
-            Ne => "!=",
-            Lt => "<",
-            Le => "<=",
-            Gt => ">",
-            Ge => ">=",
-        })
+        match self {
+            Add => write!(f, "+"),
+            Sub => write!(f, "-"),
+            Mul => write!(f, "*"),
+            Div => write!(f, "/"),
+            Eq => write!(f, "=="),
+            Ne => write!(f, "!="),
+            Lt => write!(f, "<"),
+            Le => write!(f, "<="),
+            Gt => write!(f, ">"),
+            Ge => write!(f, ">="),
+        }
     }
 }
