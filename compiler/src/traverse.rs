@@ -28,7 +28,7 @@ pub trait AstPass<'ast> {
 
     type SsaOut = ArgOrVar<'ast, Self::OutAst>;
 
-    fn pass_ssa(&mut self, id: ArgOrVar<'ast, Self::InAst>) -> Self::SsaOut;
+    fn pass_id(&mut self, id: ArgOrVar<'ast, Self::InAst>) -> Self::SsaOut;
 
     type ExprOut = Expr<'ast, Self::OutAst>;
 
@@ -74,10 +74,6 @@ pub trait AstVisit<'ast> {
         fundef
     }
 
-    fn pass_ssa(&mut self, id: ArgOrVar<'ast, Self::Ast>) -> ArgOrVar<'ast, Self::Ast> {
-        id
-    }
-
     fn pass_expr(&mut self, expr: Expr<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
         expr
     }
@@ -94,6 +90,10 @@ pub trait AstVisit<'ast> {
         unary
     }
 
+    fn pass_id(&mut self, id: ArgOrVar<'ast, Self::Ast>) -> ArgOrVar<'ast, Self::Ast> {
+        id
+    }
+
     fn pass_bool(&mut self, value: bool) -> bool {
         value
     }
@@ -108,6 +108,7 @@ where
     T: AstVisit<'ast>,
 {
     type InAst = T::Ast;
+
     type OutAst = T::Ast;
 
     fn pass_program(&mut self, program: Program<'ast, Self::InAst>) -> Program<'ast, Self::OutAst> {
@@ -116,10 +117,6 @@ where
 
     fn pass_fundef(&mut self, fundef: Fundef<'ast, Self::InAst>) -> Fundef<'ast, Self::OutAst> {
         AstVisit::pass_fundef(self, fundef)
-    }
-
-    fn pass_ssa(&mut self, id: ArgOrVar<'ast, Self::InAst>) -> Self::SsaOut {
-        AstVisit::pass_ssa(self, id)
     }
 
     fn pass_expr(&mut self, expr: Expr<'ast, Self::InAst>) -> Self::ExprOut {
@@ -136,6 +133,10 @@ where
 
     fn pass_unary(&mut self, unary: Unary<'ast, Self::InAst>) -> Self::UnaryOut {
         AstVisit::pass_unary(self, unary)
+    }
+
+    fn pass_id(&mut self, id: ArgOrVar<'ast, Self::InAst>) -> Self::SsaOut {
+        AstVisit::pass_id(self, id)
     }
 
     fn pass_bool(&mut self, value: bool) -> Self::BoolOut {

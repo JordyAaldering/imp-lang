@@ -44,7 +44,7 @@ impl<'ast> TypeInfer<'ast> {
         find_local_in_scopes(&self.scopes, key).expect("missing local definition in type inference")
     }
 
-    /// Get the type of an SSA value (must be TypedAst after pass_ssa).
+    /// Get the type of an SSA value (must be TypedAst after pass_id).
     fn type_of(&self, id: ArgOrVar<'ast, TypedAst>) -> Type {
         match id {
             ArgOrVar::Arg(i) => self.args[i].ty.clone().unwrap(),
@@ -64,7 +64,7 @@ impl<'ast> AstPass<'ast> for TypeInfer<'ast> {
         self.idmap.clear();
         self.new_ids.clear();
 
-        let ret = self.pass_ssa(fundef.ret_id());
+        let ret = self.pass_id(fundef.ret_id());
 
         let new_args = self.args.iter().map(|arg| {
             self.alloc_avis(arg.name.clone(), arg.ty.clone().unwrap())
@@ -82,7 +82,7 @@ impl<'ast> AstPass<'ast> for TypeInfer<'ast> {
         }
     }
 
-    fn pass_ssa(&mut self, id: ArgOrVar<'ast, Self::InAst>) -> ArgOrVar<'ast, Self::OutAst> {
+    fn pass_id(&mut self, id: ArgOrVar<'ast, Self::InAst>) -> ArgOrVar<'ast, Self::OutAst> {
         match id {
             ArgOrVar::Arg(i) => ArgOrVar::Arg(i),
             ArgOrVar::Var(old) => {
@@ -108,8 +108,8 @@ impl<'ast> AstPass<'ast> for TypeInfer<'ast> {
                         ArgOrVar::Var(new_id)
                     }
                     LocalDef::IndexRange { lb, ub } => {
-                        let lb = self.pass_ssa(lb);
-                        let ub = self.pass_ssa(ub);
+                        let lb = self.pass_id(lb);
+                        let ub = self.pass_id(ub);
 
                         let new_id = self.alloc_avis(old.name.clone(), Type::scalar(BaseType::U32));
                         self.idmap.insert(old as *const _, new_id);
@@ -142,8 +142,8 @@ impl<'ast> AstPass<'ast> for TypeInfer<'ast> {
         self.scopes.push(tensor.ssa.clone());
         self.new_ssa.push(Vec::new());
 
-        let lb = self.pass_ssa(tensor.lb);
-        let ub = self.pass_ssa(tensor.ub);
+        let lb = self.pass_id(tensor.lb);
+        let ub = self.pass_id(tensor.ub);
 
         let iv_new = self.alloc_avis(tensor.iv.name.clone(), Type::scalar(BaseType::U32));
         self.idmap.insert(tensor.iv as *const _, iv_new);
@@ -154,7 +154,7 @@ impl<'ast> AstPass<'ast> for TypeInfer<'ast> {
             ub,
         });
 
-        let ret = self.pass_ssa(tensor.ret);
+        let ret = self.pass_id(tensor.ret);
 
         self.scopes.pop().unwrap();
         let ssa = self.new_ssa.pop().unwrap();
@@ -163,14 +163,14 @@ impl<'ast> AstPass<'ast> for TypeInfer<'ast> {
     }
 
     fn pass_binary(&mut self, binary: Binary<'ast, Self::InAst>) -> Binary<'ast, Self::OutAst> {
-        let l = self.pass_ssa(binary.l);
-        let r = self.pass_ssa(binary.r);
+        let l = self.pass_id(binary.l);
+        let r = self.pass_id(binary.r);
 
         Binary { l, r, op: binary.op }
     }
 
     fn pass_unary(&mut self, unary: Unary<'ast, Self::InAst>) -> Unary<'ast, Self::OutAst> {
-        let r = self.pass_ssa(unary.r);
+        let r = self.pass_id(unary.r);
         Unary { r, op: unary.op }
     }
 
