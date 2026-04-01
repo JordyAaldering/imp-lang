@@ -1,8 +1,8 @@
 use crate::{ast::{self, ArgOrVar, Avis, TypedAst}, compile::compile_ast::*};
 
 pub struct UndoSsa<'ast> {
-    args: Vec<&'ast Avis<'ast, TypedAst>>,
-    scopes: Vec<Vec<(&'ast ast::Avis<'ast, TypedAst>, &'ast ast::Expr<'ast, TypedAst>)>>,
+    args: Vec<&'ast Avis<TypedAst>>,
+    scopes: Vec<ast::SsaBlock<'ast, TypedAst>>,
 }
 
 impl<'ast> UndoSsa<'ast> {
@@ -10,18 +10,18 @@ impl<'ast> UndoSsa<'ast> {
         Self { args: Vec::new(), scopes: Vec::new() }
     }
 
-    fn find(&self, key: ArgOrVar<'ast, TypedAst>) -> &'ast Avis<'ast, TypedAst> {
+    fn find(&self, key: ArgOrVar<'ast, TypedAst>) -> &'ast Avis<TypedAst> {
         match key {
             ArgOrVar::Arg(i) => self.args[i],
-            ArgOrVar::Var(v) | ArgOrVar::Iv(v) => v,
+            ArgOrVar::Var(v) => v,
         }
     }
 
-    fn find_ssa(&self, key: &'ast ast::Avis<'ast, TypedAst>) -> &'ast ast::Expr<'ast, TypedAst> {
+    fn find_local_def(&self, key: &'ast ast::Avis<TypedAst>) -> ast::LocalDef<'ast, TypedAst> {
         for scope in self.scopes.iter().rev() {
-            for (id, expr) in scope.iter().rev() {
-                if std::ptr::eq(*id, key) {
-                    return *expr;
+            for entry in scope.iter().rev() {
+                if std::ptr::eq(entry.avis(), key) {
+                    return entry.def();
                 }
             }
         }
@@ -62,30 +62,34 @@ impl<'ast> UndoSsa<'ast> {
         match id {
             ArgOrVar::Arg(i) => Expr::Identifier(fundef.args[i].name.clone()),
             ArgOrVar::Var(k) => {
-                match self.find_ssa(k).clone() {
-                    ast::Expr::Tensor(ast::Tensor { iv, lb, ub, ret, ssa }) => {
-                        self.scopes.push(ssa.clone());
-                        let iv = iv.name.clone();
-                        let expr = self.inline_expr(ret, fundef);
-                        let lb = self.inline_expr(lb, fundef);
-                        let ub = self.inline_expr(ub, fundef);
-                        self.scopes.pop().unwrap();
-                        Expr::Tensor { iv, expr: Box::new(expr), lb: Box::new(lb), ub: Box::new(ub) }
+                match self.find_local_def(k) {
+                    ast::LocalDef::Assign(expr) => {
+                        match expr.clone() {
+                            ast::Expr::Tensor(ast::Tensor { iv, lb, ub, ret, ssa }) => {
+                                self.scopes.push(ssa.clone());
+                                let iv = iv.name.clone();
+                                let expr = self.inline_expr(ret, fundef);
+                                let lb = self.inline_expr(lb, fundef);
+                                let ub = self.inline_expr(ub, fundef);
+                                self.scopes.pop().unwrap();
+                                Expr::Tensor { iv, expr: Box::new(expr), lb: Box::new(lb), ub: Box::new(ub) }
+                            }
+                            ast::Expr::Binary(ast::Binary { l, r, op }) => {
+                                let l = self.inline_expr(l, fundef);
+                                let r = self.inline_expr(r, fundef);
+                                Expr::Binary { l: Box::new(l), r: Box::new(r), op }
+                            }
+                            ast::Expr::Unary(ast::Unary { r, op }) => {
+                                let r = self.inline_expr(r, fundef);
+                                Expr::Unary { r: Box::new(r), op }
+                            }
+                            ast::Expr::Bool(v) => Expr::Bool(v),
+                            ast::Expr::U32(v) => Expr::U32(v),
+                        }
                     }
-                    ast::Expr::Binary(ast::Binary { l, r, op }) => {
-                        let l = self.inline_expr(l, fundef);
-                        let r = self.inline_expr(r, fundef);
-                        Expr::Binary { l: Box::new(l), r: Box::new(r), op }
-                    }
-                    ast::Expr::Unary(ast::Unary { r, op }) => {
-                        let r = self.inline_expr(r, fundef);
-                        Expr::Unary { r: Box::new(r), op }
-                    }
-                    ast::Expr::Bool(v) => Expr::Bool(v),
-                    ast::Expr::U32(v) => Expr::U32(v),
+                    ast::LocalDef::IndexRange { .. } => Expr::Identifier(k.name.clone()),
                 }
             }
-            ArgOrVar::Iv(k) => Expr::Identifier(k.name.clone()),
         }
     }
 }

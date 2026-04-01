@@ -1,4 +1,4 @@
-use super::{AstConfig, ArgOrVar, Avis, Expr};
+use super::{AstConfig, ArgOrVar, Avis, SsaBlock};
 
 /// ```
 /// { iv + 1 | 0 <= iv < 3;
@@ -32,8 +32,9 @@ use super::{AstConfig, ArgOrVar, Avis, Expr};
 /// we might have to look through a number of scopes.
 #[derive(Clone, Debug)]
 pub struct Tensor<'ast, Ast: AstConfig> {
-    pub ssa: Vec<(&'ast Avis<'ast, Ast>, &'ast Expr<'ast, Ast>)>,
-    pub iv: &'ast Avis<'ast, Ast>,
+    /// Scope entries visible inside the tensor body, including the index range binding.
+    pub ssa: SsaBlock<'ast, Ast>,
+    pub iv: &'ast Avis<Ast>,
     pub lb: ArgOrVar<'ast, Ast>,
     pub ub: ArgOrVar<'ast, Ast>,
     pub ret: ArgOrVar<'ast, Ast>,

@@ -1,4 +1,4 @@
-use std::{collections::HashMap, marker::PhantomData};
+use std::collections::HashMap;
 
 use crate::{ast::*, scanparse::parse_ast};
 
@@ -11,8 +11,8 @@ pub fn convert_to_ssa<'ast>(program: parse_ast::Program) -> Program<'ast, Untype
 
 pub struct ConvertToSsa<'ast> {
     uid: usize,
-    ids: Vec<&'ast Avis<'ast, UntypedAst>>,
-    scopes: Vec<Vec<(&'ast Avis<'ast, UntypedAst>, &'ast Expr<'ast, UntypedAst>)>>,
+    ids: Vec<&'ast Avis<UntypedAst>>,
+    scopes: Vec<SsaBlock<'ast, UntypedAst>>,
     name_to_id: Vec<HashMap<String, ArgOrVar<'ast, UntypedAst>>>,
 }
 
@@ -26,8 +26,8 @@ impl<'ast> ConvertToSsa<'ast> {
         }
     }
 
-    fn alloc_avis(&self, name: String, ty: MaybeType) -> &'ast Avis<'ast, UntypedAst> {
-        Box::leak(Box::new(Avis { name, ty, _marker: PhantomData }))
+    fn alloc_avis(&self, name: String, ty: MaybeType) -> &'ast Avis<UntypedAst> {
+        Box::leak(Box::new(Avis { name, ty }))
     }
 
     fn alloc_expr(&self, expr: Expr<'ast, UntypedAst>) -> &'ast Expr<'ast, UntypedAst> {
@@ -89,10 +89,14 @@ impl<'ast> ConvertToSsa<'ast> {
                 self.ids.push(iv_avis);
 
                 let mut scope = HashMap::new();
-                scope.insert(iv, ArgOrVar::Iv(iv_avis));
+                scope.insert(iv, ArgOrVar::Var(iv_avis));
 
                 self.name_to_id.push(scope);
-                self.scopes.push(Vec::new());
+                self.scopes.push(vec![ScopeEntry::Index {
+                    avis: iv_avis,
+                    lb,
+                    ub,
+                }]);
                 let ret = self.convert_expr(*expr);
                 let ssa = self.scopes.pop().unwrap();
                 self.name_to_id.pop().unwrap();
@@ -124,7 +128,10 @@ impl<'ast> ConvertToSsa<'ast> {
         let avis = self.alloc_avis(name, MaybeType(None));
         self.ids.push(avis);
         let expr_ref = self.alloc_expr(built);
-        self.scopes.last_mut().unwrap().push((avis, expr_ref));
+        self.scopes.last_mut().unwrap().push(ScopeEntry::Assign {
+            avis,
+            expr: expr_ref,
+        });
         ArgOrVar::Var(avis)
     }
 }

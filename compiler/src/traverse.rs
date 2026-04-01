@@ -74,7 +74,7 @@ pub trait Traverse<'ast, Ast: AstConfig> {
         Self::DEFAULT
     }
 
-    fn trav_arg(&mut self, _arg: &mut &'ast Avis<'ast, Ast>) -> Self::Output {
+    fn trav_arg(&mut self, _arg: &mut &'ast Avis<Ast>) -> Self::Output {
         Self::DEFAULT
     }
 
@@ -104,7 +104,7 @@ pub trait Traverse<'ast, Ast: AstConfig> {
     }
 
     fn trav_binary(&mut self, binary: &mut Binary<'ast, Ast>) -> Self::Output {
-        self.trav_ssa(&mut binary.r);
+        self.trav_ssa(&mut binary.l);
         self.trav_ssa(&mut binary.r);
         Self::DEFAULT
     }
