@@ -13,7 +13,7 @@ fn main() {
     println!("{}", show::show(&ast));
 
     let mut codegen = compile::codegen_c::CodegenContext::new();
-    let (_, ast) = codegen.pass_program(ast).unwrap();
+    let ast = codegen.pass_program(ast);
     print!("{}", codegen.output);
 
     let ast = undo_ssa::UndoSsa::new().trav_program(&ast);

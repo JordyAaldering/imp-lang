@@ -1,5 +1,6 @@
 mod program;
 mod fundef;
+mod stmt;
 mod expr;
 mod tensor;
 mod binary;
@@ -9,6 +10,7 @@ mod typ;
 
 pub use program::*;
 pub use fundef::*;
+pub use stmt::*;
 pub use expr::*;
 pub use tensor::*;
 pub use binary::*;
