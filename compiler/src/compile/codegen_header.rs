@@ -1,5 +1,3 @@
-use std::convert::Infallible;
-
 use crate::{ast::*, traverse::AstPass};
 
 pub struct CompileHeader {
@@ -21,21 +19,20 @@ impl CompileHeader {
 impl<'ast> AstPass<'ast> for CompileHeader {
     type InAst = TypedAst;
     type OutAst = TypedAst;
-    type Ok = ();
-    type Err = Infallible;
+    type ExprOk = ();
 
-    fn pass_program(&mut self, program: Program<'ast, TypedAst>) -> Result<(Self::Ok, Program<'ast, TypedAst>), Self::Err> {
+    fn pass_program(&mut self, program: Program<'ast, TypedAst>) -> Program<'ast, TypedAst> {
         self.output.clear();
         let mut fundefs = Vec::with_capacity(program.fundefs.len());
         for fundef in program.fundefs {
-            let (_, fundef) = self.pass_fundef(fundef)?;
+            let fundef = self.pass_fundef(fundef);
             fundefs.push(fundef);
         }
 
-        Ok(((), Program { fundefs }))
+        Program { fundefs }
     }
 
-    fn pass_fundef(&mut self, fundef: Fundef<'ast, TypedAst>) -> Result<(Self::Ok, Fundef<'ast, TypedAst>), Self::Err> {
+    fn pass_fundef(&mut self, fundef: Fundef<'ast, TypedAst>) -> Fundef<'ast, TypedAst> {
         let mut res = String::new();
 
         let ret_type = to_rusttype(fundef.typof(fundef.ret));
@@ -58,31 +55,35 @@ impl<'ast> AstPass<'ast> for CompileHeader {
         res.push_str("}\n");
 
         self.output.push_str(&res);
-        Ok(((), fundef))
+        fundef
     }
 
-    fn pass_ssa(&mut self, id: ArgOrVar<'ast, TypedAst>) -> Result<(Self::Ok, ArgOrVar<'ast, TypedAst>), Self::Err> {
-        Ok(((), id))
+    fn pass_expr(&mut self, expr: Expr<'ast, Self::InAst>) -> (Self::ExprOk, Self::ExprOut) {
+        ((), expr)
     }
 
-    fn pass_tensor(&mut self, tensor: Tensor<'ast, TypedAst>) -> Result<(Self::Ok, Tensor<'ast, TypedAst>), Self::Err> {
-        Ok(((), tensor))
+    fn pass_ssa(&mut self, id: ArgOrVar<'ast, TypedAst>) -> (Self::ExprOk, ArgOrVar<'ast, TypedAst>) {
+        ((), id)
     }
 
-    fn pass_binary(&mut self, binary: Binary<'ast, TypedAst>) -> Result<(Self::Ok, Binary<'ast, TypedAst>), Self::Err> {
-        Ok(((), binary))
+    fn pass_tensor(&mut self, tensor: Tensor<'ast, TypedAst>) -> (Self::ExprOk, Tensor<'ast, TypedAst>) {
+        ((), tensor)
     }
 
-    fn pass_unary(&mut self, unary: Unary<'ast, TypedAst>) -> Result<(Self::Ok, Unary<'ast, TypedAst>), Self::Err> {
-        Ok(((), unary))
+    fn pass_binary(&mut self, binary: Binary<'ast, TypedAst>) -> (Self::ExprOk, Binary<'ast, TypedAst>) {
+        ((), binary)
     }
 
-    fn pass_bool(&mut self, value: bool) -> Result<(Self::Ok, bool), Self::Err> {
-        Ok(((), value))
+    fn pass_unary(&mut self, unary: Unary<'ast, TypedAst>) -> (Self::ExprOk, Unary<'ast, TypedAst>) {
+        ((), unary)
     }
 
-    fn pass_u32(&mut self, value: u32) -> Result<(Self::Ok, u32), Self::Err> {
-        Ok(((), value))
+    fn pass_bool(&mut self, value: bool) -> (Self::ExprOk, bool) {
+        ((), value)
+    }
+
+    fn pass_u32(&mut self, value: u32) -> (Self::ExprOk, u32) {
+        ((), value)
     }
 }
 
