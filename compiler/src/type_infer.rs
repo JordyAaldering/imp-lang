@@ -7,7 +7,7 @@ use crate::{ast::*, traverse::Traverse};
 /// Walks the AST computing types for all expressions, variables, and function returns.
 /// Creates new Avis entries for each SSA binding with properly inferred types.
 pub fn type_infer<'ast>(program: Program<'ast, UntypedAst>) -> Result<Program<'ast, TypedAst>, InferenceError> {
-    Ok(TypeInfer::new().pass_program(program))
+    Ok(TypeInfer::new().trav_program(program))
 }
 
 pub struct TypeInfer<'ast> {
@@ -57,7 +57,7 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
     type InAst = UntypedAst;
     type OutAst = TypedAst;
 
-    fn pass_fundef(&mut self, fundef: Fundef<'ast, Self::InAst>) -> Fundef<'ast, Self::OutAst> {
+    fn trav_fundef(&mut self, fundef: Fundef<'ast, Self::InAst>) -> Fundef<'ast, Self::OutAst> {
         self.args = fundef.args.clone();
         let fundef_scope = fundef.scope_block();
         self.scopes.push(fundef_scope);
@@ -87,19 +87,23 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
         Fundef {
             name: fundef.name,
             args: new_args,
-            ids: self.new_ids.clone(),
+            decls: self.new_ids.clone(),
             body,
         }
     }
 
-    fn pass_stmt(&mut self, stmt: Stmt<'ast, Self::InAst>) -> Stmt<'ast, Self::OutAst> {
+    fn trav_farg(&mut self, arg: &'ast Avis<Self::InAst>) -> &'ast Avis<Self::OutAst> {
+        self.alloc_avis(arg.name.clone(), arg.ty.clone().unwrap())
+    }
+
+    fn trav_stmt(&mut self, stmt: Stmt<'ast, Self::InAst>) -> Stmt<'ast, Self::OutAst> {
         match stmt {
-            Stmt::Assign(assign) => Stmt::Assign(self.pass_assign(assign)),
-            Stmt::Return(ret) => Stmt::Return(self.pass_return(ret)),
+            Stmt::Assign(assign) => Stmt::Assign(self.trav_assign(assign)),
+            Stmt::Return(ret) => Stmt::Return(self.trav_return(ret)),
         }
     }
 
-    fn pass_assign(&mut self, assign: Assign<'ast, Self::InAst>) -> Assign<'ast, Self::OutAst> {
+    fn trav_assign(&mut self, assign: Assign<'ast, Self::InAst>) -> Assign<'ast, Self::OutAst> {
         let before_len = self.new_ssa.last().map_or(0, |ssa| ssa.len());
         let _ = self.trav_id(Id::Var(assign.avis));
         let ssa = self.new_ssa.last().expect("missing output scope in type inference");
@@ -111,30 +115,8 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
         }
     }
 
-    fn pass_return(&mut self, ret: Return<'ast, Self::InAst>) -> Return<'ast, Self::OutAst> {
+    fn trav_return(&mut self, ret: Return<'ast, Self::InAst>) -> Return<'ast, Self::OutAst> {
         Return { id: self.trav_id(ret.id) }
-    }
-
-    fn pass_scope_entry(&mut self, entry: ScopeEntry<'ast, Self::InAst>) -> ScopeEntry<'ast, Self::OutAst> {
-        match entry {
-            ScopeEntry::Assign { avis, expr } => {
-                let assign = self.pass_assign(Assign { avis, expr });
-                ScopeEntry::Assign {
-                    avis: assign.avis,
-                    expr: assign.expr,
-                }
-            }
-            ScopeEntry::IndexRange { iv: avis, .. } => {
-                let before_len = self.new_ssa.last().map_or(0, |ssa| ssa.len());
-                let _ = self.trav_id(Id::Var(avis));
-                let ssa = self.new_ssa.last().expect("missing output scope in type inference");
-                assert!(ssa.len() > before_len, "scope entry conversion did not emit output");
-                match *ssa.last().expect("missing emitted scope entry") {
-                    ScopeEntry::IndexRange { iv: avis, lb, ub } => ScopeEntry::IndexRange { iv: avis, lb, ub },
-                    ScopeEntry::Assign { .. } => panic!("expected index range scope entry"),
-                }
-            }
-        }
     }
 
     fn trav_id(&mut self, id: Id<'ast, Self::InAst>) -> Id<'ast, Self::OutAst> {
@@ -245,6 +227,26 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
     fn trav_u32(&mut self, value: u32) -> u32 {
         value
     }
+
+    type StmtOut = Stmt<'ast, Self::OutAst>;
+
+    type AssignOut = Assign<'ast, Self::OutAst>;
+
+    type ReturnOut = Return<'ast, Self::OutAst>;
+
+    type ExprOut = Expr<'ast, Self::OutAst>;
+
+    type TensorOut = Tensor<'ast, Self::OutAst>;
+
+    type BinaryOut = Binary<'ast, Self::OutAst>;
+
+    type UnaryOut = Unary<'ast, Self::OutAst>;
+
+    type IdOut = Id<'ast, Self::OutAst>;
+
+    type BoolOut = bool;
+
+    type U32Out = u32;
 }
 
 impl<'ast> TypeInfer<'ast> {

@@ -25,18 +25,18 @@ impl CompileHeader {
 impl<'ast> Visit<'ast> for CompileHeader {
     type Ast = TypedAst;
 
-    fn pass_program(&mut self, program: Program<'ast, TypedAst>) -> Program<'ast, TypedAst> {
+    fn visit_program(&mut self, program: Program<'ast, TypedAst>) -> Program<'ast, TypedAst> {
         self.output.clear();
         let mut fundefs = Vec::with_capacity(program.fundefs.len());
         for fundef in program.fundefs {
-            let fundef = self.pass_fundef(fundef);
+            let fundef = self.visit_fundef(fundef);
             fundefs.push(fundef);
         }
 
         Program { fundefs }
     }
 
-    fn pass_fundef(&mut self, fundef: Fundef<'ast, TypedAst>) -> Fundef<'ast, TypedAst> {
+    fn visit_fundef(&mut self, fundef: Fundef<'ast, TypedAst>) -> Fundef<'ast, TypedAst> {
         let mut res = String::new();
 
         let ret_type = to_rusttype(fundef.typof(fundef.ret_id()));

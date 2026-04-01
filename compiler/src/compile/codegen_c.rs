@@ -123,7 +123,7 @@ impl CodegenContext {
 impl<'ast> Visit<'ast> for CodegenContext {
     type Ast = TypedAst;
 
-    fn pass_program(&mut self, program: Program<'ast, TypedAst>) -> Program<'ast, TypedAst> {
+    fn visit_program(&mut self, program: Program<'ast, TypedAst>) -> Program<'ast, TypedAst> {
         self.output.clear();
         let mut out = String::new();
         out.push_str("#include <stdlib.h>\n");
@@ -132,7 +132,7 @@ impl<'ast> Visit<'ast> for CodegenContext {
 
         let mut fundefs = Vec::with_capacity(program.fundefs.len());
         for fundef in program.fundefs {
-            let fundef = self.pass_fundef(fundef);
+            let fundef = self.visit_fundef(fundef);
             out.push('\n');
             fundefs.push(fundef);
         }
@@ -141,7 +141,7 @@ impl<'ast> Visit<'ast> for CodegenContext {
         Program { fundefs }
     }
 
-    fn pass_fundef(&mut self, fundef: Fundef<'ast, TypedAst>) -> Fundef<'ast, TypedAst> {
+    fn visit_fundef(&mut self, fundef: Fundef<'ast, TypedAst>) -> Fundef<'ast, TypedAst> {
         let mut res = String::new();
         self.emitted.clear();
         let args: Vec<String> = fundef.args.iter().map(|avis| format!("{} {}", to_ctype(&avis.ty), avis.name)).collect();

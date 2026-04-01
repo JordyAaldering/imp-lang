@@ -49,7 +49,7 @@ pub fn compile(src: &str) -> Program<'static, TypedAst> {
 /// Runs the Rust header codegen pass, generating safe wrappers and unsafe FFI bindings.
 pub fn emit_header(ast: &mut Program<'static, TypedAst>, outfile: &str) {
     let mut cg = compile::codegen_header::CompileHeader::new();
-    let _ = cg.pass_program(ast.clone());
+    let _ = cg.trav_program(ast.clone());
     std::fs::write(outfile, cg.finish()).unwrap();
 }
 
@@ -58,6 +58,6 @@ pub fn emit_header(ast: &mut Program<'static, TypedAst>, outfile: &str) {
 /// Runs the C codegen pass, generating compilable C99 code.
 pub fn emit_c(ast: &mut Program<'static, TypedAst>, outfile: &str) {
     let mut cg = compile::codegen_c::CodegenContext::new();
-    let _ = cg.pass_program(ast.clone());
+    let _ = cg.trav_program(ast.clone());
     std::fs::write(outfile, cg.finish()).unwrap();
 }

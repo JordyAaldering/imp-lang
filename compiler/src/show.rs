@@ -6,7 +6,7 @@ use crate::{ast::*, traverse::Visit};
 /// (UntypedAst, TypedAst, etc.) and outputs formatted code.
 pub fn show<'ast, Ast: AstConfig>(program: &Program<'ast, Ast>) -> String {
     let mut shower = Show::<'ast, Ast>::new();
-    shower.pass_program(program.clone());
+    shower.visit_program(program.clone());
     shower.finish()
 }
 
@@ -88,10 +88,10 @@ impl<'ast, Ast: AstConfig> Show<'ast, Ast> {
 impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
     type Ast = Ast;
 
-    fn pass_program(&mut self, program: Program<'ast, Ast>) -> Program<'ast, Ast> {
+    fn visit_program(&mut self, program: Program<'ast, Ast>) -> Program<'ast, Ast> {
         let mut fundefs = Vec::with_capacity(program.fundefs.len());
         for fundef in program.fundefs {
-            let fundef = self.pass_fundef(fundef);
+            let fundef = self.visit_fundef(fundef);
             if !self.output.is_empty() {
                 self.output.push_str("\n\n");
             }
@@ -101,7 +101,7 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
         Program { fundefs }
     }
 
-    fn pass_fundef(&mut self, fundef: Fundef<'ast, Ast>) -> Fundef<'ast, Ast> {
+    fn visit_fundef(&mut self, fundef: Fundef<'ast, Ast>) -> Fundef<'ast, Ast> {
         self.args = fundef.args.clone();
 
         let args_str = fundef
@@ -120,7 +120,7 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
                 fundef.typof(ret_id)
             ));
 
-        for id in &fundef.ids {
+        for id in &fundef.decls {
             self.output
                 .push_str(&format!("    {} {};\n", id.ty, id.name));
         }
