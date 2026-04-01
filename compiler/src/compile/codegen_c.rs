@@ -50,14 +50,14 @@ impl CodegenContext {
         match expr {
             Expr::Tensor(Tensor { iv, lb, ub, ret, ssa }) => {
                 let mut forloop = String::new();
-                let mut scope = fundef.ssa.clone();
+                let mut scope = fundef.body.clone();
                 scope.extend(ssa.iter().copied());
+                scope.push(Stmt::Return { id: *ret });
                 let tensor_fundef = Fundef {
                     name: fundef.name.clone(),
                     args: fundef.args.clone(),
                     ids: fundef.ids.clone(),
-                    ssa: scope,
-                    ret: *ret,
+                    body: scope,
                 };
 
                 let ty = to_ctype(tensor_fundef.typof(*ret));
@@ -124,10 +124,11 @@ impl<'ast> AstPass<'ast> for CodegenContext {
         let mut res = String::new();
         self.emitted.clear();
         let args: Vec<String> = fundef.args.iter().map(|avis| format!("{} {}", to_ctype(&avis.ty), avis.name)).collect();
-        let ret_type = fundef.typof(fundef.ret);
+        let ret = fundef.ret_id();
+        let ret_type = fundef.typof(ret);
         res.push_str(&format!("{} DSL_{}({}) {{\n", to_ctype(ret_type), fundef.name, args.join(", ")));
 
-        let ret_code = self.expr_for(fundef.ret, &fundef);
+        let ret_code = self.expr_for(ret, &fundef);
 
         let mut stmts = Vec::new();
         mem::swap(&mut stmts, &mut self.stmts);

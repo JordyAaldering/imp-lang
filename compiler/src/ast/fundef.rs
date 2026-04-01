@@ -10,7 +10,7 @@ pub enum LocalDef<'ast, Ast: AstConfig> {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub enum ScopeEntry<'ast, Ast: AstConfig> {
+pub enum Stmt<'ast, Ast: AstConfig> {
     Assign {
         avis: &'ast Avis<Ast>,
         expr: &'ast Expr<'ast, Ast>,
@@ -20,69 +20,54 @@ pub enum ScopeEntry<'ast, Ast: AstConfig> {
         lb: ArgOrVar<'ast, Ast>,
         ub: ArgOrVar<'ast, Ast>,
     },
+    Return {
+        id: ArgOrVar<'ast, Ast>,
+    },
 }
 
-impl<'ast, Ast: AstConfig> ScopeEntry<'ast, Ast> {
-    pub fn avis(self) -> &'ast Avis<Ast> {
+impl<'ast, Ast: AstConfig> Stmt<'ast, Ast> {
+    pub fn avis(self) -> Option<&'ast Avis<Ast>> {
         match self {
-            Self::Assign { avis, .. } | Self::Index { avis, .. } => avis,
+            Self::Assign { avis, .. } | Self::Index { avis, .. } => Some(avis),
+            Self::Return { .. } => None,
         }
     }
 
-    pub fn def(self) -> LocalDef<'ast, Ast> {
+    pub fn def(self) -> Option<LocalDef<'ast, Ast>> {
         match self {
-            Self::Assign { expr, .. } => LocalDef::Assign(expr),
-            Self::Index { lb, ub, .. } => LocalDef::IndexRange { lb, ub },
+            Self::Assign { expr, .. } => Some(LocalDef::Assign(expr)),
+            Self::Index { lb, ub, .. } => Some(LocalDef::IndexRange { lb, ub }),
+            Self::Return { .. } => None,
         }
     }
 }
 
-pub type SsaBlock<'ast, Ast> = Vec<ScopeEntry<'ast, Ast>>;
+pub type SsaBlock<'ast, Ast> = Vec<Stmt<'ast, Ast>>;
 
 pub fn find_local_in_scopes<'ast, Ast: AstConfig>(
     scopes: &[SsaBlock<'ast, Ast>],
     key: &'ast Avis<Ast>,
 ) -> Option<LocalDef<'ast, Ast>> {
     for scope in scopes.iter().rev() {
-        for entry in scope.iter().rev() {
-            if std::ptr::eq(entry.avis(), key) {
-                return Some(entry.def());
+        for stmt in scope.iter().rev() {
+            let Some(avis) = stmt.avis() else {
+                continue;
+            };
+
+            if std::ptr::eq(avis, key) {
+                return stmt.def();
             }
         }
     }
     None
 }
 
-/// Maybe the whole thing is just overkill, and we should instead just use a refcell tree
-/// structure to store the ast, which also allows us to lookup parent nodes.
-/// https://github.com/0xSaksham/tree_data_structure
-/// The main issue is likely in modifying parent nodes, but
-///   we should never modify parent nodes, only ourselves
-///   the only exception is maybe to adjust their declaration may (which is scope-local),
-///   but maybe that should still be done by the fundef after the fact, by storing changes in the
-///   knapsack.
-///
-///   traversals should then always return a new node (possibly unchanged)
-///   to force (eg) fundefs to adjust their map of declarations
-///
-/// But how to link from this declarations map to the corresponding nodes?
-/// Can the reference be used as a key?
 #[derive(Clone, Debug)]
 pub struct Fundef<'ast, Ast: AstConfig> {
-    /// User-defined function name
     pub name: String,
-    /// Function arguments
     pub args: Vec<&'ast Avis<Ast>>,
-    /// Local identifiers
     pub ids: Vec<&'ast Avis<Ast>>,
-    /// arena containing a mapping of variable keys to their ssa assignment expressions
-    /// two options for multi-return:
-    ///  1) also keep track of return index here
-    ///  2) add tuple types, and insert extraction functions, then there is always only one lhs
-    /// I am leaning towards option 1
-    pub ssa: SsaBlock<'ast, Ast>,
-    /// Key of the return value
-    pub ret: ArgOrVar<'ast, Ast>,
+    pub body: SsaBlock<'ast, Ast>,
 }
 
 impl<'ast, Ast: AstConfig> Fundef<'ast, Ast> {
@@ -99,6 +84,16 @@ impl<'ast, Ast: AstConfig> Fundef<'ast, Ast> {
 
     pub fn typof(&self, k: ArgOrVar<'ast, Ast>) -> &Ast::ValueType {
         &self.avis_of(k).ty
+    }
+
+    pub fn ret_id(&self) -> ArgOrVar<'ast, Ast> {
+        for stmt in self.body.iter().rev() {
+            if let Stmt::Return { id } = *stmt {
+                return id;
+            }
+        }
+
+        panic!("fundef body must end in a return statement")
     }
 
     pub fn arg_index(&self, key: ArgOrVar<'ast, Ast>) -> Option<usize> {
@@ -119,6 +114,6 @@ impl<'ast, Ast: AstConfig> Fundef<'ast, Ast> {
     }
 
     pub fn find_local_def(&self, key: &'ast Avis<Ast>) -> Option<LocalDef<'ast, Ast>> {
-        find_local_in_scopes(std::slice::from_ref(&self.ssa), key)
+        find_local_in_scopes(std::slice::from_ref(&self.body), key)
     }
 }

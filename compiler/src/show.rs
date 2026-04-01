@@ -7,19 +7,23 @@ pub fn show<'ast, Ast: AstConfig>(program: &Program<'ast, Ast>) -> String {
 fn show_fundef<'ast, Ast: AstConfig>(fundef: &Fundef<'ast, Ast>) -> String {
     let mut out = String::new();
     let args = fundef.args.iter().map(|arg| format!("{} {}", arg.ty, arg.name)).collect::<Vec<_>>().join(", ");
-    out.push_str(&format!("fn {}({}) -> {} {{\n", fundef.name, args, fundef.typof(fundef.ret)));
+    out.push_str(&format!("fn {}({}) -> {} {{\n", fundef.name, args, fundef.typof(fundef.ret_id())));
 
     for id in &fundef.ids {
         out.push_str(&format!("    {} {};\n", id.ty, id.name));
     }
 
-    for entry in &fundef.ssa {
-        if let ScopeEntry::Assign { avis, expr } = entry {
-            out.push_str(&format!("    {} = {};\n", avis.name, show_expr(expr, 1, &fundef.args)));
+    for stmt in &fundef.body {
+        match stmt {
+            Stmt::Assign { avis, expr } => {
+                out.push_str(&format!("    {} = {};\n", avis.name, show_expr(expr, 1, &fundef.args)));
+            }
+            Stmt::Return { id } => {
+                out.push_str(&format!("    return {};\n", fundef.nameof(*id)));
+            }
+            Stmt::Index { .. } => {}
         }
     }
-
-    out.push_str(&format!("    return {};\n", fundef.nameof(fundef.ret)));
     out.push_str("}");
     out
 }
@@ -30,8 +34,8 @@ fn show_expr<'ast, Ast: AstConfig>(expr: &Expr<'ast, Ast>, level: usize, args: &
             let mut out = String::new();
             let indent = " ".repeat(4 * level);
             out.push_str("{\n");
-            for entry in &t.ssa {
-                if let ScopeEntry::Assign { avis, expr } = entry {
+            for stmt in &t.ssa {
+                if let Stmt::Assign { avis, expr } = stmt {
                     out.push_str(&format!("{}{} = {};\n", indent, avis.name, show_expr(expr, level + 1, args)));
                 }
             }

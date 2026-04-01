@@ -74,26 +74,26 @@ impl<'ast> AstPass<'ast> for TypeInfer<'ast> {
 
     fn pass_fundef(&mut self, fundef: Fundef<'ast, Self::InAst>) -> Fundef<'ast, Self::OutAst> {
         self.args = fundef.args.clone();
-        self.scopes.push(fundef.ssa.clone());
+        self.scopes.push(fundef.body.clone());
         self.new_ssa.push(Vec::new());
         self.idmap.clear();
         self.new_ids.clear();
 
-        let (_, ret) = self.pass_ssa(fundef.ret);
+        let (_, ret) = self.pass_ssa(fundef.ret_id());
 
         let new_args = self.args.iter().map(|arg| {
             self.alloc_avis(arg.name.clone(), arg.ty.clone().unwrap())
         }).collect::<Vec<_>>();
 
         self.scopes.pop().unwrap();
-        let ssa = self.new_ssa.pop().unwrap();
+        let mut body = self.new_ssa.pop().unwrap();
+        body.push(Stmt::Return { id: ret });
 
         Fundef {
             name: fundef.name,
             args: new_args,
             ids: self.new_ids.clone(),
-            ssa,
-            ret,
+            body,
         }
     }
 
@@ -117,7 +117,7 @@ impl<'ast> AstPass<'ast> for TypeInfer<'ast> {
                         self.new_ids.push(new_id);
 
                         let expr_ref = self.alloc_expr(new_expr);
-                        self.new_ssa.last_mut().unwrap().push(ScopeEntry::Assign {
+                        self.new_ssa.last_mut().unwrap().push(Stmt::Assign {
                             avis: new_id,
                             expr: expr_ref,
                         });
@@ -131,7 +131,7 @@ impl<'ast> AstPass<'ast> for TypeInfer<'ast> {
                         let new_id = self.alloc_avis(old.name.clone(), Type::scalar(BaseType::U32));
                         self.idmap.insert(old as *const _, new_id);
                         self.new_ids.push(new_id);
-                        self.new_ssa.last_mut().unwrap().push(ScopeEntry::Index {
+                        self.new_ssa.last_mut().unwrap().push(Stmt::Index {
                             avis: new_id,
                             lb,
                             ub,
@@ -154,7 +154,7 @@ impl<'ast> AstPass<'ast> for TypeInfer<'ast> {
         let iv_new = self.alloc_avis(tensor.iv.name.clone(), Type::scalar(BaseType::U32));
         self.idmap.insert(tensor.iv as *const _, iv_new);
         self.new_ids.push(iv_new);
-        self.new_ssa.last_mut().unwrap().push(ScopeEntry::Index {
+        self.new_ssa.last_mut().unwrap().push(Stmt::Index {
             avis: iv_new,
             lb,
             ub,
