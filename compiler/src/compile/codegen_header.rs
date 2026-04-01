@@ -40,7 +40,7 @@ impl<'ast> Traverse<'ast, TypedAst> for CompileHeader {
         res
     }
 
-    fn trav_arg(&mut self, arg: &mut &'ast Avis<'ast, TypedAst>) -> Self::Output {
+    fn trav_arg(&mut self, arg: &mut &'ast Avis<TypedAst>) -> Self::Output {
         format!("{}: {}", arg.name, to_rusttype(&arg.ty))
     }
 }

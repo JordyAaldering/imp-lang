@@ -1,4 +1,4 @@
-use std::{collections::HashMap, marker::PhantomData};
+use std::collections::HashMap;
 
 use crate::{ast::*, traverse::Rewriter};
 
@@ -14,11 +14,11 @@ pub fn type_infer<'ast>(program: Program<'ast, UntypedAst>) -> Result<Program<'a
 }
 
 pub struct TypeInfer<'ast> {
-    args: Vec<&'ast Avis<'ast, UntypedAst>>,
-    scopes: Vec<Vec<(&'ast Avis<'ast, UntypedAst>, &'ast Expr<'ast, UntypedAst>)>>,
-    idmap: HashMap<*const Avis<'ast, UntypedAst>, &'ast Avis<'ast, TypedAst>>,
-    new_ids: Vec<&'ast Avis<'ast, TypedAst>>,
-    new_ssa: Vec<Vec<(&'ast Avis<'ast, TypedAst>, &'ast Expr<'ast, TypedAst>)>>,
+    args: Vec<&'ast Avis<UntypedAst>>,
+    scopes: Vec<SsaBlock<'ast, UntypedAst>>,
+    idmap: HashMap<*const Avis<UntypedAst>, &'ast Avis<TypedAst>>,
+    new_ids: Vec<&'ast Avis<TypedAst>>,
+    new_ssa: Vec<SsaBlock<'ast, TypedAst>>,
 }
 
 #[derive(Debug)]
@@ -35,19 +35,19 @@ impl<'ast> TypeInfer<'ast> {
         }
     }
 
-    fn alloc_avis(&self, name: String, ty: Type) -> &'ast Avis<'ast, TypedAst> {
-        Box::leak(Box::new(Avis { name, ty, _marker: PhantomData }))
+    fn alloc_avis(&self, name: String, ty: Type) -> &'ast Avis<TypedAst> {
+        Box::leak(Box::new(Avis { name, ty }))
     }
 
     fn alloc_expr(&self, expr: Expr<'ast, TypedAst>) -> &'ast Expr<'ast, TypedAst> {
         Box::leak(Box::new(expr))
     }
 
-    fn find_ssa(&self, key: &'ast Avis<'ast, UntypedAst>) -> &'ast Expr<'ast, UntypedAst> {
+    fn find_local_def(&self, key: &'ast Avis<UntypedAst>) -> LocalDef<'ast, UntypedAst> {
         for scope in self.scopes.iter().rev() {
-            for (id, expr) in scope.iter().rev() {
-                if std::ptr::eq(*id, key) {
-                    return *expr;
+            for entry in scope.iter().rev() {
+                if std::ptr::eq(entry.avis(), key) {
+                    return entry.def();
                 }
             }
         }
@@ -97,22 +97,38 @@ impl<'ast> Rewriter<'ast> for TypeInfer<'ast> {
                     return Ok((new_id.ty.clone(), ArgOrVar::Var(*new_id)));
                 }
 
-                let old_expr = self.find_ssa(old).clone();
-                let (new_ty, new_expr) = self.trav_expr(old_expr)?;
+                match self.find_local_def(old) {
+                    LocalDef::Assign(old_expr) => {
+                        let (new_ty, new_expr) = self.trav_expr(old_expr.clone())?;
 
-                let new_id = self.alloc_avis(old.name.clone(), new_ty.clone());
-                self.idmap.insert(old as *const _, new_id);
-                self.new_ids.push(new_id);
+                        let new_id = self.alloc_avis(old.name.clone(), new_ty.clone());
+                        self.idmap.insert(old as *const _, new_id);
+                        self.new_ids.push(new_id);
 
-                let expr_ref = self.alloc_expr(new_expr);
-                self.new_ssa.last_mut().unwrap().push((new_id, expr_ref));
+                        let expr_ref = self.alloc_expr(new_expr);
+                        self.new_ssa.last_mut().unwrap().push(ScopeEntry::Assign {
+                            avis: new_id,
+                            expr: expr_ref,
+                        });
 
-                Ok((new_ty, ArgOrVar::Var(new_id)))
-            }
-            ArgOrVar::Iv(old) => {
-                let ty = Type::scalar(BaseType::U32);
-                let mapped = *self.idmap.get(&(old as *const _)).unwrap();
-                Ok((ty, ArgOrVar::Iv(mapped)))
+                        Ok((new_ty, ArgOrVar::Var(new_id)))
+                    }
+                    LocalDef::IndexRange { lb, ub } => {
+                        let (_, lb) = self.trav_ssa(lb)?;
+                        let (_, ub) = self.trav_ssa(ub)?;
+
+                        let new_id = self.alloc_avis(old.name.clone(), Type::scalar(BaseType::U32));
+                        self.idmap.insert(old as *const _, new_id);
+                        self.new_ids.push(new_id);
+                        self.new_ssa.last_mut().unwrap().push(ScopeEntry::Index {
+                            avis: new_id,
+                            lb,
+                            ub,
+                        });
+
+                        Ok((Type::scalar(BaseType::U32), ArgOrVar::Var(new_id)))
+                    }
+                }
             }
         }
     }
@@ -127,6 +143,11 @@ impl<'ast> Rewriter<'ast> for TypeInfer<'ast> {
         let iv_new = self.alloc_avis(tensor.iv.name.clone(), Type::scalar(BaseType::U32));
         self.idmap.insert(tensor.iv as *const _, iv_new);
         self.new_ids.push(iv_new);
+        self.new_ssa.last_mut().unwrap().push(ScopeEntry::Index {
+            avis: iv_new,
+            lb,
+            ub,
+        });
 
         let (ret_ty, ret) = self.trav_ssa(tensor.ret)?;
         let shp = if let Shape::Scalar = ret_ty.shp { "." } else { "*" };

@@ -13,8 +13,10 @@ fn show_fundef<'ast, Ast: AstConfig>(fundef: &Fundef<'ast, Ast>) -> String {
         out.push_str(&format!("    {} {};\n", id.ty, id.name));
     }
 
-    for (lhs, rhs) in &fundef.ssa {
-        out.push_str(&format!("    {} = {};\n", lhs.name, show_expr(rhs, 1, &fundef.args)));
+    for entry in &fundef.ssa {
+        if let ScopeEntry::Assign { avis, expr } = entry {
+            out.push_str(&format!("    {} = {};\n", avis.name, show_expr(expr, 1, &fundef.args)));
+        }
     }
 
     out.push_str(&format!("    return {};\n", fundef.nameof(fundef.ret)));
@@ -22,14 +24,16 @@ fn show_fundef<'ast, Ast: AstConfig>(fundef: &Fundef<'ast, Ast>) -> String {
     out
 }
 
-fn show_expr<'ast, Ast: AstConfig>(expr: &Expr<'ast, Ast>, level: usize, args: &[&'ast Avis<'ast, Ast>]) -> String {
+fn show_expr<'ast, Ast: AstConfig>(expr: &Expr<'ast, Ast>, level: usize, args: &[&'ast Avis<Ast>]) -> String {
     match expr {
         Expr::Tensor(t) => {
             let mut out = String::new();
             let indent = " ".repeat(4 * level);
             out.push_str("{\n");
-            for (lhs, rhs) in &t.ssa {
-                out.push_str(&format!("{}{} = {};\n", indent, lhs.name, show_expr(rhs, level + 1, args)));
+            for entry in &t.ssa {
+                if let ScopeEntry::Assign { avis, expr } = entry {
+                    out.push_str(&format!("{}{} = {};\n", indent, avis.name, show_expr(expr, level + 1, args)));
+                }
             }
             out.push_str(&format!("{}return {};\n", indent, name_of(t.ret, args)));
             out.push_str(&format!("{}| {} <= {} < {} }}", indent, name_of(t.lb, args), t.iv.name, name_of(t.ub, args)));
@@ -42,9 +46,9 @@ fn show_expr<'ast, Ast: AstConfig>(expr: &Expr<'ast, Ast>, level: usize, args: &
     }
 }
 
-fn name_of<'ast, Ast: AstConfig>(id: ArgOrVar<'ast, Ast>, args: &[&'ast Avis<'ast, Ast>]) -> String {
+fn name_of<'ast, Ast: AstConfig>(id: ArgOrVar<'ast, Ast>, args: &[&'ast Avis<Ast>]) -> String {
     match id {
         ArgOrVar::Arg(i) => args[i].name.clone(),
-        ArgOrVar::Var(v) | ArgOrVar::Iv(v) => v.name.clone(),
+        ArgOrVar::Var(v) => v.name.clone(),
     }
 }

@@ -1,5 +1,44 @@
 use super::{ArgOrVar, AstConfig, Avis, Expr};
 
+#[derive(Clone, Copy, Debug)]
+pub enum LocalDef<'ast, Ast: AstConfig> {
+    Assign(&'ast Expr<'ast, Ast>),
+    IndexRange {
+        lb: ArgOrVar<'ast, Ast>,
+        ub: ArgOrVar<'ast, Ast>,
+    },
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum ScopeEntry<'ast, Ast: AstConfig> {
+    Assign {
+        avis: &'ast Avis<Ast>,
+        expr: &'ast Expr<'ast, Ast>,
+    },
+    Index {
+        avis: &'ast Avis<Ast>,
+        lb: ArgOrVar<'ast, Ast>,
+        ub: ArgOrVar<'ast, Ast>,
+    },
+}
+
+impl<'ast, Ast: AstConfig> ScopeEntry<'ast, Ast> {
+    pub fn avis(self) -> &'ast Avis<Ast> {
+        match self {
+            Self::Assign { avis, .. } | Self::Index { avis, .. } => avis,
+        }
+    }
+
+    pub fn def(self) -> LocalDef<'ast, Ast> {
+        match self {
+            Self::Assign { expr, .. } => LocalDef::Assign(expr),
+            Self::Index { lb, ub, .. } => LocalDef::IndexRange { lb, ub },
+        }
+    }
+}
+
+pub type SsaBlock<'ast, Ast> = Vec<ScopeEntry<'ast, Ast>>;
+
 /// Maybe the whole thing is just overkill, and we should instead just use a refcell tree
 /// structure to store the ast, which also allows us to lookup parent nodes.
 /// https://github.com/0xSaksham/tree_data_structure
@@ -19,37 +58,59 @@ pub struct Fundef<'ast, Ast: AstConfig> {
     /// User-defined function name
     pub name: String,
     /// Function arguments
-    pub args: Vec<&'ast Avis<'ast, Ast>>,
+    pub args: Vec<&'ast Avis<Ast>>,
     /// Local identifiers
-    pub ids: Vec<&'ast Avis<'ast, Ast>>,
+    pub ids: Vec<&'ast Avis<Ast>>,
     /// arena containing a mapping of variable keys to their ssa assignment expressions
     /// two options for multi-return:
     ///  1) also keep track of return index here
     ///  2) add tuple types, and insert extraction functions, then there is always only one lhs
     /// I am leaning towards option 1
-    pub ssa: Vec<(&'ast Avis<'ast, Ast>, &'ast Expr<'ast, Ast>)>,
+    pub ssa: SsaBlock<'ast, Ast>,
     /// Key of the return value
     pub ret: ArgOrVar<'ast, Ast>,
 }
 
 impl<'ast, Ast: AstConfig> Fundef<'ast, Ast> {
-    pub fn nameof(&self, k: ArgOrVar<'ast, Ast>) -> &str {
-        match k {
-            ArgOrVar::Arg(i) => &self.args[i].name,
-            ArgOrVar::Var(v) => &v.name,
-            ArgOrVar::Iv(v) => &v.name,
+    pub fn avis_of(&self, key: ArgOrVar<'ast, Ast>) -> &'ast Avis<Ast> {
+        match key {
+            ArgOrVar::Arg(i) => self.args[i],
+            ArgOrVar::Var(v) => v,
         }
+    }
+
+    pub fn nameof(&self, k: ArgOrVar<'ast, Ast>) -> &str {
+        &self.avis_of(k).name
     }
 
     pub fn typof(&self, k: ArgOrVar<'ast, Ast>) -> &Ast::ValueType {
-        match k {
-            ArgOrVar::Arg(i) => &self.args[i].ty,
-            ArgOrVar::Var(v) => &v.ty,
-            ArgOrVar::Iv(v) => &v.ty,
+        &self.avis_of(k).ty
+    }
+
+    pub fn arg_index(&self, key: ArgOrVar<'ast, Ast>) -> Option<usize> {
+        match key {
+            ArgOrVar::Arg(i) => Some(i),
+            ArgOrVar::Var(_) => None,
         }
     }
 
-    pub fn find_ssa(&self, key: &'ast Avis<'ast, Ast>) -> Option<&'ast Expr<'ast, Ast>> {
-        self.ssa.iter().find_map(|(id, expr)| if std::ptr::eq(*id, key) { Some(*expr) } else { None })
+    pub fn find_ssa(&self, key: &'ast Avis<Ast>) -> Option<&'ast Expr<'ast, Ast>> {
+        self.find_local_def(key).and_then(|def| {
+            if let LocalDef::Assign(expr) = def {
+                Some(expr)
+            } else {
+                None
+            }
+        })
+    }
+
+    pub fn find_local_def(&self, key: &'ast Avis<Ast>) -> Option<LocalDef<'ast, Ast>> {
+        self.ssa.iter().rev().find_map(|entry| {
+            if std::ptr::eq(entry.avis(), key) {
+                Some(entry.def())
+            } else {
+                None
+            }
+        })
     }
 }
