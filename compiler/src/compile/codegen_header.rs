@@ -1,27 +1,47 @@
-use crate::{ast::*, traverse::Traverse};
+use std::convert::Infallible;
 
-pub struct CompileHeader;
+use crate::{ast::*, traverse::AstPass};
+
+pub struct CompileHeader {
+    output: String,
+}
 
 impl CompileHeader {
     pub fn new() -> Self {
-        Self
+        Self {
+            output: String::new(),
+        }
+    }
+
+    pub fn finish(self) -> String {
+        self.output
     }
 }
 
-impl<'ast> Traverse<'ast, TypedAst> for CompileHeader {
-    type Output = String;
+impl<'ast> AstPass<'ast> for CompileHeader {
+    type InAst = TypedAst;
+    type OutAst = TypedAst;
+    type Ok = ();
+    type Err = Infallible;
 
-    const DEFAULT: Self::Output = String::new();
+    fn pass_program(&mut self, program: Program<'ast, TypedAst>) -> Result<(Self::Ok, Program<'ast, TypedAst>), Self::Err> {
+        self.output.clear();
+        let mut fundefs = Vec::with_capacity(program.fundefs.len());
+        for fundef in program.fundefs {
+            let (_, fundef) = self.pass_fundef(fundef)?;
+            fundefs.push(fundef);
+        }
 
-    fn trav_fundef(&mut self, fundef: &mut Fundef<'ast, TypedAst>) -> Self::Output {
+        Ok(((), Program { fundefs }))
+    }
+
+    fn pass_fundef(&mut self, fundef: Fundef<'ast, TypedAst>) -> Result<(Self::Ok, Fundef<'ast, TypedAst>), Self::Err> {
         let mut res = String::new();
 
         let ret_type = to_rusttype(fundef.typof(fundef.ret));
 
-        let args = fundef.args.iter_mut()
-            .map(|arg| {
-                self.trav_arg(arg)
-            })
+        let args = fundef.args.iter()
+            .map(|arg| format!("{}: {}", arg.name, to_rusttype(&arg.ty)))
             .collect::<Vec<String>>()
             .join(", ");
 
@@ -37,11 +57,32 @@ impl<'ast> Traverse<'ast, TypedAst> for CompileHeader {
                             .collect::<Vec<_>>().join(", ")));
         res.push_str("}\n");
 
-        res
+        self.output.push_str(&res);
+        Ok(((), fundef))
     }
 
-    fn trav_arg(&mut self, arg: &mut &'ast Avis<TypedAst>) -> Self::Output {
-        format!("{}: {}", arg.name, to_rusttype(&arg.ty))
+    fn pass_ssa(&mut self, id: ArgOrVar<'ast, TypedAst>) -> Result<(Self::Ok, ArgOrVar<'ast, TypedAst>), Self::Err> {
+        Ok(((), id))
+    }
+
+    fn pass_tensor(&mut self, tensor: Tensor<'ast, TypedAst>) -> Result<(Self::Ok, Tensor<'ast, TypedAst>), Self::Err> {
+        Ok(((), tensor))
+    }
+
+    fn pass_binary(&mut self, binary: Binary<'ast, TypedAst>) -> Result<(Self::Ok, Binary<'ast, TypedAst>), Self::Err> {
+        Ok(((), binary))
+    }
+
+    fn pass_unary(&mut self, unary: Unary<'ast, TypedAst>) -> Result<(Self::Ok, Unary<'ast, TypedAst>), Self::Err> {
+        Ok(((), unary))
+    }
+
+    fn pass_bool(&mut self, value: bool) -> Result<(Self::Ok, bool), Self::Err> {
+        Ok(((), value))
+    }
+
+    fn pass_u32(&mut self, value: u32) -> Result<(Self::Ok, u32), Self::Err> {
+        Ok(((), value))
     }
 }
 

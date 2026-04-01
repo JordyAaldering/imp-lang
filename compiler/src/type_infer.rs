@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 
-use crate::{ast::*, traverse::Rewriter};
+use crate::{ast::*, traverse::AstPass};
 
 pub fn type_infer<'ast>(program: Program<'ast, UntypedAst>) -> Result<Program<'ast, TypedAst>, InferenceError> {
     let mut fundefs = Vec::new();
 
     for fundef in program.fundefs {
-        let (_, out) = TypeInfer::new().trav_fundef(fundef)?;
+        let (_, out) = TypeInfer::new().pass_fundef(fundef)?;
         fundefs.push(out);
     }
 
@@ -44,31 +44,24 @@ impl<'ast> TypeInfer<'ast> {
     }
 
     fn find_local_def(&self, key: &'ast Avis<UntypedAst>) -> LocalDef<'ast, UntypedAst> {
-        for scope in self.scopes.iter().rev() {
-            for entry in scope.iter().rev() {
-                if std::ptr::eq(entry.avis(), key) {
-                    return entry.def();
-                }
-            }
-        }
-        unreachable!()
+        find_local_in_scopes(&self.scopes, key).expect("missing local definition in type inference")
     }
 }
 
-impl<'ast> Rewriter<'ast> for TypeInfer<'ast> {
+impl<'ast> AstPass<'ast> for TypeInfer<'ast> {
     type InAst = UntypedAst;
     type OutAst = TypedAst;
     type Ok = Type;
     type Err = InferenceError;
 
-    fn trav_fundef(&mut self, fundef: Fundef<'ast, Self::InAst>) -> Result<(Type, Fundef<'ast, Self::OutAst>), InferenceError> {
+    fn pass_fundef(&mut self, fundef: Fundef<'ast, Self::InAst>) -> Result<(Type, Fundef<'ast, Self::OutAst>), InferenceError> {
         self.args = fundef.args.clone();
         self.scopes.push(fundef.ssa.clone());
         self.new_ssa.push(Vec::new());
         self.idmap.clear();
         self.new_ids.clear();
 
-        let (ret_ty, ret) = self.trav_ssa(fundef.ret)?;
+        let (ret_ty, ret) = self.pass_ssa(fundef.ret)?;
 
         let new_args = self.args.iter().map(|arg| {
             self.alloc_avis(arg.name.clone(), arg.ty.clone().unwrap())
@@ -86,7 +79,7 @@ impl<'ast> Rewriter<'ast> for TypeInfer<'ast> {
         }))
     }
 
-    fn trav_ssa(&mut self, id: ArgOrVar<'ast, Self::InAst>) -> Result<(Type, ArgOrVar<'ast, Self::OutAst>), InferenceError> {
+    fn pass_ssa(&mut self, id: ArgOrVar<'ast, Self::InAst>) -> Result<(Type, ArgOrVar<'ast, Self::OutAst>), InferenceError> {
         match id {
             ArgOrVar::Arg(i) => {
                 let ty = self.args[i].ty.clone().unwrap();
@@ -99,7 +92,7 @@ impl<'ast> Rewriter<'ast> for TypeInfer<'ast> {
 
                 match self.find_local_def(old) {
                     LocalDef::Assign(old_expr) => {
-                        let (new_ty, new_expr) = self.trav_expr(old_expr.clone())?;
+                        let (new_ty, new_expr) = self.pass_expr(old_expr.clone())?;
 
                         let new_id = self.alloc_avis(old.name.clone(), new_ty.clone());
                         self.idmap.insert(old as *const _, new_id);
@@ -114,8 +107,8 @@ impl<'ast> Rewriter<'ast> for TypeInfer<'ast> {
                         Ok((new_ty, ArgOrVar::Var(new_id)))
                     }
                     LocalDef::IndexRange { lb, ub } => {
-                        let (_, lb) = self.trav_ssa(lb)?;
-                        let (_, ub) = self.trav_ssa(ub)?;
+                        let (_, lb) = self.pass_ssa(lb)?;
+                        let (_, ub) = self.pass_ssa(ub)?;
 
                         let new_id = self.alloc_avis(old.name.clone(), Type::scalar(BaseType::U32));
                         self.idmap.insert(old as *const _, new_id);
@@ -133,12 +126,12 @@ impl<'ast> Rewriter<'ast> for TypeInfer<'ast> {
         }
     }
 
-    fn trav_tensor(&mut self, tensor: Tensor<'ast, Self::InAst>) -> Result<(Type, Tensor<'ast, Self::OutAst>), InferenceError> {
+    fn pass_tensor(&mut self, tensor: Tensor<'ast, Self::InAst>) -> Result<(Type, Tensor<'ast, Self::OutAst>), InferenceError> {
         self.scopes.push(tensor.ssa.clone());
         self.new_ssa.push(Vec::new());
 
-        let (_, lb) = self.trav_ssa(tensor.lb)?;
-        let (_, ub) = self.trav_ssa(tensor.ub)?;
+        let (_, lb) = self.pass_ssa(tensor.lb)?;
+        let (_, ub) = self.pass_ssa(tensor.ub)?;
 
         let iv_new = self.alloc_avis(tensor.iv.name.clone(), Type::scalar(BaseType::U32));
         self.idmap.insert(tensor.iv as *const _, iv_new);
@@ -149,7 +142,7 @@ impl<'ast> Rewriter<'ast> for TypeInfer<'ast> {
             ub,
         });
 
-        let (ret_ty, ret) = self.trav_ssa(tensor.ret)?;
+        let (ret_ty, ret) = self.pass_ssa(tensor.ret)?;
         let shp = if let Shape::Scalar = ret_ty.shp { "." } else { "*" };
         let tensor_ty = Type::vector(ret_ty.basetype, shp);
 
@@ -159,9 +152,9 @@ impl<'ast> Rewriter<'ast> for TypeInfer<'ast> {
         Ok((tensor_ty, Tensor { iv: iv_new, lb, ub, ret, ssa }))
     }
 
-    fn trav_binary(&mut self, binary: Binary<'ast, Self::InAst>) -> Result<(Type, Binary<'ast, Self::OutAst>), Self::Err> {
-        let (lty, l) = self.trav_ssa(binary.l)?;
-        let (rty, r) = self.trav_ssa(binary.r)?;
+    fn pass_binary(&mut self, binary: Binary<'ast, Self::InAst>) -> Result<(Type, Binary<'ast, Self::OutAst>), Self::Err> {
+        let (lty, l) = self.pass_ssa(binary.l)?;
+        let (rty, r) = self.pass_ssa(binary.r)?;
 
         let ty = unifies(lty, rty)?;
 
@@ -175,8 +168,8 @@ impl<'ast> Rewriter<'ast> for TypeInfer<'ast> {
         Ok((ty, Binary { l, r, op: binary.op }))
     }
 
-    fn trav_unary(&mut self, unary: Unary<'ast, Self::InAst>) -> Result<(Type, Unary<'ast, Self::OutAst>), Self::Err> {
-        let (rty, r) = self.trav_ssa(unary.r)?;
+    fn pass_unary(&mut self, unary: Unary<'ast, Self::InAst>) -> Result<(Type, Unary<'ast, Self::OutAst>), Self::Err> {
+        let (rty, r) = self.pass_ssa(unary.r)?;
 
         use Uop::*;
         let ty = match unary.op {
@@ -187,11 +180,11 @@ impl<'ast> Rewriter<'ast> for TypeInfer<'ast> {
         Ok((ty, Unary { r, op: unary.op }))
     }
 
-    fn trav_bool(&mut self, value: bool) -> Result<(Type, bool), Self::Err> {
+    fn pass_bool(&mut self, value: bool) -> Result<(Type, bool), Self::Err> {
         Ok((Type::scalar(BaseType::Bool), value))
     }
 
-    fn trav_u32(&mut self, value: u32) -> Result<(Type, u32), Self::Err> {
+    fn pass_u32(&mut self, value: u32) -> Result<(Type, u32), Self::Err> {
         Ok((Type::scalar(BaseType::U32), value))
     }
 }

@@ -1,4 +1,4 @@
-use compiler::{traverse::Traverse, *};
+use compiler::{traverse::AstPass, *};
 
 use std::{env, fs};
 
@@ -9,11 +9,13 @@ fn main() {
     println!("{}", ast);
     let ast = convert_to_ssa::convert_to_ssa(ast);
     println!("{}", show::show(&ast));
-    let mut ast = type_infer::type_infer(ast).unwrap();
+    let ast = type_infer::type_infer(ast).unwrap();
     println!("{}", show::show(&ast));
-    let c_code = compile::codegen_c::CodegenContext::new().trav_program(&mut ast);
-    print!("{}", c_code);
 
-    let undo_ssa = undo_ssa::UndoSsa::new().trav_program(&ast);
-    println!("{:?}", undo_ssa);
+    let mut codegen = compile::codegen_c::CodegenContext::new();
+    let (_, ast) = codegen.pass_program(ast).unwrap();
+    print!("{}", codegen.output);
+
+    let ast = undo_ssa::UndoSsa::new().trav_program(&ast);
+    println!("{:?}", ast);
 }

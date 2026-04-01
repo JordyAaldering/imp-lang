@@ -18,14 +18,7 @@ impl<'ast> UndoSsa<'ast> {
     }
 
     fn find_local_def(&self, key: &'ast ast::Avis<TypedAst>) -> ast::LocalDef<'ast, TypedAst> {
-        for scope in self.scopes.iter().rev() {
-            for entry in scope.iter().rev() {
-                if std::ptr::eq(entry.avis(), key) {
-                    return entry.def();
-                }
-            }
-        }
-        unreachable!()
+        ast::find_local_in_scopes(&self.scopes, key).expect("missing local definition in undo_ssa")
     }
 
     pub fn trav_program(&mut self, program: &ast::Program<'ast, TypedAst>) -> Program {

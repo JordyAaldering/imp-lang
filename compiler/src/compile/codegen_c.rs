@@ -1,10 +1,11 @@
-use std::{collections::HashSet, mem};
+use std::{collections::HashSet, convert::Infallible, mem};
 
-use crate::{ast::*, traverse::Traverse};
+use crate::{ast::*, traverse::AstPass};
 
 pub struct CodegenContext {
     emitted: HashSet<*const Avis<TypedAst>>,
     stmts: Vec<String>,
+    pub output: String,
 }
 
 impl CodegenContext {
@@ -12,7 +13,12 @@ impl CodegenContext {
         Self {
             emitted: HashSet::new(),
             stmts: Vec::new(),
+            output: String::new(),
         }
+    }
+
+    pub fn finish(self) -> String {
+        self.output
     }
 
     fn ensure_local<'ast>(&mut self, avis: &'ast Avis<TypedAst>, expr: &Expr<'ast, TypedAst>, fundef: &Fundef<'ast, TypedAst>) {
@@ -78,31 +84,38 @@ impl CodegenContext {
     }
 }
 
-impl<'ast> Traverse<'ast, TypedAst> for CodegenContext {
-    type Output = String;
-    const DEFAULT: String = String::new();
+impl<'ast> AstPass<'ast> for CodegenContext {
+    type InAst = TypedAst;
+    type OutAst = TypedAst;
+    type Ok = ();
+    type Err = Infallible;
 
-    fn trav_program(&mut self, program: &mut Program<'ast, TypedAst>) -> String {
-        let mut res = String::new();
-        res.push_str("#include <stdlib.h>\n");
-        res.push_str("#include <stdbool.h>\n");
-        res.push_str("#include <stdint.h>\n");
+    fn pass_program(&mut self, program: Program<'ast, TypedAst>) -> Result<(Self::Ok, Program<'ast, TypedAst>), Self::Err> {
+        self.output.clear();
+        let mut out = String::new();
+        out.push_str("#include <stdlib.h>\n");
+        out.push_str("#include <stdbool.h>\n");
+        out.push_str("#include <stdint.h>\n");
 
-        for fundef in &mut program.fundefs {
-            res.push('\n');
-            res.push_str(&self.trav_fundef(fundef));
+        let mut fundefs = Vec::with_capacity(program.fundefs.len());
+        for fundef in program.fundefs {
+            let (_, fundef) = self.pass_fundef(fundef)?;
+            out.push('\n');
+            fundefs.push(fundef);
         }
-        res
+
+        self.output = format!("{}{}", out, self.output);
+        Ok(((), Program { fundefs }))
     }
 
-    fn trav_fundef(&mut self, fundef: &mut Fundef<'ast, TypedAst>) -> String {
+    fn pass_fundef(&mut self, fundef: Fundef<'ast, TypedAst>) -> Result<(Self::Ok, Fundef<'ast, TypedAst>), Self::Err> {
         let mut res = String::new();
         self.emitted.clear();
         let args: Vec<String> = fundef.args.iter().map(|avis| format!("{} {}", to_ctype(&avis.ty), avis.name)).collect();
         let ret_type = fundef.typof(fundef.ret);
         res.push_str(&format!("{} DSL_{}({}) {{\n", to_ctype(ret_type), fundef.name, args.join(", ")));
 
-        let ret_code = self.expr_for(fundef.ret, fundef);
+        let ret_code = self.expr_for(fundef.ret, &fundef);
 
         let mut stmts = Vec::new();
         mem::swap(&mut stmts, &mut self.stmts);
@@ -112,7 +125,33 @@ impl<'ast> Traverse<'ast, TypedAst> for CodegenContext {
 
         res.push_str(&format!("    return {};\n", ret_code));
         res.push_str("}\n");
-        res
+
+        self.output.push_str(&res);
+        Ok(((), fundef))
+    }
+
+    fn pass_ssa(&mut self, id: ArgOrVar<'ast, TypedAst>) -> Result<(Self::Ok, ArgOrVar<'ast, TypedAst>), Self::Err> {
+        Ok(((), id))
+    }
+
+    fn pass_tensor(&mut self, tensor: Tensor<'ast, TypedAst>) -> Result<(Self::Ok, Tensor<'ast, TypedAst>), Self::Err> {
+        Ok(((), tensor))
+    }
+
+    fn pass_binary(&mut self, binary: Binary<'ast, TypedAst>) -> Result<(Self::Ok, Binary<'ast, TypedAst>), Self::Err> {
+        Ok(((), binary))
+    }
+
+    fn pass_unary(&mut self, unary: Unary<'ast, TypedAst>) -> Result<(Self::Ok, Unary<'ast, TypedAst>), Self::Err> {
+        Ok(((), unary))
+    }
+
+    fn pass_bool(&mut self, value: bool) -> Result<(Self::Ok, bool), Self::Err> {
+        Ok(((), value))
+    }
+
+    fn pass_u32(&mut self, value: u32) -> Result<(Self::Ok, u32), Self::Err> {
+        Ok(((), value))
     }
 }
 

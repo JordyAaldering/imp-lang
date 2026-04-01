@@ -17,5 +17,5 @@ fn main() {
         .file(&c_path)
         .compile("simple");
 
-    println!("cargo:rerun-if-changed=src/simple.dsl");
+    println!("cargo:rerun-if-changed=src/simple.imp");
 }
