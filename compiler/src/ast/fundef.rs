@@ -4,7 +4,7 @@ use super::{Id, AstConfig, Avis, LocalDef, ScopeBlock, Stmt};
 pub struct Fundef<'ast, Ast: AstConfig> {
     pub name: String,
     pub args: Vec<&'ast Avis<Ast>>,
-    pub decls: Vec<&'ast Avis<Ast>>,
+    pub decs: Vec<&'ast Avis<Ast>>,
     pub body: Vec<Stmt<'ast, Ast>>,
 }
 
@@ -48,7 +48,6 @@ impl<'ast, Ast: AstConfig> Fundef<'ast, Ast> {
             .collect()
     }
 
-    /// Find the definition of a local variable by searching through body scopes.
     pub fn find_local_def(&self, key: &'ast Avis<Ast>) -> Option<LocalDef<'ast, Ast>> {
         let body_scope = self.scope_block();
         find_local_in_scopes(std::slice::from_ref(&body_scope), key)

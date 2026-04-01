@@ -1,19 +1,14 @@
 use crate::{ast::*, traverse::Visit};
 
-/// Pretty-print an AST back to source code.
-///
-/// Uses AstVisit to recursively render the AST. Works on any AST variant
-/// (UntypedAst, TypedAst, etc.) and outputs formatted code.
 pub fn show<'ast, Ast: AstConfig>(program: &Program<'ast, Ast>) -> String {
-    let mut shower = Show::<'ast, Ast>::new();
-    shower.visit_program(program.clone());
-    shower.finish()
+    let mut show = Show::new();
+    show.visit_program(program.clone());
+    show.output
 }
 
 struct Show<'ast, Ast: AstConfig> {
     output: String,
     args: Vec<&'ast Avis<Ast>>,
-    _marker: std::marker::PhantomData<&'ast Ast>,
 }
 
 impl<'ast, Ast: AstConfig> Show<'ast, Ast> {
@@ -21,12 +16,7 @@ impl<'ast, Ast: AstConfig> Show<'ast, Ast> {
         Self {
             output: String::new(),
             args: Vec::new(),
-            _marker: std::marker::PhantomData,
         }
-    }
-
-    fn finish(self) -> String {
-        self.output
     }
 
     fn name_of(&self, id: Id<'ast, Ast>) -> String {
@@ -120,9 +110,8 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
                 fundef.typof(ret_id)
             ));
 
-        for id in &fundef.decls {
-            self.output
-                .push_str(&format!("    {} {};\n", id.ty, id.name));
+        for id in &fundef.decs {
+            self.output.push_str(&format!("    {} {};\n", id.ty, id.name));
         }
 
         for stmt in &fundef.body {

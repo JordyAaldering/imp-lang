@@ -77,7 +77,7 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
         Fundef {
             name: fundef.name,
             args: new_args,
-            decls: self.new_ids.clone(),
+            decs: self.new_ids.clone(),
             body,
         }
     }

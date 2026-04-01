@@ -71,7 +71,7 @@ impl<'ast> ConvertToSsa<'ast> {
         Fundef {
             name: fundef.id,
             args,
-            decls: self.ids.clone(),
+            decs: self.ids.clone(),
             body,
         }
     }
