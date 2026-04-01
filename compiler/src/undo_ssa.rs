@@ -28,18 +28,19 @@ impl<'ast> UndoSsa<'ast> {
 
     fn trav_fundef(&mut self, fundef: &ast::Fundef<'ast, TypedAst>) -> Fundef {
         self.args = fundef.args.clone();
-        self.scopes.push(fundef.ssa.clone());
+        self.scopes.push(fundef.body.clone());
 
         let args = fundef.args.iter().map(|a| (a.ty.clone(), a.name.clone())).collect();
 
+        let ret = fundef.ret_id();
         let mut body = Vec::new();
-        body.push(self.generate_assignment(fundef.ret, fundef));
-        body.push(Stmt::Return { expr: Expr::Identifier(self.find(fundef.ret).name.to_owned()) });
+        body.push(self.generate_assignment(ret, fundef));
+        body.push(Stmt::Return { expr: Expr::Identifier(self.find(ret).name.to_owned()) });
 
         self.scopes.pop().unwrap();
         Fundef {
             name: fundef.name.to_owned(),
-            ret_type: self.find(fundef.ret).ty.to_owned(),
+            ret_type: self.find(ret).ty.to_owned(),
             args,
             block: Block { stmts: body },
         }

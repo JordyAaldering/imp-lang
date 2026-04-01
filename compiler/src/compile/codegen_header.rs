@@ -35,7 +35,7 @@ impl<'ast> AstPass<'ast> for CompileHeader {
     fn pass_fundef(&mut self, fundef: Fundef<'ast, TypedAst>) -> Fundef<'ast, TypedAst> {
         let mut res = String::new();
 
-        let ret_type = to_rusttype(fundef.typof(fundef.ret));
+        let ret_type = to_rusttype(fundef.typof(fundef.ret_id()));
 
         let args = fundef.args.iter()
             .map(|arg| format!("{}: {}", arg.name, to_rusttype(&arg.ty)))

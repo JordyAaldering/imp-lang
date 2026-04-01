@@ -43,8 +43,9 @@ impl CodegenContext {
                 self.llvm_type(&avis.ty)
             }).collect();
 
+            let ret = f.ret_id();
             let fn_type = LLVMFunctionType(
-                self.llvm_type(f.typof(f.ret)),
+                self.llvm_type(f.typof(ret)),
                 arg_types.as_ptr() as *mut _,
                 arg_types.len() as u32,
                 0,
@@ -69,7 +70,7 @@ impl CodegenContext {
                 fargs.push(LLVMGetParam(function, i as u32));
             }
 
-            let ret_val = self.compile_id(f.ret, &fargs, f);
+            let ret_val = self.compile_id(ret, &fargs, f);
 
             LLVMBuildRet(self.builder, ret_val);
 
