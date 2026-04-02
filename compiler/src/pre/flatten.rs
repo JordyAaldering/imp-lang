@@ -31,7 +31,7 @@ impl<'ast> Flatten<'ast> {
         format!("_flat_{}", self.uid)
     }
 
-    fn alloc_farg(&self, name: String, ty: MaybeType) -> &'ast Farg<FlattenedAst> {
+    fn alloc_farg(&self, name: String, ty: Type) -> &'ast Farg {
         Box::leak(Box::new(Farg { name, ty }))
     }
 

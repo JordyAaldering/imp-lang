@@ -75,7 +75,7 @@ fn is_vector(ty: &Type) -> bool {
     matches!(ty.shp, Shape::Vector(_))
 }
 
-fn join_args(args: &Vec<&Farg<TypedAst>>, map_ty: fn(&Type) -> String) -> String {
+fn join_args(args: &Vec<&Farg>, map_ty: fn(&Type) -> String) -> String {
     args.iter()
         .map(|arg| format!("{}: {}", arg.name, map_ty(&arg.ty)))
         .collect::<Vec<_>>()

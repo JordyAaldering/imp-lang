@@ -7,7 +7,7 @@ pub fn type_infer<'ast>(program: Program<'ast, UntypedAst>) -> Result<Program<'a
 }
 
 pub struct TypeInfer<'ast> {
-    args: Vec<&'ast Farg<UntypedAst>>,
+    args: Vec<&'ast Farg>,
     scopes: Vec<ScopeBlock<'ast, UntypedAst>>,
     idmap: HashMap<*const Lvis<'ast, UntypedAst>, &'ast Lvis<'ast, TypedAst>>,
     new_ids: Vec<&'ast Lvis<'ast, TypedAst>>,
@@ -28,7 +28,7 @@ impl<'ast> TypeInfer<'ast> {
         }
     }
 
-    fn alloc_farg(&self, name: String, ty: Type) -> &'ast Farg<TypedAst> {
+    fn alloc_farg(&self, name: String, ty: Type) -> &'ast Farg {
         Box::leak(Box::new(Farg { name, ty }))
     }
 
@@ -87,8 +87,8 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
         }
     }
 
-    fn trav_farg(&mut self, arg: &'ast Farg<Self::InAst>) -> &'ast Farg<Self::OutAst> {
-        self.alloc_farg(arg.name.clone(), arg.ty.clone().unwrap())
+    fn trav_farg(&mut self, arg: &'ast Farg) -> &'ast Farg {
+        self.alloc_farg(arg.name.clone(), arg.ty.clone())
     }
 
     fn trav_vardec(&mut self, _: &'ast Lvis<'ast, Self::InAst>) -> &'ast Lvis<'ast, Self::OutAst> {
@@ -227,7 +227,7 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
     fn trav_id(&mut self, id: Id<'ast, Self::InAst>) -> Self::IdOut {
         match id {
             Id::Arg(i) => {
-                let ty = self.args[i].ty.clone().unwrap();
+                let ty = self.args[i].ty.clone();
                 (Id::Arg(i), ty)
             },
             Id::Var(old) => {

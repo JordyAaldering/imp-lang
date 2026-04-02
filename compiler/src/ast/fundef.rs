@@ -1,14 +1,20 @@
 use crate::ast::Type;
 
-use super::{Id, AstConfig, Farg, Lvis, LocalDef, ScopeBlock, Stmt};
+use super::{Id, AstConfig, Lvis, LocalDef, ScopeBlock, Stmt};
 
 #[derive(Clone, Debug)]
 pub struct Fundef<'ast, Ast: AstConfig> {
     pub name: String,
     pub ret_type: Type,
-    pub args: Vec<&'ast Farg<Ast>>,
+    pub args: Vec<&'ast Farg>,
     pub decs: Vec<&'ast Lvis<'ast, Ast>>,
     pub body: Vec<Stmt<'ast, Ast>>,
+}
+
+#[derive(Clone, Debug)]
+pub struct Farg {
+    pub name: String,
+    pub ty: Type,
 }
 
 impl<'ast, Ast: AstConfig> Fundef<'ast, Ast> {
@@ -16,13 +22,6 @@ impl<'ast, Ast: AstConfig> Fundef<'ast, Ast> {
         match k {
             Id::Arg(i) => self.args[*i].name.clone(),
             Id::Var(v) => Ast::var_name(v),
-        }
-    }
-
-    pub fn typof(&self, k: &Id<'ast, Ast>) -> &Ast::VarType {
-        match k {
-            Id::Arg(i) => &self.args[*i].ty,
-            Id::Var(v) => &Ast::var_lvis(v).ty,
         }
     }
 

@@ -33,7 +33,7 @@ impl<'ast> ToSsa<'ast> {
         format!("_ssa_{}", self.uid)
     }
 
-    fn alloc_farg(&self, name: String, ty: MaybeType) -> &'ast Farg<UntypedAst> {
+    fn alloc_farg(&self, name: String, ty: Type) -> &'ast Farg {
         Box::leak(Box::new(Farg { name, ty }))
     }
 

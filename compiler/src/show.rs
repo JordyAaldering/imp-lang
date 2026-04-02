@@ -7,9 +7,10 @@ pub fn show<'ast, Ast: AstConfig + 'ast>(program: &Program<'ast, Ast>) -> String
 }
 
 struct Show<'ast, Ast: AstConfig> {
-    args: Vec<&'ast Farg<Ast>>,
+    args: Vec<&'ast Farg>,
     depth: usize,
     output: String,
+    _phantom: std::marker::PhantomData<Ast>,
 }
 
 impl<'ast, Ast: AstConfig> Show<'ast, Ast> {
@@ -18,6 +19,7 @@ impl<'ast, Ast: AstConfig> Show<'ast, Ast> {
             args: Vec::new(),
             output: String::new(),
             depth: 0,
+            _phantom: std::marker::PhantomData,
         }
     }
 
@@ -60,7 +62,7 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
         self.push("}");
     }
 
-    fn visit_farg(&mut self, arg: &'ast Farg<Self::Ast>) {
+    fn visit_farg(&mut self, arg: &'ast Farg) {
         self.output.push_str(&format!("{} {}, ", arg.ty, arg.name));
     }
 
