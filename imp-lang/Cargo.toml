@@ -1,14 +1,14 @@
 [package]
-name = "compiler"
+name = "imp_lang"
 version = "0.1.0"
 edition = "2024"
 
 [lib]
-name = "compiler"
+name = "imp_lang"
 path = "src/lib.rs"
 
 [[bin]]
-name = "compile"
+name = "imp_lang"
 path = "src/bin.rs"
 
 [dependencies]

@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::Path;
 
-use compiler::*;
+use imp_lang::*;
 
 fn main() {
     let out_dir = std::env::var("OUT_DIR").unwrap();

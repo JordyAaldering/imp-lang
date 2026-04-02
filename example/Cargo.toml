@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-compiler = { path = "../compiler" }
+imp_lang = { path = "../imp-lang" }
 
 [build-dependencies]
 cc = "1.2.58"
-compiler = { path = "../compiler" }
+imp_lang = { path = "../imp-lang" }
