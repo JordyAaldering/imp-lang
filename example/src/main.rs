@@ -1,6 +1,6 @@
 include!(concat!(env!("OUT_DIR"), "/simple.rs"));
 
-use imp_core::ImpArrayu32;
+use imp_core::*;
 
 fn main() {
     println!("shouldbefolded = {}", shouldbefolded());
@@ -8,7 +8,7 @@ fn main() {
     assert_eq!(shouldbefolded(), addthem(4, 2, 3));
 
     let ub = 10;
-    let arr: ImpArrayu32 = iota(ub);
+    let arr: ImpArray<u32> = iota(ub);
     assert_eq!(arr.shp, vec![ub as usize]);
     assert_eq!(arr.data, (0..ub).collect::<Vec<u32>>());
     println!("arr.data = {:?}", arr.data);

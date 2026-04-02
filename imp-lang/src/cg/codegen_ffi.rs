@@ -58,7 +58,10 @@ impl<'ast> Visit<'ast> for CompileFfi {
                 fundef.name,
                 call_args.join(", ")
             ));
-            self.push("    unsafe { imp_core::ImpArrayu32::from_raw(__raw) }\n");
+            self.push(&format!(
+                "    unsafe {{ imp_core::ImpArray::<{}>::from_raw(__raw) }}\n",
+                rust_base_type(&fundef.ret_type)
+            ));
         } else {
             self.push(&format!(
                 "    unsafe {{ IMP_{}({}) }}\n",
@@ -83,25 +86,24 @@ fn join_args(args: &Vec<&Farg>, map_ty: fn(&Type) -> String) -> String {
 }
 
 fn rust_api_type(ty: &Type) -> String {
-    let base = match ty.ty {
-        BaseType::U32 => "u32",
-        BaseType::Bool => "bool",
-    };
+    let base = rust_base_type(ty);
 
     match ty.shp {
         Shape::Scalar => base.to_owned(),
-        Shape::Vector(_) => format!("imp_core::ImpArray{}", base),
+        Shape::Vector(_) => format!("imp_core::ImpArray<{}>", base),
     }
 }
 
 fn rust_ffi_type(ty: &Type) -> String {
-    let base = match ty.ty {
+    match ty.shp {
+        Shape::Scalar => rust_base_type(ty).to_owned(),
+        Shape::Vector(_) => "imp_core::ImpArrayRaw".to_owned(),
+    }
+}
+
+fn rust_base_type(ty: &Type) -> &'static str {
+    match ty.ty {
         BaseType::U32 => "u32",
         BaseType::Bool => "bool",
-    };
-
-    match ty.shp {
-        Shape::Scalar => base.to_owned(),
-        Shape::Vector(_) => format!("imp_core::ImpArray{}Raw", base),
     }
 }

@@ -1,35 +1,40 @@
 use std::ffi::c_void;
 
-pub struct ImpArrayu32 {
+pub struct ImpArray<T>
+where
+    T: Copy,
+{
     pub shp: Vec<usize>,
-    pub data: Vec<u32>,
+    pub data: Vec<T>,
 }
 
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
-pub struct ImpArrayu32Raw {
+pub struct ImpArrayRaw {
     pub len: usize,
     pub dim: usize,
     pub shp: *mut usize,
-    pub data: *mut u32,
+    pub data: *mut c_void,
 }
 
 unsafe extern "C" {
     fn free(ptr: *mut c_void);
 }
 
-impl ImpArrayu32 {
-    pub fn as_raw(&mut self) -> ImpArrayu32Raw {
-        ImpArrayu32Raw {
+impl<T> ImpArray<T>
+where
+    T: Copy,
+{
+    pub fn as_raw(&mut self) -> ImpArrayRaw {
+        ImpArrayRaw {
             len: self.data.len(),
             dim: self.shp.len(),
             shp: self.shp.as_mut_ptr(),
-            data: self.data.as_mut_ptr(),
+            data: self.data.as_mut_ptr() as *mut c_void,
         }
     }
 
-    /// Copies the C-owned buffers into Rust-owned vectors and frees the C buffers.
-    pub unsafe fn from_raw(raw: ImpArrayu32Raw) -> Self {
+    pub unsafe fn from_raw(raw: ImpArrayRaw) -> Self {
         let shp = if raw.shp.is_null() {
             Vec::new()
         } else {
@@ -39,14 +44,15 @@ impl ImpArrayu32 {
         let data = if raw.data.is_null() {
             Vec::new()
         } else {
-            unsafe { std::slice::from_raw_parts(raw.data, raw.len).to_vec() }
+            unsafe { std::slice::from_raw_parts(raw.data as *const T, raw.len).to_vec() }
         };
 
         if !raw.shp.is_null() {
             unsafe { free(raw.shp as *mut c_void) };
         }
+
         if !raw.data.is_null() {
-            unsafe { free(raw.data as *mut c_void) };
+            unsafe { free(raw.data) };
         }
 
         Self { shp, data }

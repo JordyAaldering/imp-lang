@@ -47,8 +47,8 @@ impl<'ast> Visit<'ast> for CompileC {
         self.output.push_str("    size_t len;\n");
         self.output.push_str("    size_t dim;\n");
         self.output.push_str("    size_t *shp;\n");
-        self.output.push_str("    uint32_t *data;\n");
-        self.output.push_str("} ImpArrayu32Raw;\n\n");
+        self.output.push_str("    void *data;\n");
+        self.output.push_str("} ImpArrayRaw;\n\n");
 
         for fundef in &program.fundefs {
             self.visit_fundef(fundef);
@@ -123,7 +123,7 @@ impl<'ast> Visit<'ast> for CompileC {
         self.push_line(&format!("size_t *{} = (size_t *)malloc(sizeof(size_t));", shp_name));
         self.push_line(&format!("{}[0] = {};", shp_name, len_name));
         self.push_line(&format!(
-            "ImpArrayu32Raw {} = (ImpArrayu32Raw) {{ .len = {}, .shp = {}, .dim = 1, .data = {} }};",
+            "ImpArrayRaw {} = (ImpArrayRaw) {{ .len = {}, .shp = {}, .dim = 1, .data = (void *){} }};",
             target_name, len_name, shp_name, data_name
         ));
     }
@@ -166,6 +166,6 @@ fn base_ctype(ty: &Type) -> &'static str {
 fn full_ctype(ty: &Type) -> String {
     match &ty.shp {
         Shape::Scalar => base_ctype(ty).to_owned(),
-        Shape::Vector(_) => "ImpArrayu32Raw".to_owned(),
+        Shape::Vector(_) => "ImpArrayRaw".to_owned(),
     }
 }
