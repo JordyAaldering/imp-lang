@@ -109,6 +109,7 @@ impl CompileC {
                 let r = self.expr_for(*r, fundef, extra_scopes);
                 format!("{} {}", op, r)
             }
+            Expr::Id(id) => self.expr_for(*id, fundef, extra_scopes),
             Expr::Bool(v) => if *v { "true".to_owned() } else { "false".to_owned() },
             Expr::U32(v) => format!("{}", *v),
         }

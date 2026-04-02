@@ -95,6 +95,7 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
             Tensor(n) => self.visit_tensor(n),
             Binary(n) => self.visit_binary(n),
             Unary(n) => self.visit_unary(n),
+            Id(n) => self.visit_id(n),
             Bool(n) => self.visit_bool(n),
             U32(n) => self.visit_u32(n),
         }
