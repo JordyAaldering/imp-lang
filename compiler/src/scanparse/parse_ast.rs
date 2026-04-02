@@ -17,35 +17,50 @@ pub struct Fundef {
 
 #[derive(Debug)]
 pub enum Stmt {
-    Assign {
-        lhs: String,
-        expr: Expr,
-    },
-    Return {
-        expr: Expr,
-    },
+    Assign(Assign),
+    Return(Return),
+}
+
+#[derive(Debug)]
+pub struct Assign {
+    pub lhs: String,
+    pub expr: Expr,
+}
+
+#[derive(Debug)]
+pub struct Return {
+    pub expr: Expr,
 }
 
 #[derive(Debug)]
 pub enum Expr {
-    Tensor {
-        iv: String,
-        expr: Box<Expr>,
-        lb: Box<Expr>,
-        ub: Box<Expr>,
-    },
-    Binary {
-        l: Box<Expr>,
-        r: Box<Expr>,
-        op: Bop,
-    },
-    Unary {
-        r: Box<Expr>,
-        op: Uop,
-    },
+    Tensor(Tensor),
+    Binary(Binary),
+    Unary(Unary),
     Id(String),
     Bool(bool),
     U32(u32),
+}
+
+#[derive(Debug)]
+pub struct Tensor {
+    pub iv: String,
+    pub expr: Box<Expr>,
+    pub lb: Box<Expr>,
+    pub ub: Box<Expr>,
+}
+
+#[derive(Debug)]
+pub struct Binary {
+    pub l: Box<Expr>,
+    pub r: Box<Expr>,
+    pub op: Bop,
+}
+
+#[derive(Debug)]
+pub struct Unary {
+    pub r: Box<Expr>,
+    pub op: Uop,
 }
 
 impl fmt::Display for Program {
@@ -78,35 +93,22 @@ impl fmt::Display for Fundef {
 
 impl fmt::Display for Stmt {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        use Stmt::*;
         match self {
-            Assign { lhs, expr } => {
-                write!(f, "{} = {};", lhs, expr)
-            },
-            Return { expr } => {
-                write!(f, "return {};", expr)
-            },
+            Stmt::Assign(n) => write!(f, "{} = {};", n.lhs, n.expr),
+            Stmt::Return(n) => write!(f, "return {};", n.expr),
         }
     }
 }
 
 impl fmt::Display for Expr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        use Expr::*;
         match self {
-            Tensor { expr, lb, iv, ub } => {
-                write!(f, "{{ {} | {} <= {} < {} }}", expr, lb, iv, ub)
-            },
-            Binary { l, op, r } => {
-                write!(f, "({} {} {})", l, op, r)
-            },
-            Unary { op, r } => {
-                write!(f, "{}{}", op, r)
-            },
-            // Terminals
-            Id(v) => write!(f, "{}", v),
-            Bool(v) => write!(f, "{}", v),
-            U32(v) => write!(f, "{}", v),
+            Expr::Tensor(n) => write!(f, "{{ {} | {} <= {} < {} }}", n.expr, n.lb, n.iv, n.ub),
+            Expr::Binary(n) => write!(f, "({} {} {})", n.l, n.op, n.r),
+            Expr::Unary(n) => write!(f, "{}{}", n.op, n.r),
+            Expr::Id(v) => write!(f, "{}", v),
+            Expr::Bool(v) => write!(f, "{}", v),
+            Expr::U32(v) => write!(f, "{}", v),
         }
     }
 }

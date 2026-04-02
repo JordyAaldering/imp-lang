@@ -74,7 +74,7 @@ impl<'src> Parser<'src> {
 
         self.expect(Token::RBrace)?;
 
-        if !matches!(body.last(), Some(Stmt::Return { .. })) {
+        if !matches!(body.last(), Some(Stmt::Return(_))) {
             return Err(ParseError::MissingReturn);
         }
 
@@ -108,11 +108,11 @@ impl<'src> Parser<'src> {
             Token::Identifier(lhs) => {
                 self.expect(Token::Assign)?;
                 let expr = self.parse_expr(None::<Bop>)?;
-                Stmt::Assign { lhs, expr }
+                Stmt::Assign(Assign { lhs, expr })
             },
             Token::Return => {
                 let expr = self.parse_expr(None::<Bop>)?;
-                Stmt::Return { expr }
+                Stmt::Return(Return { expr })
             }
             _ => return Err(ParseError::UnexpectedToken("statement".to_owned(), token, span)),
         };
@@ -159,7 +159,7 @@ impl<'src> Parser<'src> {
 
         self.expect(Token::RBrace)?;
 
-        Ok(Expr::Tensor { iv, expr: Box::new(expr), lb: Box::new(lb), ub: Box::new(ub) })
+        Ok(Expr::Tensor(Tensor { iv, expr: Box::new(expr), lb: Box::new(lb), ub: Box::new(ub) }))
     }
 
     /// Uses Pratt parsing to handle associativity and operator precedence.
@@ -200,11 +200,11 @@ impl<'src> Parser<'src> {
         while let Some((op, _loc)) = self.parse_binary_operator(&prev_op)? {
             let right = self.parse_expr(Some(op))?;
             // Update `left`
-            left = Expr::Binary {
+            left = Expr::Binary(Binary {
                 l: Box::new(left),
                 r: Box::new(right),
                 op,
-            };
+            });
         }
 
         Ok(left)
@@ -217,7 +217,7 @@ impl<'src> Parser<'src> {
     /// ```
     fn parse_unary(&mut self, op: Uop) -> ParseResult<Expr> {
         let r = self.parse_expr(Some(op))?;
-        Ok(Expr::Unary { r: Box::new(r), op })
+        Ok(Expr::Unary(Unary { r: Box::new(r), op }))
     }
 
     fn parse_binary_operator(&mut self, previous: &Option<impl Operator>) -> ParseResult<Option<(Bop, Span)>> {
