@@ -126,7 +126,7 @@ impl<'src> Parser<'src> {
             args,
             decs: Vec::new(),
             body,
-            ret_type: MaybeType(Some(ret_type)),
+            ret_type,
         })
     }
 
