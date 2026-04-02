@@ -51,7 +51,6 @@ impl<'ast> Visit<'ast> for CompileFfi {
 
         self.output.push_str(&res);
     }
-
 }
 
 fn to_rusttype(ty: &Type) -> String {

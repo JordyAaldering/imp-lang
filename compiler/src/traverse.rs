@@ -18,7 +18,34 @@ pub trait Traverse<'ast> {
         Program { fundefs }
     }
 
-    fn trav_fundef(&mut self, fundef: Fundef<'ast, Self::InAst>) -> Fundef<'ast, Self::OutAst>;
+    fn trav_fundef(&mut self, fundef: Fundef<'ast, Self::InAst>) -> Fundef<'ast, Self::OutAst> {
+        let args = self.trav_fargs(fundef.args);
+
+        let mut decs = Vec::new();
+        for vardec in fundef.decs {
+            decs.push(self.trav_vardec(vardec));
+        }
+
+        let mut body = Vec::new();
+        for stmt in fundef.body {
+            body.push(self.trav_stmt(stmt));
+        }
+
+        Fundef {
+            name: fundef.name,
+            args,
+            decs,
+            body,
+        }
+    }
+
+    fn trav_fargs(&mut self, args: Vec<&'ast Avis<Self::InAst>>) -> Vec<&'ast Avis<Self::OutAst>> {
+        let mut new_args = Vec::new();
+        for arg in args {
+            new_args.push(self.trav_farg(arg));
+        }
+        new_args
+    }
 
     fn trav_farg(&mut self, arg: &'ast Avis<Self::InAst>) -> &'ast Avis<Self::OutAst>;
 
@@ -28,9 +55,7 @@ pub trait Traverse<'ast> {
     /// Statements
     ///
 
-    type StmtOut = Stmt<'ast, Self::OutAst>;
-
-    fn trav_stmt(&mut self, stmt: Stmt<'ast, Self::InAst>) -> Self::StmtOut;
+    fn trav_stmt(&mut self, stmt: Stmt<'ast, Self::InAst>) -> Stmt<'ast, Self::OutAst>;
 
     type AssignOut = Assign<'ast, Self::OutAst>;
 
@@ -91,9 +116,7 @@ pub trait Visit<'ast> {
     }
 
     fn visit_fundef(&mut self, fundef: &Fundef<'ast, Self::Ast>) {
-        for arg in &fundef.args {
-            self.visit_farg(arg);
-        }
+        self.visit_fargs(&fundef.args);
 
         for vardec in &fundef.decs {
             self.visit_vardec(vardec);
@@ -101,6 +124,12 @@ pub trait Visit<'ast> {
 
         for stmt in &fundef.body {
             self.visit_stmt(stmt);
+        }
+    }
+
+    fn visit_fargs(&mut self, args: &Vec<&'ast Avis<Self::Ast>>) {
+        for arg in args {
+            self.visit_farg(arg);
         }
     }
 

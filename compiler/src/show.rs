@@ -46,9 +46,7 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
 
         self.push(&format!("fn {}(", fundef.name));
 
-        for arg in &fundef.args {
-            self.output.push_str(&format!("{} {}, ", arg.ty, arg.name));
-        }
+        self.visit_fargs(&fundef.args);
 
         self.output.push_str(&format!(") -> {} {{\n", fundef.typof(fundef.ret_id())));
 
@@ -65,6 +63,10 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
         self.depth -= 1;
 
         self.push("}");
+    }
+
+    fn visit_farg(&mut self, arg: &'ast Avis<Self::Ast>) {
+        self.output.push_str(&format!("{} {}, ", arg.ty, arg.name));
     }
 
     fn visit_stmt(&mut self, stmt: &Stmt<'ast, Self::Ast>) {
