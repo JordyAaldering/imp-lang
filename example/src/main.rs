@@ -12,4 +12,8 @@ fn main() {
     assert_eq!(arr.shp, vec![ub as usize]);
     assert_eq!(arr.data, (0..ub).collect::<Vec<u32>>());
     println!("arr.data = {:?}", arr.data);
+
+    let arr2: ImpArray<u32> = arrays();
+    assert_eq!(arr2.shp, vec![5]);
+    println!("arr2.data = {:?}", arr2.data);
 }

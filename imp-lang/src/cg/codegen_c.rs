@@ -4,7 +4,7 @@ pub struct CompileC {
     output: String,
     arg_names: Vec<String>,
     expr_stack: Vec<String>,
-    tensor_target: Option<(String, Type)>,
+    lhs_target: Option<(String, Type)>,
     indent: usize,
 }
 
@@ -14,7 +14,7 @@ impl CompileC {
             output: String::new(),
             arg_names: Vec::new(),
             expr_stack: Vec::new(),
-            tensor_target: None,
+            lhs_target: None,
             indent: 0,
         }
     }
@@ -78,9 +78,16 @@ impl<'ast> Visit<'ast> for CompileC {
 
     fn visit_assign(&mut self, assign: &Assign<'ast, Self::Ast>) {
         if let Expr::Tensor(tensor) = assign.expr {
-            self.tensor_target = Some((assign.lvis.name.clone(), assign.lvis.ty.clone()));
+            self.lhs_target = Some((assign.lvis.name.clone(), assign.lvis.ty.clone()));
             self.visit_tensor(tensor);
-            self.tensor_target = None;
+            self.lhs_target = None;
+            return;
+        }
+
+        if let Expr::Array(array) = assign.expr {
+            self.lhs_target = Some((assign.lvis.name.clone(), assign.lvis.ty.clone()));
+            self.visit_array(array);
+            self.lhs_target = None;
             return;
         }
 
@@ -94,7 +101,7 @@ impl<'ast> Visit<'ast> for CompileC {
     }
 
     fn visit_tensor(&mut self, tensor: &Tensor<'ast, Self::Ast>) {
-        let (target_name, target_ty) = self.tensor_target.clone().expect("tensor target must be set");
+        let (target_name, target_ty) = self.lhs_target.clone().expect("tensor target must be set");
         let data_name = format!("{}_data", target_name);
         let shp_name = format!("{}_shp", target_name);
         let len_name = format!("{}_len", target_name);
@@ -104,7 +111,7 @@ impl<'ast> Visit<'ast> for CompileC {
         let iv = &tensor.iv.name;
         let base = base_ctype(&target_ty);
 
-        self.push_line(&format!("size_t {} = (size_t)({} - {});", len_name, ub, lb));
+        self.push_line(&format!("size_t {} = (size_t)({});", len_name, ub));
         self.push_line(&format!("{} *{} = ({} *)malloc({} * sizeof({}));", base, data_name, base, len_name, base));
         self.push_line(&format!(
             "for (size_t {} = {}; {} < {}; {} += 1) {{",
@@ -116,7 +123,7 @@ impl<'ast> Visit<'ast> for CompileC {
             self.visit_stmt(stmt);
         }
         let ret = self.render_expr(&Expr::Id(tensor.ret.clone()));
-        self.push_line(&format!("{}[{} - {}] = {};", data_name, iv, lb, ret));
+        self.push_line(&format!("{}[{}] = {};", data_name, iv, ret));
         self.indent -= 1;
 
         self.push_line("}");
@@ -132,6 +139,29 @@ impl<'ast> Visit<'ast> for CompileC {
         let l = self.render_expr(&Expr::Id(binary.l.clone()));
         let r = self.render_expr(&Expr::Id(binary.r.clone()));
         self.expr_stack.push(format!("{} {} {}", l, binary.op, r));
+    }
+
+    fn visit_array(&mut self, array: &Array<'ast, Self::Ast>) {
+        let (target_name, target_ty) = self.lhs_target.clone().expect("array target must be set");
+        let data_name = format!("{}_data", target_name);
+        let shp_name = format!("{}_shp", target_name);
+        let len_name = format!("{}_len", target_name);
+        let base = base_ctype(&target_ty);
+
+        self.push_line(&format!("size_t {} = {};", len_name, array.values.len()));
+        self.push_line(&format!("{} *{} = ({} *)malloc({} * sizeof({}));", base, data_name, base, len_name, base));
+
+        for (i, value) in array.values.iter().enumerate() {
+            let rendered = self.render_expr(&Expr::Id(value.clone()));
+            self.push_line(&format!("{}[{}] = {};", data_name, i, rendered));
+        }
+
+        self.push_line(&format!("size_t *{} = (size_t *)malloc(sizeof(size_t));", shp_name));
+        self.push_line(&format!("{}[0] = {};", shp_name, len_name));
+        self.push_line(&format!(
+            "ImpArrayRaw {} = (ImpArrayRaw) {{ .len = {}, .shp = {}, .dim = 1, .data = (void *){} }};",
+            target_name, len_name, shp_name, data_name
+        ));
     }
 
     fn visit_unary(&mut self, unary: &Unary<'ast, Self::Ast>) {
