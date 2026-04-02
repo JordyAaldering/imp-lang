@@ -1,7 +1,7 @@
 use crate::{ast::*, Visit};
 
-pub fn show<'ast, Ast: AstConfig>(program: &Program<'ast, Ast>) -> String {
-    let mut show = Show::new();
+pub fn show<'ast, Ast: AstConfig + 'ast>(program: &Program<'ast, Ast>) -> String {
+    let mut show: Show<'ast, Ast> = Show::new();
     show.visit_program(program);
     show.output
 }
@@ -34,32 +34,27 @@ impl<'ast, Ast: AstConfig> Show<'ast, Ast> {
 impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
     type Ast = Ast;
 
-    fn visit_program(&mut self, program: &Program<'ast, Ast>) {
+    fn visit_program(&mut self, program: &Program<'ast, Self::Ast>) {
         for fundef in &program.fundefs {
             self.visit_fundef(fundef);
             self.output.push('\n');
         }
     }
 
-    fn visit_fundef(&mut self, fundef: &Fundef<'ast, Ast>) {
+    fn visit_fundef(&mut self, fundef: &Fundef<'ast, Self::Ast>) {
         self.args = fundef.args.clone();
 
         self.push(&format!("fn {}(", fundef.name));
-
         self.visit_fargs(&fundef.args);
-
         self.output.push_str(&format!(") -> {} {{\n", fundef.ret_type));
 
         self.depth += 1;
-
         for id in &fundef.decs {
             self.push(&format!("{} {};\n", id.ty, id.name));
         }
-
         for stmt in &fundef.body {
             self.visit_stmt(stmt);
         }
-
         self.depth -= 1;
 
         self.push("}");
@@ -70,10 +65,9 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
     }
 
     fn visit_stmt(&mut self, stmt: &Stmt<'ast, Self::Ast>) {
-        use Stmt::*;
         match stmt {
-            Assign(n) => self.visit_assign(n),
-            Return(n) => self.visit_return(n),
+            Stmt::Assign(n) => self.visit_assign(n),
+            Stmt::Return(n) => self.visit_return(n),
         }
         self.output.push_str(";\n");
     }
@@ -81,7 +75,7 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
     fn visit_assign(&mut self, assign: &Assign<'ast, Self::Ast>) {
         self.push(&assign.avis.name);
         self.output.push_str(" = ");
-        self.visit_expr(&assign.expr);
+        self.visit_expr(assign.expr);
     }
 
     fn visit_return(&mut self, ret: &Return<'ast, Self::Ast>) {
@@ -90,14 +84,13 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
     }
 
     fn visit_expr(&mut self, expr: &Expr<'ast, Self::Ast>) {
-        use Expr::*;
         match expr {
-            Tensor(n) => self.visit_tensor(n),
-            Binary(n) => self.visit_binary(n),
-            Unary(n) => self.visit_unary(n),
-            Id(n) => self.visit_id(n),
-            Bool(n) => self.visit_bool(n),
-            U32(n) => self.visit_u32(n),
+            Expr::Tensor(n) => self.visit_tensor(n),
+            Expr::Binary(n) => self.visit_binary(n),
+            Expr::Unary(n) => self.visit_unary(n),
+            Expr::Id(n) => self.visit_id(n),
+            Expr::Bool(n) => self.visit_bool(n),
+            Expr::U32(n) => self.visit_u32(n),
         }
     }
 
@@ -105,38 +98,36 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
         self.output.push_str("{\n");
 
         self.depth += 1;
-
         for stmt in &tensor.body {
             self.visit_stmt(stmt);
         }
 
         self.indent();
-        self.visit_id(&tensor.ret);
+        <Ast as AstConfig>::visit_operand(self, &tensor.ret);
         self.output.push('\n');
 
         self.depth -= 1;
 
-        self.push(&"| ");
-        self.visit_id(&tensor.lb);
+        self.push("| ");
+        <Ast as AstConfig>::visit_operand(self, &tensor.lb);
         self.output.push_str(" <= ");
         self.output.push_str(&tensor.iv.name);
         self.output.push_str(" < ");
-        self.visit_id(&tensor.ub);
-        self.output.push_str(&" }");
-
+        <Ast as AstConfig>::visit_operand(self, &tensor.ub);
+        self.output.push_str(" }");
     }
 
     fn visit_binary(&mut self, binary: &Binary<'ast, Self::Ast>) {
-        self.visit_id(&binary.l);
+        <Ast as AstConfig>::visit_operand(self, &binary.l);
         self.output.push(' ');
         self.output.push_str(&binary.op.to_string());
         self.output.push(' ');
-        self.visit_id(&binary.r);
+        <Ast as AstConfig>::visit_operand(self, &binary.r);
     }
 
     fn visit_unary(&mut self, unary: &Unary<'ast, Self::Ast>) {
         self.output.push_str(&unary.op.to_string());
-        self.visit_id(&unary.r);
+        <Ast as AstConfig>::visit_operand(self, &unary.r);
     }
 
     fn visit_id(&mut self, id: &Id<'ast, Self::Ast>) {
