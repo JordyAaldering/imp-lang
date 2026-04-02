@@ -111,9 +111,9 @@ impl<'ast> ConvertToSsa<'ast> {
             Tensor { expr, iv, lb, ub } => self.trav_tensor_expr(*expr, iv, *lb, *ub),
             Binary { l, r, op } => self.trav_binary(*l, *r, op),
             Unary { r, op } => self.trav_unary(*r, op),
+            Identifier(id) => self.trav_id_expr(id),
             Bool(v) => self.trav_bool(v),
             U32(v) => self.trav_u32(v),
-            Identifier(id) => return self.trav_id(id),
         };
 
         self.emit_expr(expr)
@@ -176,6 +176,10 @@ impl<'ast> ConvertToSsa<'ast> {
     fn trav_unary(&mut self, r: parse_ast::Expr, op: Uop) -> Expr<'ast, UntypedAst> {
         let r = self.trav_expr(r);
         Expr::Unary(Unary { r, op })
+    }
+
+    fn trav_id_expr(&mut self, id: String) -> Expr<'ast, UntypedAst> {
+        Expr::Id(self.trav_id(id))
     }
 
     ///

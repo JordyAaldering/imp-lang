@@ -139,6 +139,10 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
                 let (expr, ty) = self.trav_unary(n);
                 (Unary(expr), ty)
             },
+            Id(n) => {
+                let (id, ty) = self.trav_id(n);
+                (Id(id), ty)
+            },
             Bool(n) => {
                 let (expr, ty) = self.trav_bool(n);
                 (Bool(expr), ty)
