@@ -33,7 +33,7 @@ pub trait Visit<'ast> {
 
     fn visit_farg(&mut self, _arg: &'ast Farg) { }
 
-    fn visit_vardec(&mut self, _vardec: &'ast Lvis<'ast, Self::Ast>) { }
+    fn visit_vardec(&mut self, _vardec: &'ast LocalVar<'ast, Self::Ast>) { }
 
     ///
     /// Statements
@@ -238,7 +238,7 @@ pub trait Traverse<'ast> {
         arg
     }
 
-    fn trav_vardec(&mut self, decl: &'ast Lvis<'ast, Self::InAst>) -> &'ast Lvis<'ast, Self::OutAst>;
+    fn trav_vardec(&mut self, decl: &'ast LocalVar<'ast, Self::InAst>) -> &'ast LocalVar<'ast, Self::OutAst>;
 
     ///
     /// Statements

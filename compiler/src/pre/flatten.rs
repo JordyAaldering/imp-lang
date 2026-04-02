@@ -35,8 +35,8 @@ impl<'ast> Flatten<'ast> {
         Box::leak(Box::new(Farg { name, ty }))
     }
 
-    fn alloc_lvis(&self, name: String, ty: MaybeType) -> &'ast Lvis<'ast, FlattenedAst> {
-        Box::leak(Box::new(Lvis { name, ty, ssa: () }))
+    fn alloc_lvis(&self, name: String, ty: MaybeType) -> &'ast LocalVar<'ast, FlattenedAst> {
+        Box::leak(Box::new(LocalVar { name, ty, ssa: () }))
     }
 
     fn alloc_expr(&self, expr: Expr<'ast, FlattenedAst>) -> &'ast Expr<'ast, FlattenedAst> {

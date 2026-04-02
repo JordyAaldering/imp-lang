@@ -13,7 +13,7 @@ pub fn to_ssa<'ast>(program: Program<'ast, FlattenedAst>) -> Program<'ast, Untyp
 
 pub struct ToSsa<'ast> {
     uid: usize,
-    ids: Vec<&'ast Lvis<'ast, UntypedAst>>,
+    ids: Vec<&'ast LocalVar<'ast, UntypedAst>>,
     body_stack: Vec<Vec<Stmt<'ast, UntypedAst>>>,
     env_stack: Vec<HashMap<String, Id<'ast, UntypedAst>>>,
 }
@@ -37,8 +37,8 @@ impl<'ast> ToSsa<'ast> {
         Box::leak(Box::new(Farg { name, ty }))
     }
 
-    fn alloc_lvis(&self, name: String, ty: MaybeType, ssa: Option<&'ast Expr<'ast, UntypedAst>>) -> &'ast Lvis<'ast, UntypedAst> {
-        Box::leak(Box::new(Lvis { name, ty, ssa }))
+    fn alloc_lvis(&self, name: String, ty: MaybeType, ssa: Option<&'ast Expr<'ast, UntypedAst>>) -> &'ast LocalVar<'ast, UntypedAst> {
+        Box::leak(Box::new(LocalVar { name, ty, ssa }))
     }
 
     fn alloc_expr(&self, expr: Expr<'ast, UntypedAst>) -> &'ast Expr<'ast, UntypedAst> {

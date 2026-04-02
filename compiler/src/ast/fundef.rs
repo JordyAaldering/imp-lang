@@ -1,13 +1,13 @@
 use crate::ast::Type;
 
-use super::{Id, AstConfig, Lvis, LocalDef, ScopeBlock, Stmt};
+use super::{Id, AstConfig, LocalVar, LocalDef, ScopeBlock, Stmt};
 
 #[derive(Clone, Debug)]
 pub struct Fundef<'ast, Ast: AstConfig> {
     pub name: String,
     pub ret_type: Type,
     pub args: Vec<&'ast Farg>,
-    pub decs: Vec<&'ast Lvis<'ast, Ast>>,
+    pub decs: Vec<&'ast LocalVar<'ast, Ast>>,
     pub body: Vec<Stmt<'ast, Ast>>,
 }
 
@@ -49,13 +49,13 @@ impl<'ast, Ast: AstConfig> Fundef<'ast, Ast> {
             .collect()
     }
 
-    pub fn find_local_def(&self, key: &'ast Lvis<'ast, Ast>) -> Option<LocalDef<'ast, Ast>> {
+    pub fn find_local_def(&self, key: &'ast LocalVar<'ast, Ast>) -> Option<LocalDef<'ast, Ast>> {
         let body_scope = self.scope_block();
         find_local_in_scopes(&vec![body_scope], key)
     }
 }
 
-pub fn find_local_in_scopes<'ast, Ast: AstConfig>(scopes: &Vec<ScopeBlock<'ast, Ast>>, key: &'ast Lvis<'ast, Ast>) -> Option<LocalDef<'ast, Ast>> {
+pub fn find_local_in_scopes<'ast, Ast: AstConfig>(scopes: &Vec<ScopeBlock<'ast, Ast>>, key: &'ast LocalVar<'ast, Ast>) -> Option<LocalDef<'ast, Ast>> {
     for scope in scopes.iter().rev() {
         for stmt in scope.iter().rev() {
             let lvis = stmt.lvis();
