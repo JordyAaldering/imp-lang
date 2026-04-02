@@ -13,13 +13,15 @@ pub struct Fundef {
     pub args: Vec<(Type, String)>,
     pub ret_type: Type,
     pub body: Vec<Stmt>,
-    pub ret_expr: Expr,
 }
 
 #[derive(Debug)]
 pub enum Stmt {
     Assign {
         lhs: String,
+        expr: Expr,
+    },
+    Return {
         expr: Expr,
     },
 }
@@ -70,8 +72,6 @@ impl fmt::Display for Fundef {
         for stmt in &self.body {
             writeln!(f, "    {}", stmt)?;
         }
-
-        writeln!(f, "    return {};", self.ret_expr)?;
         write!(f, "}}")
     }
 }
@@ -82,6 +82,9 @@ impl fmt::Display for Stmt {
         match self {
             Assign { lhs, expr } => {
                 write!(f, "{} = {};", lhs, expr)
+            },
+            Return { expr } => {
+                write!(f, "return {};", expr)
             },
         }
     }

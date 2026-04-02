@@ -55,11 +55,15 @@ impl<'ast> ConvertToSsa<'ast> {
         self.name_to_id = vec![arg_scope, HashMap::new()];
         self.scopes = vec![Vec::new()];
 
+        let mut ret = None;
+
         for stmt in fundef.body {
-            self.trav_stmt(stmt);
+            if let Some(found) = self.trav_stmt(stmt) {
+                ret = Some(found);
+            }
         }
 
-        let ret = self.trav_return(fundef.ret_expr);
+        let ret = ret.expect("parsed function must end with return statement");
 
         let scope = self.scopes.pop().unwrap();
 
@@ -84,10 +88,14 @@ impl<'ast> ConvertToSsa<'ast> {
     /// Statements
     ///
 
-    fn trav_stmt(&mut self, stmt: parse_ast::Stmt) {
+    fn trav_stmt(&mut self, stmt: parse_ast::Stmt) -> Option<Stmt<'ast, UntypedAst>> {
         use parse_ast::Stmt::*;
         match stmt {
-            Assign { lhs, expr } => self.trav_assign(lhs, expr),
+            Assign { lhs, expr } => {
+                self.trav_assign(lhs, expr);
+                None
+            }
+            Return { expr } => Some(self.trav_return(expr)),
         }
     }
 
