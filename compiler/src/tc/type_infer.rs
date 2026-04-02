@@ -7,10 +7,10 @@ pub fn type_infer<'ast>(program: Program<'ast, UntypedAst>) -> Result<Program<'a
 }
 
 pub struct TypeInfer<'ast> {
-    args: Vec<&'ast Avis<UntypedAst>>,
+    args: Vec<&'ast Farg<UntypedAst>>,
     scopes: Vec<ScopeBlock<'ast, UntypedAst>>,
-    idmap: HashMap<*const Avis<UntypedAst>, &'ast Avis<TypedAst>>,
-    new_ids: Vec<&'ast Avis<TypedAst>>,
+    idmap: HashMap<*const Lvis<'ast, UntypedAst>, &'ast Lvis<'ast, TypedAst>>,
+    new_ids: Vec<&'ast Lvis<'ast, TypedAst>>,
     new_ssa: Vec<ScopeBlock<'ast, TypedAst>>,
 }
 
@@ -28,8 +28,12 @@ impl<'ast> TypeInfer<'ast> {
         }
     }
 
-    fn alloc_avis(&self, name: String, ty: Type) -> &'ast Avis<TypedAst> {
-        Box::leak(Box::new(Avis { name, ty }))
+    fn alloc_farg(&self, name: String, ty: Type) -> &'ast Farg<TypedAst> {
+        Box::leak(Box::new(Farg { name, ty }))
+    }
+
+    fn alloc_lvis(&self, name: String, ty: Type, ssa: Option<&'ast Expr<'ast, TypedAst>>) -> &'ast Lvis<'ast, TypedAst> {
+        Box::leak(Box::new(Lvis { name, ty, ssa }))
     }
 
     fn alloc_expr(&self, expr: Expr<'ast, TypedAst>) -> &'ast Expr<'ast, TypedAst> {
@@ -68,7 +72,7 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
             .unwrap()
             .into_iter()
             .filter_map(|entry| match entry {
-                ScopeEntry::Assign { avis, expr } => Some(Stmt::Assign(Assign { avis, expr })),
+                ScopeEntry::Assign { lvis, expr } => Some(Stmt::Assign(Assign { lvis, expr })),
                 ScopeEntry::IndexRange { .. } => None,
             })
             .collect::<Vec<_>>();
@@ -83,11 +87,11 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
         }
     }
 
-    fn trav_farg(&mut self, arg: &'ast Avis<Self::InAst>) -> &'ast Avis<Self::OutAst> {
-        self.alloc_avis(arg.name.clone(), arg.ty.clone().unwrap())
+    fn trav_farg(&mut self, arg: &'ast Farg<Self::InAst>) -> &'ast Farg<Self::OutAst> {
+        self.alloc_farg(arg.name.clone(), arg.ty.clone().unwrap())
     }
 
-    fn trav_vardec(&mut self, _: &'ast Avis<Self::InAst>) -> &'ast Avis<Self::OutAst> {
+    fn trav_vardec(&mut self, _: &'ast Lvis<'ast, Self::InAst>) -> &'ast Lvis<'ast, Self::OutAst> {
         unreachable!("Vardecs should be replaced manually")
     }
 
@@ -104,12 +108,12 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
 
     fn trav_assign(&mut self, assign: Assign<'ast, Self::InAst>) -> Assign<'ast, Self::OutAst> {
         let before_len = self.new_ssa.last().map_or(0, |ssa| ssa.len());
-        let _ = self.trav_id(Id::Var(assign.avis));
+        let _ = self.trav_id(Id::Var(assign.lvis));
         let ssa = self.new_ssa.last().expect("missing output scope in type inference");
         assert!(ssa.len() > before_len, "statement conversion did not emit output");
         let last = (*ssa.last().expect("missing emitted statement")).clone();
         match last {
-            ScopeEntry::Assign { avis, expr } => Assign { avis, expr },
+            ScopeEntry::Assign { lvis, expr } => Assign { lvis, expr },
             ScopeEntry::IndexRange { .. } => panic!("expected assignment scope entry"),
         }
     }
@@ -170,7 +174,7 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
         let (lb, _check_if_vec) = self.trav_id(tensor.lb);
         let (ub, _check_if_vec) = self.trav_id(tensor.ub);
 
-        let iv_new = self.alloc_avis(tensor.iv.name.clone(), Type::scalar(BaseType::U32));
+        let iv_new = self.alloc_lvis(tensor.iv.name.clone(), Type::scalar(BaseType::U32), None);
         self.idmap.insert(tensor.iv as *const _, iv_new);
         self.new_ids.push(iv_new);
         self.new_ssa.last_mut().unwrap().push(ScopeEntry::IndexRange {
@@ -188,7 +192,7 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
             .unwrap()
             .into_iter()
             .filter_map(|entry| match entry {
-                ScopeEntry::Assign { avis, expr } => Some(Stmt::Assign(Assign { avis, expr })),
+                ScopeEntry::Assign { lvis, expr } => Some(Stmt::Assign(Assign { lvis, expr })),
                 ScopeEntry::IndexRange { .. } => None,
             })
             .collect::<Vec<_>>();
@@ -235,13 +239,13 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
                     LocalDef::Assign(old_expr) => {
                         let (new_expr, new_ty) = self.trav_expr(old_expr.clone());
 
-                        let new_id = self.alloc_avis(old.name.clone(), new_ty.clone());
+                        let expr_ref = self.alloc_expr(new_expr);
+                        let new_id = self.alloc_lvis(old.name.clone(), new_ty.clone(), Some(expr_ref));
                         self.idmap.insert(old as *const _, new_id);
                         self.new_ids.push(new_id);
 
-                        let expr_ref = self.alloc_expr(new_expr);
                         self.new_ssa.last_mut().unwrap().push(ScopeEntry::Assign {
-                            avis: new_id,
+                            lvis: new_id,
                             expr: expr_ref,
                         });
 
@@ -251,7 +255,7 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
                         let (lb, _) = self.trav_id(lb);
                         let (ub, _) = self.trav_id(ub);
 
-                        let new_id = self.alloc_avis(old.name.clone(), Type::scalar(BaseType::U32));
+                        let new_id = self.alloc_lvis(old.name.clone(), Type::scalar(BaseType::U32), None);
                         self.idmap.insert(old as *const _, new_id);
                         self.new_ids.push(new_id);
                         self.new_ssa.last_mut().unwrap().push(ScopeEntry::IndexRange {

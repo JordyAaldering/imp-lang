@@ -45,7 +45,9 @@ pub trait AstConfig: Clone + fmt::Debug {
 
     fn var_name<'ast>(link: &Self::VarLink<'ast>) -> String;
 
-    fn var_avis<'ast>(link: &Self::VarLink<'ast>) -> Option<&'ast Avis<Self>>;
+    type SsaLink<'ast>: Clone + fmt::Debug;
+
+    fn var_lvis<'ast>(link: &Self::VarLink<'ast>) -> Option<&'ast Lvis<'ast, Self>>;
 
     fn visit_operand<'ast, V>(visitor: &mut V, operand: &Self::Operand<'ast>)
     where
@@ -67,11 +69,13 @@ impl AstConfig for ParsedAst {
 
     type Operand<'ast> = &'ast Expr<'ast, ParsedAst>;
 
+    type SsaLink<'ast> = ();
+
     fn var_name<'ast>(link: &Self::VarLink<'ast>) -> String {
         link.clone()
     }
 
-    fn var_avis<'ast>(_link: &Self::VarLink<'ast>) -> Option<&'ast Avis<Self>> {
+    fn var_lvis<'ast>(_link: &Self::VarLink<'ast>) -> Option<&'ast Lvis<'ast, Self>> {
         None
     }
 
@@ -101,11 +105,13 @@ impl AstConfig for FlattenedAst {
 
     type Operand<'ast> = Id<'ast, FlattenedAst>;
 
+    type SsaLink<'ast> = ();
+
     fn var_name<'ast>(link: &Self::VarLink<'ast>) -> String {
         link.clone()
     }
 
-    fn var_avis<'ast>(_link: &Self::VarLink<'ast>) -> Option<&'ast Avis<Self>> {
+    fn var_lvis<'ast>(_link: &Self::VarLink<'ast>) -> Option<&'ast Lvis<'ast, Self>> {
         None
     }
 
@@ -131,15 +137,17 @@ pub struct UntypedAst;
 impl AstConfig for UntypedAst {
     type VarType = MaybeType;
 
-    type VarLink<'ast> = &'ast Avis<UntypedAst>;
+    type VarLink<'ast> = &'ast Lvis<'ast, UntypedAst>;
 
     type Operand<'ast> = Id<'ast, UntypedAst>;
+
+    type SsaLink<'ast> = Option<&'ast Expr<'ast, UntypedAst>>;
 
     fn var_name<'ast>(link: &Self::VarLink<'ast>) -> String {
         link.name.clone()
     }
 
-    fn var_avis<'ast>(link: &Self::VarLink<'ast>) -> Option<&'ast Avis<Self>> {
+    fn var_lvis<'ast>(link: &Self::VarLink<'ast>) -> Option<&'ast Lvis<'ast, Self>> {
         Some(*link)
     }
 
@@ -165,15 +173,17 @@ pub struct TypedAst;
 impl AstConfig for TypedAst {
     type VarType = Type;
 
-    type VarLink<'ast> = &'ast Avis<TypedAst>;
+    type VarLink<'ast> = &'ast Lvis<'ast, TypedAst>;
 
     type Operand<'ast> = Id<'ast, TypedAst>;
+
+    type SsaLink<'ast> = Option<&'ast Expr<'ast, TypedAst>>;
 
     fn var_name<'ast>(link: &Self::VarLink<'ast>) -> String {
         link.name.clone()
     }
 
-    fn var_avis<'ast>(link: &Self::VarLink<'ast>) -> Option<&'ast Avis<Self>> {
+    fn var_lvis<'ast>(link: &Self::VarLink<'ast>) -> Option<&'ast Lvis<'ast, Self>> {
         Some(*link)
     }
 

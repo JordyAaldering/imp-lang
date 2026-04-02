@@ -1,7 +1,7 @@
 use std::iter::Peekable;
 
 use crate::ast::{
-    Assign, Avis, BaseType, Binary, Bop, Expr, Fundef, Id, MaybeType, Program, Return, Shape,
+    Assign, Farg, Lvis, BaseType, Binary, Bop, Expr, Fundef, Id, MaybeType, Program, Return, Shape,
     Stmt, Tensor, Type, Uop, Unary, ParsedAst,
 };
 
@@ -40,8 +40,12 @@ impl<'src> Parser<'src> {
         format!("_ret_{}", self.uid)
     }
 
-    fn alloc_avis(&self, name: String, ty: MaybeType) -> &'static Avis<ParsedAst> {
-        Box::leak(Box::new(Avis { name, ty }))
+    fn alloc_farg(&self, name: String, ty: MaybeType) -> &'static Farg<ParsedAst> {
+        Box::leak(Box::new(Farg { name, ty }))
+    }
+
+    fn alloc_lvis(&self, name: String, ty: MaybeType) -> &'static Lvis<'static, ParsedAst> {
+        Box::leak(Box::new(Lvis { name, ty, ssa: () }))
     }
 
     fn alloc_expr(&self, expr: Expr<'static, ParsedAst>) -> &'static Expr<'static, ParsedAst> {
@@ -130,10 +134,10 @@ impl<'src> Parser<'src> {
         })
     }
 
-    fn parse_farg(&mut self) -> ParseResult<&'static Avis<ParsedAst>> {
+    fn parse_farg(&mut self) -> ParseResult<&'static Farg<ParsedAst>> {
         let (ty, _) = self.parse_type()?;
         let (id, _) = self.parse_id()?;
-        Ok(self.alloc_avis(id, MaybeType(Some(ty))))
+        Ok(self.alloc_farg(id, MaybeType(Some(ty))))
     }
 
     fn parse_stmt(&mut self) -> ParseResult<Vec<Stmt<'static, ParsedAst>>> {
@@ -143,8 +147,8 @@ impl<'src> Parser<'src> {
             Token::Identifier(lhs) => {
                 self.expect(Token::Assign)?;
                 let expr = self.parse_expr(None::<Bop>)?;
-                let avis = self.alloc_avis(lhs, MaybeType(None));
-                vec![Stmt::Assign(Assign { avis, expr })]
+                let lvis = self.alloc_lvis(lhs, MaybeType(None));
+                vec![Stmt::Assign(Assign { lvis, expr })]
             }
             Token::Return => {
                 let expr = self.parse_expr(None::<Bop>)?;
@@ -152,9 +156,9 @@ impl<'src> Parser<'src> {
                     Expr::Id(id) => vec![Stmt::Return(Return { id: id.clone() })],
                     _ => {
                         let ret_name = self.fresh_uid();
-                        let ret_avis = self.alloc_avis(ret_name.clone(), MaybeType(None));
+                        let ret_lvis = self.alloc_lvis(ret_name.clone(), MaybeType(None));
                         vec![
-                            Stmt::Assign(Assign { avis: ret_avis, expr }),
+                            Stmt::Assign(Assign { lvis: ret_lvis, expr }),
                             Stmt::Return(Return {
                                 id: Id::Var(ret_name),
                             }),
@@ -203,7 +207,7 @@ impl<'src> Parser<'src> {
 
         self.expect(Token::RBrace)?;
 
-        let iv = self.alloc_avis(iv, MaybeType(None));
+        let iv = self.alloc_lvis(iv, MaybeType(None));
         Ok(self.alloc_expr(Expr::Tensor(Tensor {
             body: Vec::new(),
             ret,

@@ -45,7 +45,7 @@ impl<'ast> Visit<'ast> for CompileFfi {
         res.push_str(&format!("fn {}({}) -> {} {{\n", fundef.name, args, ret_type));
         res.push_str(&format!("    unsafe {{ IMP_{}({}) }}\n",
                                 fundef.name,
-                                fundef.args.iter().map(|avis| avis.name.to_owned())
+                                fundef.args.iter().map(|arg| arg.name.to_owned())
                             .collect::<Vec<_>>().join(", ")));
         res.push_str("}\n");
 

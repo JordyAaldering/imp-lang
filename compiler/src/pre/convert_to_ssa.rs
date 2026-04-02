@@ -13,7 +13,7 @@ pub fn convert_to_ssa<'ast>(program: Program<'ast, FlattenedAst>) -> Program<'as
 
 pub struct ConvertToSsa<'ast> {
     uid: usize,
-    ids: Vec<&'ast Avis<UntypedAst>>,
+    ids: Vec<&'ast Lvis<'ast, UntypedAst>>,
     body_stack: Vec<Vec<Stmt<'ast, UntypedAst>>>,
     env_stack: Vec<HashMap<String, Id<'ast, UntypedAst>>>,
 }
@@ -33,8 +33,12 @@ impl<'ast> ConvertToSsa<'ast> {
         format!("_ssa_{}", self.uid)
     }
 
-    fn alloc_avis(&self, name: String, ty: MaybeType) -> &'ast Avis<UntypedAst> {
-        Box::leak(Box::new(Avis { name, ty }))
+    fn alloc_farg(&self, name: String, ty: MaybeType) -> &'ast Farg<UntypedAst> {
+        Box::leak(Box::new(Farg { name, ty }))
+    }
+
+    fn alloc_lvis(&self, name: String, ty: MaybeType, ssa: Option<&'ast Expr<'ast, UntypedAst>>) -> &'ast Lvis<'ast, UntypedAst> {
+        Box::leak(Box::new(Lvis { name, ty, ssa }))
     }
 
     fn alloc_expr(&self, expr: Expr<'ast, UntypedAst>) -> &'ast Expr<'ast, UntypedAst> {
@@ -66,7 +70,7 @@ impl<'ast> ConvertToSsa<'ast> {
         let mut args = Vec::with_capacity(fundef.args.len());
 
         for arg in fundef.args {
-            args.push(self.alloc_avis(arg.name.clone(), arg.ty.clone()));
+            args.push(self.alloc_farg(arg.name.clone(), arg.ty.clone()));
         }
 
         self.push_env();
@@ -100,7 +104,7 @@ impl<'ast> ConvertToSsa<'ast> {
 
     fn trav_assign(&mut self, assign: Assign<'ast, FlattenedAst>) {
         let id = self.trav_expr((*assign.expr).clone());
-        self.bind_env(assign.avis.name.clone(), id);
+        self.bind_env(assign.lvis.name.clone(), id);
     }
 
     fn trav_return(&mut self, ret: Return<'ast, FlattenedAst>) {
@@ -133,25 +137,25 @@ impl<'ast> ConvertToSsa<'ast> {
 
     fn emit_expr(&mut self, expr: Expr<'ast, UntypedAst>) -> Id<'ast, UntypedAst> {
         let name = self.fresh_uid();
-        let avis = self.alloc_avis(name, MaybeType(None));
-        self.ids.push(avis);
         let expr_ref = self.alloc_expr(expr);
+        let lvis = self.alloc_lvis(name, MaybeType(None), Some(expr_ref));
+        self.ids.push(lvis);
         self.body_stack
             .last_mut()
             .expect("missing body")
-            .push(Stmt::Assign(Assign { avis, expr: expr_ref }));
-        Id::Var(avis)
+            .push(Stmt::Assign(Assign { lvis, expr: expr_ref }));
+        Id::Var(lvis)
     }
 
     fn trav_tensor(&mut self, tensor: Tensor<'ast, FlattenedAst>) -> Tensor<'ast, UntypedAst> {
         let lb = self.trav_id(tensor.lb);
         let ub = self.trav_id(tensor.ub);
 
-        let iv_avis = self.alloc_avis(tensor.iv.name.clone(), MaybeType(None));
-        self.ids.push(iv_avis);
+        let iv_lvis = self.alloc_lvis(tensor.iv.name.clone(), MaybeType(None), None);
+        self.ids.push(iv_lvis);
 
         self.push_env();
-        self.bind_env(tensor.iv.name.clone(), Id::Var(iv_avis));
+        self.bind_env(tensor.iv.name.clone(), Id::Var(iv_lvis));
 
         self.body_stack.push(Vec::new());
         for stmt in tensor.body {
@@ -165,7 +169,7 @@ impl<'ast> ConvertToSsa<'ast> {
         Tensor {
             body,
             ret,
-            iv: iv_avis,
+            iv: iv_lvis,
             lb,
             ub,
         }

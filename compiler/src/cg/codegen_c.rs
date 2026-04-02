@@ -3,7 +3,7 @@ use std::{collections::HashSet, mem};
 use crate::{ast::*, Visit};
 
 pub struct CompileC {
-    emitted: HashSet<*const Avis<TypedAst>>,
+    emitted: HashSet<*const ()>,
     stmts: Vec<String>,
     output: String,
 }
@@ -23,15 +23,15 @@ impl CompileC {
 
     fn ensure_local<'ast>(
         &mut self,
-        avis: &'ast Avis<TypedAst>,
+        lvis: &'ast Lvis<'ast, TypedAst>,
         expr: &Expr<'ast, TypedAst>,
         fundef: &Fundef<'ast, TypedAst>,
         extra_scopes: &Vec<ScopeBlock<'ast, TypedAst>>,
     ) {
-        let key = avis as *const _;
+        let key = lvis as *const _ as *const ();
         if self.emitted.insert(key) {
             let rhs = self.render_expr(expr, fundef, extra_scopes);
-            self.stmts.push(format!("{} {} = {};", to_ctype(&avis.ty), avis.name, rhs));
+            self.stmts.push(format!("{} {} = {};", to_ctype(&lvis.ty), lvis.name, rhs));
         }
     }
 
@@ -49,21 +49,21 @@ impl CompileC {
             return fundef.args[i].name.clone();
         }
 
-        let avis = match id {
+        let lvis = match id {
             Id::Arg(_) => return fundef.nameof(&id),
-            Id::Var(avis) => avis,
+            Id::Var(lvis) => lvis,
         };
 
         let mut scopes = Vec::with_capacity(1 + extra_scopes.len());
         scopes.push(self.body_scope(fundef));
         scopes.extend(extra_scopes.iter().cloned());
 
-        match find_local_in_scopes(&scopes, avis) {
+        match find_local_in_scopes(&scopes, lvis) {
             Some(LocalDef::Assign(expr)) => {
-                self.ensure_local(avis, expr, fundef, extra_scopes);
-                avis.name.clone()
+                self.ensure_local(lvis, expr, fundef, extra_scopes);
+                lvis.name.clone()
             }
-            Some(LocalDef::IndexRange { .. }) | None => avis.name.clone(),
+            Some(LocalDef::IndexRange { .. }) | None => lvis.name.clone(),
         }
     }
 

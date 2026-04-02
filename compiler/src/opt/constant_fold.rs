@@ -2,7 +2,7 @@ use crate::{Rewrite, ast::*};
 
 
 pub struct ConstantFold<'ast> {
-    args: Vec<&'ast Avis<TypedAst>>,
+    args: Vec<&'ast Farg<TypedAst>>,
 }
 
 impl<'ast> ConstantFold<'ast> {
