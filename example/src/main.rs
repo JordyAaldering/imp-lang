@@ -7,9 +7,9 @@ fn main() {
     println!("addthem = {}", addthem(4, 2, 3));
     assert_eq!(shouldbefolded(), addthem(4, 2, 3));
 
-    // This does not work yet, but it should:
     let ub = 10;
-    let arr: ImpArrayu32 = makevector(ub);
+    let arr: ImpArrayu32 = iota(ub);
     assert_eq!(arr.shp, vec![ub as usize]);
+    assert_eq!(arr.data, (0..ub).collect::<Vec<u32>>());
     println!("arr.data = {:?}", arr.data);
 }
