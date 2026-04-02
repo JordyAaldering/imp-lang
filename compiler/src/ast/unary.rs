@@ -1,6 +1,6 @@
 use std::fmt;
 
-use super::AstConfig;
+use super::*;
 
 #[derive(Clone, Debug)]
 pub struct Unary<'ast, Ast: AstConfig> {

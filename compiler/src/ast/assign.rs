@@ -1,4 +1,4 @@
-use super::{AstConfig, VarInfo, Expr};
+use super::*;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Assign<'ast, Ast: AstConfig> {

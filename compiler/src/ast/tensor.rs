@@ -1,4 +1,4 @@
-use super::{AstConfig, VarInfo, ScopeBlock, Stmt, Id};
+use super::*;
 
 #[derive(Clone, Debug)]
 pub struct Tensor<'ast, Ast: AstConfig> {

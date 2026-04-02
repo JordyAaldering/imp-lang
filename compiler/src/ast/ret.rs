@@ -1,4 +1,4 @@
-use super::{Id, AstConfig};
+use super::*;
 
 #[derive(Clone, Debug)]
 pub struct Return<'ast, Ast: AstConfig> {

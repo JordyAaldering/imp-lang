@@ -1,4 +1,4 @@
-use super::AstConfig;
+use super::*;
 
 #[derive(Clone, Copy, Debug)]
 pub enum Id<'ast, Ast: AstConfig> {
