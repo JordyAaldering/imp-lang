@@ -22,10 +22,14 @@ fn main() {
     let ast = tc::type_infer(ast).unwrap();
     println!("{}", show::show(&ast));
 
-    println!("=== codegen_header ===");
-    let mut codegen = cg::codegen_ffi::CompileFfi::new();
-    codegen.visit_program(&ast);
-    print!("{}", codegen.finish());
+    println!("=== constant_fold ===");
+    let ast = opt::constant_fold(ast);
+    println!("{}", show::show(&ast));
+
+    // println!("=== codegen_header ===");
+    // let mut codegen = cg::codegen_ffi::CompileFfi::new();
+    // codegen.visit_program(&ast);
+    // print!("{}", codegen.finish());
 
     println!("=== codegen_c ===");
     let mut codegen = cg::codegen_c::CompileC::new();

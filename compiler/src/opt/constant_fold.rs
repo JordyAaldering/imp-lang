@@ -1,5 +1,9 @@
 use crate::{Rewrite, ast::*};
 
+pub fn constant_fold<'ast>(program: Program<'ast, TypedAst>) -> Program<'ast, TypedAst> {
+    let mut cf = ConstantFold::new();
+    cf.rewrite_program(program)
+}
 
 pub struct ConstantFold<'ast> {
     args: Vec<&'ast Farg<TypedAst>>,
@@ -22,17 +26,28 @@ impl<'ast> Rewrite<'ast> for ConstantFold<'ast> {
     }
 
     fn rewrite_binary(&mut self, binary: Binary<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
-        let l = &binary.l;
-        let r = &binary.r;
-        match (l, r) {
-            (Id::Var(_l), Id::Var(_r)) => {
-                // Todo
-                Expr::Binary(binary)
-            }
-            _ => {
-                // Nothing to do
-                Expr::Binary(binary)
+        if matches!(binary.op, Bop::Add) {
+            let l = match &binary.l {
+                Id::Var(lvis) => match lvis.ssa {
+                    Some(Expr::U32(v)) => Some(v),
+                    _ => None,
+                },
+                Id::Arg(_) => None,
+            };
+
+            let r = match &binary.r {
+                Id::Var(lvis) => match lvis.ssa {
+                    Some(Expr::U32(v)) => Some(v),
+                    _ => None,
+                },
+                Id::Arg(_) => None,
+            };
+
+            if let (Some(l), Some(r)) = (l, r) {
+                return Expr::U32(l + r);
             }
         }
+
+        Expr::Binary(binary)
     }
 }
