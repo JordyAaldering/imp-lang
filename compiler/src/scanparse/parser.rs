@@ -2,7 +2,7 @@ use std::iter::Peekable;
 
 use crate::ast::{
     Assign, Avis, BaseType, Binary, Bop, Expr, Fundef, Id, MaybeType, Program, Return, Shape,
-    Stmt, Tensor, Type, Uop, Unary, ParseAst,
+    Stmt, Tensor, Type, Uop, Unary, ParsedAst,
 };
 
 use super::{
@@ -40,11 +40,11 @@ impl<'src> Parser<'src> {
         format!("_ret_{}", self.uid)
     }
 
-    fn alloc_avis(&self, name: String, ty: MaybeType) -> &'static Avis<ParseAst> {
+    fn alloc_avis(&self, name: String, ty: MaybeType) -> &'static Avis<ParsedAst> {
         Box::leak(Box::new(Avis { name, ty }))
     }
 
-    fn alloc_expr(&self, expr: Expr<'static, ParseAst>) -> &'static Expr<'static, ParseAst> {
+    fn alloc_expr(&self, expr: Expr<'static, ParsedAst>) -> &'static Expr<'static, ParsedAst> {
         Box::leak(Box::new(expr))
     }
 
@@ -75,7 +75,7 @@ impl<'src> Parser<'src> {
 }
 
 impl<'src> Parser<'src> {
-    pub fn parse_program(&mut self) -> ParseResult<Program<'static, ParseAst>> {
+    pub fn parse_program(&mut self) -> ParseResult<Program<'static, ParsedAst>> {
         let mut fundefs = Vec::new();
 
         while self.lexer.peek().is_some() {
@@ -85,7 +85,7 @@ impl<'src> Parser<'src> {
         Ok(Program { fundefs })
     }
 
-    fn parse_fundef(&mut self) -> ParseResult<Fundef<'static, ParseAst>> {
+    fn parse_fundef(&mut self) -> ParseResult<Fundef<'static, ParsedAst>> {
         let (_, _span_start) = self.expect(Token::Fn)?;
 
         let (name, _) = self.parse_id()?;
@@ -130,13 +130,13 @@ impl<'src> Parser<'src> {
         })
     }
 
-    fn parse_farg(&mut self) -> ParseResult<&'static Avis<ParseAst>> {
+    fn parse_farg(&mut self) -> ParseResult<&'static Avis<ParsedAst>> {
         let (ty, _) = self.parse_type()?;
         let (id, _) = self.parse_id()?;
         Ok(self.alloc_avis(id, MaybeType(Some(ty))))
     }
 
-    fn parse_stmt(&mut self) -> ParseResult<Vec<Stmt<'static, ParseAst>>> {
+    fn parse_stmt(&mut self) -> ParseResult<Vec<Stmt<'static, ParsedAst>>> {
         let (token, span) = self.next()?;
 
         let stmts = match token {
@@ -176,7 +176,7 @@ impl<'src> Parser<'src> {
         Ok(stmts)
     }
 
-    fn parse_expr(&mut self, prev_op: Option<impl Operator>) -> ParseResult<&'static Expr<'static, ParseAst>> {
+    fn parse_expr(&mut self, prev_op: Option<impl Operator>) -> ParseResult<&'static Expr<'static, ParsedAst>> {
         if let Some((Token::LBrace, _)) = self.lexer.peek() {
             self.parse_tensor()
         } else {
@@ -184,7 +184,7 @@ impl<'src> Parser<'src> {
         }
     }
 
-    fn parse_tensor(&mut self) -> ParseResult<&'static Expr<'static, ParseAst>> {
+    fn parse_tensor(&mut self) -> ParseResult<&'static Expr<'static, ParsedAst>> {
         self.expect(Token::LBrace)?;
 
         let ret = self.parse_expr(None::<Bop>)?;
@@ -213,7 +213,7 @@ impl<'src> Parser<'src> {
         })))
     }
 
-    fn parse_binary(&mut self, prev_op: Option<impl Operator>) -> ParseResult<&'static Expr<'static, ParseAst>> {
+    fn parse_binary(&mut self, prev_op: Option<impl Operator>) -> ParseResult<&'static Expr<'static, ParsedAst>> {
         let (token, span_start) = self.next()?;
 
         let mut left = match token {
@@ -258,7 +258,7 @@ impl<'src> Parser<'src> {
         Ok(left)
     }
 
-    fn parse_unary(&mut self, op: Uop) -> ParseResult<&'static Expr<'static, ParseAst>> {
+    fn parse_unary(&mut self, op: Uop) -> ParseResult<&'static Expr<'static, ParsedAst>> {
         let r = self.parse_expr(Some(op))?;
         Ok(self.alloc_expr(Expr::Unary(Unary { r, op })))
     }

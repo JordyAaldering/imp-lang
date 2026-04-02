@@ -5,9 +5,9 @@ mod parser;
 
 use lexer::Lexer;
 use parser::Parser;
-use crate::ast::{Program, ParseAst};
+use crate::ast::{Program, ParsedAst};
 
-pub fn scanparse(src: &str) -> Result<Program<'static, ParseAst>, String> {
+pub fn scanparse(src: &str) -> Result<Program<'static, ParsedAst>, String> {
     let lexer = Lexer::new(src);
     let mut parser = Parser::new(lexer);
     parser.parse_program()
