@@ -22,9 +22,7 @@ impl<'ast, Ast: AstConfig> Fundef<'ast, Ast> {
     pub fn typof(&self, k: &Id<'ast, Ast>) -> &Ast::VarType {
         match k {
             Id::Arg(i) => &self.args[*i].ty,
-            Id::Var(v) => &Ast::var_lvis(v)
-                .expect("cannot get variable type for this AST configuration")
-                .ty,
+            Id::Var(v) => &Ast::var_lvis(v).ty,
         }
     }
 

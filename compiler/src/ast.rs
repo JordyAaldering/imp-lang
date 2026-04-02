@@ -41,13 +41,13 @@ pub trait AstConfig: Clone + fmt::Debug {
 
     type VarLink<'ast>: Clone + fmt::Debug;
 
+    type SsaLink<'ast>: Clone + fmt::Debug;
+
     type Operand<'ast>: Clone + fmt::Debug;
 
     fn var_name<'ast>(link: &Self::VarLink<'ast>) -> String;
 
-    type SsaLink<'ast>: Clone + fmt::Debug;
-
-    fn var_lvis<'ast>(link: &Self::VarLink<'ast>) -> Option<&'ast Lvis<'ast, Self>>;
+    fn var_lvis<'ast>(link: &Self::VarLink<'ast>) -> &'ast Lvis<'ast, Self>;
 
     fn visit_operand<'ast, V>(visitor: &mut V, operand: &Self::Operand<'ast>)
     where
@@ -67,16 +67,16 @@ impl AstConfig for ParsedAst {
 
     type VarLink<'ast> = String;
 
-    type Operand<'ast> = &'ast Expr<'ast, ParsedAst>;
-
     type SsaLink<'ast> = ();
+
+    type Operand<'ast> = &'ast Expr<'ast, ParsedAst>;
 
     fn var_name<'ast>(link: &Self::VarLink<'ast>) -> String {
         link.clone()
     }
 
-    fn var_lvis<'ast>(_link: &Self::VarLink<'ast>) -> Option<&'ast Lvis<'ast, Self>> {
-        None
+    fn var_lvis<'ast>(_link: &Self::VarLink<'ast>) -> &'ast Lvis<'ast, Self> {
+        unreachable!("Tried calling var_lvis before SSA construction");
     }
 
     fn visit_operand<'ast, V>(visitor: &mut V, operand: &Self::Operand<'ast>)
@@ -103,16 +103,16 @@ impl AstConfig for FlattenedAst {
 
     type VarLink<'ast> = String;
 
-    type Operand<'ast> = Id<'ast, FlattenedAst>;
-
     type SsaLink<'ast> = ();
+
+    type Operand<'ast> = Id<'ast, FlattenedAst>;
 
     fn var_name<'ast>(link: &Self::VarLink<'ast>) -> String {
         link.clone()
     }
 
-    fn var_lvis<'ast>(_link: &Self::VarLink<'ast>) -> Option<&'ast Lvis<'ast, Self>> {
-        None
+    fn var_lvis<'ast>(_link: &Self::VarLink<'ast>) -> &'ast Lvis<'ast, Self> {
+        unreachable!("Tried calling var_lvis before SSA construction");
     }
 
     fn visit_operand<'ast, V>(visitor: &mut V, operand: &Self::Operand<'ast>)
@@ -139,16 +139,16 @@ impl AstConfig for UntypedAst {
 
     type VarLink<'ast> = &'ast Lvis<'ast, UntypedAst>;
 
-    type Operand<'ast> = Id<'ast, UntypedAst>;
-
     type SsaLink<'ast> = Option<&'ast Expr<'ast, UntypedAst>>;
+
+    type Operand<'ast> = Id<'ast, UntypedAst>;
 
     fn var_name<'ast>(link: &Self::VarLink<'ast>) -> String {
         link.name.clone()
     }
 
-    fn var_lvis<'ast>(link: &Self::VarLink<'ast>) -> Option<&'ast Lvis<'ast, Self>> {
-        Some(*link)
+    fn var_lvis<'ast>(link: &Self::VarLink<'ast>) -> &'ast Lvis<'ast, Self> {
+        link
     }
 
     fn visit_operand<'ast, V>(visitor: &mut V, operand: &Self::Operand<'ast>)
@@ -175,16 +175,16 @@ impl AstConfig for TypedAst {
 
     type VarLink<'ast> = &'ast Lvis<'ast, TypedAst>;
 
-    type Operand<'ast> = Id<'ast, TypedAst>;
-
     type SsaLink<'ast> = Option<&'ast Expr<'ast, TypedAst>>;
+
+    type Operand<'ast> = Id<'ast, TypedAst>;
 
     fn var_name<'ast>(link: &Self::VarLink<'ast>) -> String {
         link.name.clone()
     }
 
-    fn var_lvis<'ast>(link: &Self::VarLink<'ast>) -> Option<&'ast Lvis<'ast, Self>> {
-        Some(*link)
+    fn var_lvis<'ast>(link: &Self::VarLink<'ast>) -> &'ast Lvis<'ast, Self> {
+        link
     }
 
     fn visit_operand<'ast, V>(visitor: &mut V, operand: &Self::Operand<'ast>)
