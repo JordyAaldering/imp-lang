@@ -26,6 +26,10 @@ fn main() {
     let ast = opt::constant_fold(ast);
     println!("{}", show::show(&ast));
 
+    println!("=== dead_code_removal ===");
+    let ast = opt::dead_code_removal(ast);
+    println!("{}", show::show(&ast));
+
     // println!("=== codegen_header ===");
     // let mut codegen = cg::codegen_ffi::CompileFfi::new();
     // codegen.visit_program(&ast);
