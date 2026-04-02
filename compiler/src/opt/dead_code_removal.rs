@@ -51,26 +51,24 @@ impl<'ast> Rewrite<'ast> for DeadCodeRemoval {
         fundef.decs.retain(|lvis| self.used.contains(&Self::ptr(lvis)));
     }
 
-    // Recurse into binary operands so rewrite_id is called on each.
     fn rewrite_binary(&mut self, binary: Binary<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
         self.rewrite_id(binary.l.clone());
         self.rewrite_id(binary.r.clone());
         Expr::Binary(binary)
     }
 
-    // Recurse into unary operand so rewrite_id is called on it.
     fn rewrite_unary(&mut self, unary: Unary<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
         self.rewrite_id(unary.r.clone());
         Expr::Unary(unary)
     }
 
     fn rewrite_tensor(&mut self, mut tensor: Tensor<'ast, Self::Ast>) -> Tensor<'ast, Self::Ast> {
-        // Switch to a fresh inner scope for the tensor body.
         let outer_used = mem::take(&mut self.used);
 
-        // iv and ret seed the inner backward sweep.
         self.rewrite_id(Id::Var(tensor.iv));
         self.rewrite_id(tensor.ret.clone());
+        self.rewrite_id(tensor.lb.clone());
+        self.rewrite_id(tensor.ub.clone());
 
         let mut kept_rev = Vec::with_capacity(tensor.body.len());
         for stmt in mem::take(&mut tensor.body).into_iter().rev() {
@@ -93,15 +91,12 @@ impl<'ast> Rewrite<'ast> for DeadCodeRemoval {
         kept_rev.reverse();
         tensor.body = kept_rev;
 
-        // Restore outer scope, then mark lb/ub as used there (they come from
-        // the outer scope and are the tensor's external dependencies).
         self.used = outer_used;
         self.rewrite_id(tensor.lb.clone());
         self.rewrite_id(tensor.ub.clone());
         tensor
     }
 
-    // Visiting an id means it is used — mark it.
     fn rewrite_id(&mut self, id: Id<'ast, Self::Ast>) -> Id<'ast, Self::Ast> {
         if let Id::Var(v) = &id {
             self.used.insert(Self::ptr(v));

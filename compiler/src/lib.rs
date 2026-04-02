@@ -1,5 +1,6 @@
 #![feature(associated_type_defaults)]
 
+pub mod core;
 pub mod ast;
 pub mod traverse;
 pub mod show;
