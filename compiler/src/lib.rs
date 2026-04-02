@@ -19,14 +19,14 @@ pub fn compile(src: &str) -> Program<'static, TypedAst> {
     ast
 }
 
-pub fn emit_header(ast: &mut Program<'static, TypedAst>, outfile: &str) {
-    let mut cg = compile::codegen_header::CompileHeader::new();
+pub fn emit_ffi(ast: &Program<'static, TypedAst>, outfile: &str) {
+    let mut cg = compile::codegen_ffi::CompileFfi::new();
     cg.visit_program(&ast);
     std::fs::write(outfile, cg.finish()).unwrap();
 }
 
-pub fn emit_c(ast: &mut Program<'static, TypedAst>, outfile: &str) {
-    let mut cg = compile::codegen_c::CodegenContext::new();
+pub fn emit_c(ast: &Program<'static, TypedAst>, outfile: &str) {
+    let mut cg = compile::codegen_c::CompileC::new();
     cg.visit_program(ast);
     std::fs::write(outfile, cg.finish()).unwrap();
 }

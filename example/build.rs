@@ -10,7 +10,7 @@ fn main() {
 
     let src = fs::read_to_string(&"src/simple.imp").unwrap();
     let mut ast = compile(&src);
-    emit_header(&mut ast, h_path.to_str().unwrap());
+    emit_ffi(&mut ast, h_path.to_str().unwrap());
     emit_c(&mut ast, c_path.to_str().unwrap());
 
     cc::Build::new()

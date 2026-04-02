@@ -18,8 +18,13 @@ fn main() {
     let ast = type_infer::type_infer(ast).unwrap();
     println!("{}", show::show(&ast));
 
+    println!("=== codegen_header ===");
+    let mut codegen = compile::codegen_ffi::CompileFfi::new();
+    codegen.visit_program(&ast);
+    print!("{}", codegen.finish());
+
     println!("=== codegen_c ===");
-    let mut codegen = compile::codegen_c::CodegenContext::new();
+    let mut codegen = compile::codegen_c::CompileC::new();
     codegen.visit_program(&ast);
     print!("{}", codegen.finish());
 }
