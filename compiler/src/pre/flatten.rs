@@ -35,7 +35,7 @@ impl<'ast> Flatten<'ast> {
         Box::leak(Box::new(Farg { name, ty }))
     }
 
-    fn alloc_lvis(&self, name: String, ty: MaybeType) -> &'ast VarInfo<'ast, FlattenedAst> {
+    fn alloc_lvis(&self, name: String, ty: Option<Type>) -> &'ast VarInfo<'ast, FlattenedAst> {
         Box::leak(Box::new(VarInfo { name, ty, ssa: () }))
     }
 
@@ -66,7 +66,7 @@ impl<'ast> Flatten<'ast> {
 
     fn emit_expr(&mut self, expr: Expr<'ast, FlattenedAst>) -> Id<'ast, FlattenedAst> {
         let name = self.fresh_uid();
-        let lvis = self.alloc_lvis(name.clone(), MaybeType(None));
+        let lvis = self.alloc_lvis(name.clone(), None);
         let expr = self.alloc_expr(expr);
         self.body_stack
             .last_mut()

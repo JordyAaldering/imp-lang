@@ -23,8 +23,7 @@ impl<'ast, Ast: AstConfig> Show<'ast, Ast> {
         }
     }
 
-    fn push(&mut self, s: &str) {
-        self.indent();
+    fn write(&mut self, s: &str) {
         self.output.push_str(s);
     }
 
@@ -46,20 +45,22 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
     fn visit_fundef(&mut self, fundef: &Fundef<'ast, Self::Ast>) {
         self.args = fundef.args.clone();
 
-        self.push(&format!("fn {}(", fundef.name));
+        self.write(&format!("fn {}(", fundef.name));
         self.visit_fargs(&fundef.args);
         self.output.push_str(&format!(") -> {} {{\n", fundef.ret_type));
 
         self.depth += 1;
         for id in &fundef.decs {
-            self.push(&format!("{} {};\n", id.ty, id.name));
+            self.indent();
+            Self::Ast::visit_type(self, &id.ty);
+            self.write(&format!(" {};\n", id.name));
         }
         for stmt in &fundef.body {
             self.visit_stmt(stmt);
         }
         self.depth -= 1;
 
-        self.push("}");
+        self.write("}");
     }
 
     fn visit_farg(&mut self, arg: &'ast Farg) {
@@ -75,13 +76,15 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
     }
 
     fn visit_assign(&mut self, assign: &Assign<'ast, Self::Ast>) {
-        self.push(&assign.lvis.name);
+        self.indent();
+        self.write(&assign.lvis.name);
         self.output.push_str(" = ");
         self.visit_expr(assign.expr);
     }
 
     fn visit_return(&mut self, ret: &Return<'ast, Self::Ast>) {
-        self.push("return ");
+        self.indent();
+        self.write("return ");
         self.visit_id(&ret.id);
     }
 
@@ -110,7 +113,8 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
 
         self.depth -= 1;
 
-        self.push("| ");
+        self.indent();
+        self.write("| ");
         Ast::visit_operand(self, &tensor.lb);
         self.output.push_str(" <= ");
         self.output.push_str(&tensor.iv.name);
@@ -145,5 +149,9 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
 
     fn visit_u32(&mut self, value: &u32) {
         self.output.push_str(&value.to_string());
+    }
+
+    fn visit_type(&mut self, ty: &Type) {
+        self.output.push_str(&ty.to_string());
     }
 }

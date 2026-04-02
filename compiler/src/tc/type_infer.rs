@@ -284,6 +284,10 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
     fn trav_u32(&mut self, value: u32) -> Self::U32Out {
         (value, Type::scalar(BaseType::U32))
     }
+
+    fn trav_type(&mut self, _ty: Type) -> Self::TypeOut {
+        unreachable!()
+    }
 }
 
 fn unifies(a: Type, _b: Type) -> Result<Type, InferenceError> {

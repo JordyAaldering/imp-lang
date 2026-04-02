@@ -90,12 +90,13 @@ pub trait Visit<'ast> {
     /// Terminals
     ///
 
-    /// An identifier occurring in an expression-position.
     fn visit_id(&mut self, _id: &Id<'ast, Self::Ast>) { }
 
     fn visit_bool(&mut self, _v: &bool) { }
 
     fn visit_u32(&mut self, _v: &u32) { }
+
+    fn visit_type(&mut self, _ty: &Type) { }
 }
 
 pub trait Rewrite<'ast> {
@@ -183,6 +184,10 @@ pub trait Rewrite<'ast> {
 
     fn rewrite_u32(&mut self, v: u32) -> u32 {
         v
+    }
+
+    fn rewrite_type(&mut self, ty: Type) -> Type {
+        ty
     }
 }
 
@@ -280,7 +285,6 @@ pub trait Traverse<'ast> {
 
     type IdOut = Id<'ast, Self::OutAst>;
 
-    /// An identifier occurring in an expression-position.
     fn trav_id(&mut self, id: Id<'ast, Self::InAst>) -> Self::IdOut;
 
     type BoolOut = bool;
@@ -290,4 +294,8 @@ pub trait Traverse<'ast> {
     type U32Out = u32;
 
     fn trav_u32(&mut self, v: u32) -> Self::U32Out;
+
+    type TypeOut = Type;
+
+    fn trav_type(&mut self, ty: Type) -> Self::TypeOut;
 }

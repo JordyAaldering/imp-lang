@@ -1,9 +1,6 @@
 use std::iter::Peekable;
 
-use crate::ast::{
-    Assign, Farg, VarInfo, BaseType, Binary, Bop, Expr, Fundef, Id, MaybeType, Program, Return, Shape,
-    Stmt, Tensor, Type, Uop, Unary, ParsedAst,
-};
+use crate::ast::*;
 
 use super::{
     lexer::{Lexer, Token},
@@ -44,7 +41,7 @@ impl<'src> Parser<'src> {
         Box::leak(Box::new(Farg { name, ty }))
     }
 
-    fn alloc_lvis(&self, name: String, ty: MaybeType) -> &'static VarInfo<'static, ParsedAst> {
+    fn alloc_lvis(&self, name: String, ty: Option<Type>) -> &'static VarInfo<'static, ParsedAst> {
         Box::leak(Box::new(VarInfo { name, ty, ssa: () }))
     }
 
@@ -147,7 +144,7 @@ impl<'src> Parser<'src> {
             Token::Identifier(lhs) => {
                 self.expect(Token::Assign)?;
                 let expr = self.parse_expr(None::<Bop>)?;
-                let lvis = self.alloc_lvis(lhs, MaybeType(None));
+                let lvis = self.alloc_lvis(lhs, None);
                 vec![Stmt::Assign(Assign { lvis, expr })]
             }
             Token::Return => {
@@ -156,7 +153,7 @@ impl<'src> Parser<'src> {
                     Expr::Id(id) => vec![Stmt::Return(Return { id: id.clone() })],
                     _ => {
                         let ret_name = self.fresh_uid();
-                        let ret_lvis = self.alloc_lvis(ret_name.clone(), MaybeType(None));
+                        let ret_lvis = self.alloc_lvis(ret_name.clone(), None);
                         vec![
                             Stmt::Assign(Assign { lvis: ret_lvis, expr }),
                             Stmt::Return(Return {
@@ -207,7 +204,7 @@ impl<'src> Parser<'src> {
 
         self.expect(Token::RBrace)?;
 
-        let iv = self.alloc_lvis(iv, MaybeType(None));
+        let iv = self.alloc_lvis(iv, None);
         Ok(self.alloc_expr(Expr::Tensor(Tensor {
             body: Vec::new(),
             ret,

@@ -35,7 +35,7 @@ use std::fmt;
 use crate::{Traverse, Visit};
 
 pub trait AstConfig: Clone + fmt::Debug {
-    type VarType: Clone + fmt::Debug + fmt::Display;
+    type VarType: Clone + fmt::Debug;
 
     type VarLink<'ast>: Clone + fmt::Debug;
 
@@ -46,6 +46,10 @@ pub trait AstConfig: Clone + fmt::Debug {
     fn var_name<'ast>(link: &Self::VarLink<'ast>) -> String;
 
     fn var_lvis<'ast>(link: &Self::VarLink<'ast>) -> &'ast VarInfo<'ast, Self>;
+
+    fn visit_type<'ast, V>(visitor: &mut V, ty: &Self::VarType)
+    where
+        V: Visit<'ast, Ast = Self> + ?Sized;
 
     fn visit_operand<'ast, V>(visitor: &mut V, operand: &Self::Operand<'ast>)
     where
@@ -61,7 +65,7 @@ pub trait AstConfig: Clone + fmt::Debug {
 pub struct ParsedAst;
 
 impl AstConfig for ParsedAst {
-    type VarType = MaybeType;
+    type VarType = Option<Type>;
 
     type VarLink<'ast> = String;
 
@@ -75,6 +79,15 @@ impl AstConfig for ParsedAst {
 
     fn var_lvis<'ast>(_link: &Self::VarLink<'ast>) -> &'ast VarInfo<'ast, Self> {
         unreachable!("Tried calling var_lvis before SSA construction");
+    }
+
+    fn visit_type<'ast, V>(visitor: &mut V, ty: &Self::VarType)
+    where
+        V: Visit<'ast, Ast = Self> + ?Sized
+    {
+        if let Some(ty) = ty {
+            visitor.visit_type(ty);
+        }
     }
 
     fn visit_operand<'ast, V>(visitor: &mut V, operand: &Self::Operand<'ast>)
@@ -97,7 +110,7 @@ impl AstConfig for ParsedAst {
 pub struct FlattenedAst;
 
 impl AstConfig for FlattenedAst {
-    type VarType = MaybeType;
+    type VarType = Option<Type>;
 
     type VarLink<'ast> = String;
 
@@ -111,6 +124,15 @@ impl AstConfig for FlattenedAst {
 
     fn var_lvis<'ast>(_link: &Self::VarLink<'ast>) -> &'ast VarInfo<'ast, Self> {
         unreachable!("Tried calling var_lvis before SSA construction");
+    }
+
+    fn visit_type<'ast, V>(visitor: &mut V, ty: &Self::VarType)
+    where
+        V: Visit<'ast, Ast = Self> + ?Sized
+    {
+        if let Some(ty) = ty {
+            visitor.visit_type(ty);
+        }
     }
 
     fn visit_operand<'ast, V>(visitor: &mut V, operand: &Self::Operand<'ast>)
@@ -133,7 +155,7 @@ impl AstConfig for FlattenedAst {
 pub struct UntypedAst;
 
 impl AstConfig for UntypedAst {
-    type VarType = MaybeType;
+    type VarType = Option<Type>;
 
     type VarLink<'ast> = &'ast VarInfo<'ast, UntypedAst>;
 
@@ -147,6 +169,15 @@ impl AstConfig for UntypedAst {
 
     fn var_lvis<'ast>(link: &Self::VarLink<'ast>) -> &'ast VarInfo<'ast, Self> {
         link
+    }
+
+    fn visit_type<'ast, V>(visitor: &mut V, ty: &Self::VarType)
+    where
+        V: Visit<'ast, Ast = Self> + ?Sized
+    {
+        if let Some(ty) = ty {
+            visitor.visit_type(ty);
+        }
     }
 
     fn visit_operand<'ast, V>(visitor: &mut V, operand: &Self::Operand<'ast>)
@@ -183,6 +214,13 @@ impl AstConfig for TypedAst {
 
     fn var_lvis<'ast>(link: &Self::VarLink<'ast>) -> &'ast VarInfo<'ast, Self> {
         link
+    }
+
+    fn visit_type<'ast, V>(visitor: &mut V, ty: &Self::VarType)
+    where
+        V: Visit<'ast, Ast = Self> + ?Sized
+    {
+        visitor.visit_type(ty);
     }
 
     fn visit_operand<'ast, V>(visitor: &mut V, operand: &Self::Operand<'ast>)

@@ -37,7 +37,7 @@ impl<'ast> ToSsa<'ast> {
         Box::leak(Box::new(Farg { name, ty }))
     }
 
-    fn alloc_lvis(&self, name: String, ty: MaybeType, ssa: Option<&'ast Expr<'ast, UntypedAst>>) -> &'ast VarInfo<'ast, UntypedAst> {
+    fn alloc_lvis(&self, name: String, ty: Option<Type>, ssa: Option<&'ast Expr<'ast, UntypedAst>>) -> &'ast VarInfo<'ast, UntypedAst> {
         Box::leak(Box::new(VarInfo { name, ty, ssa }))
     }
 
@@ -138,7 +138,7 @@ impl<'ast> ToSsa<'ast> {
     fn emit_expr(&mut self, expr: Expr<'ast, UntypedAst>) -> Id<'ast, UntypedAst> {
         let name = self.fresh_uid();
         let expr_ref = self.alloc_expr(expr);
-        let lvis = self.alloc_lvis(name, MaybeType(None), Some(expr_ref));
+        let lvis = self.alloc_lvis(name, None, Some(expr_ref));
         self.ids.push(lvis);
         self.body_stack
             .last_mut()
@@ -151,7 +151,7 @@ impl<'ast> ToSsa<'ast> {
         let lb = self.trav_id(tensor.lb);
         let ub = self.trav_id(tensor.ub);
 
-        let iv_lvis = self.alloc_lvis(tensor.iv.name.clone(), MaybeType(None), None);
+        let iv_lvis = self.alloc_lvis(tensor.iv.name.clone(), None, None);
         self.ids.push(iv_lvis);
 
         self.push_env();
