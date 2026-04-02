@@ -12,8 +12,7 @@ pub trait Traverse<'ast> {
     fn trav_program(&mut self, program: Program<'ast, Self::InAst>) -> Program<'ast, Self::OutAst> {
         let mut fundefs = Vec::with_capacity(program.fundefs.len());
         for fundef in program.fundefs {
-            let fundef = self.trav_fundef(fundef);
-            fundefs.push(fundef);
+            fundefs.push(self.trav_fundef(fundef));
         }
 
         Program { fundefs }
