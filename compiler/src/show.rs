@@ -48,7 +48,7 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
 
         self.visit_fargs(&fundef.args);
 
-        self.output.push_str(&format!(") -> {} {{\n", fundef.typof(fundef.ret_id())));
+        self.output.push_str(&format!(") -> {} {{\n", fundef.ret_type));
 
         self.depth += 1;
 

@@ -66,6 +66,7 @@ impl<'ast> ConvertToSsa<'ast> {
             args,
             decs: self.ids.clone(),
             body,
+            ret_type: MaybeType(Some(fundef.ret_type)),
         }
     }
 

@@ -6,6 +6,7 @@ pub struct Fundef<'ast, Ast: AstConfig> {
     pub args: Vec<&'ast Avis<Ast>>,
     pub decs: Vec<&'ast Avis<Ast>>,
     pub body: Vec<Stmt<'ast, Ast>>,
+    pub ret_type: Ast::ValueType,
 }
 
 impl<'ast, Ast: AstConfig> Fundef<'ast, Ast> {
