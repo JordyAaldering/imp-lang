@@ -12,7 +12,7 @@ pub fn convert_to_ssa<'ast>(program: parse_ast::Program) -> Program<'ast, Untype
 pub struct ConvertToSsa<'ast> {
     uid: usize,
     ids: Vec<&'ast Avis<UntypedAst>>,
-    scopes: Vec<ScopeBlock<'ast, UntypedAst>>,
+    body_stack: Vec<Vec<Stmt<'ast, UntypedAst>>>,
     name_to_id: Vec<HashMap<String, Id<'ast, UntypedAst>>>,
 }
 
@@ -21,7 +21,7 @@ impl<'ast> ConvertToSsa<'ast> {
         Self {
             uid: 0,
             ids: Vec::new(),
-            scopes: Vec::new(),
+            body_stack: Vec::new(),
             name_to_id: Vec::new(),
         }
     }
@@ -53,28 +53,13 @@ impl<'ast> ConvertToSsa<'ast> {
         }
 
         self.name_to_id = vec![arg_scope, HashMap::new()];
-        self.scopes = vec![Vec::new()];
-
-        let mut ret = None;
+        self.body_stack = vec![Vec::new()];
 
         for stmt in fundef.body {
-            if let Some(found) = self.trav_stmt(stmt) {
-                ret = Some(found);
-            }
+            self.trav_stmt(stmt);
         }
 
-        let ret = ret.expect("parsed function must end with return statement");
-
-        let scope = self.scopes.pop().unwrap();
-
-        let mut body = Vec::new();
-        for entry in scope {
-            if let ScopeEntry::Assign { avis, expr } = entry {
-                body.push(Stmt::Assign(Assign { avis, expr }));
-            }
-        }
-
-        body.push(ret);
+        let body = self.body_stack.pop().unwrap();
 
         Fundef {
             name: fundef.id,
@@ -88,14 +73,11 @@ impl<'ast> ConvertToSsa<'ast> {
     /// Statements
     ///
 
-    fn trav_stmt(&mut self, stmt: parse_ast::Stmt) -> Option<Stmt<'ast, UntypedAst>> {
+    fn trav_stmt(&mut self, stmt: parse_ast::Stmt) {
         use parse_ast::Stmt::*;
         match stmt {
-            Assign { lhs, expr } => {
-                self.trav_assign(lhs, expr);
-                None
-            }
-            Return { expr } => Some(self.trav_return(expr)),
+            Assign { lhs, expr } => self.trav_assign(lhs, expr),
+            Return { expr } => self.trav_return(expr),
         }
     }
 
@@ -104,9 +86,9 @@ impl<'ast> ConvertToSsa<'ast> {
         self.name_to_id.last_mut().unwrap().insert(lhs, id);
     }
 
-    fn trav_return(&mut self, expr: parse_ast::Expr) -> Stmt<'ast, UntypedAst> {
+    fn trav_return(&mut self, expr: parse_ast::Expr) {
         let id = self.trav_expr(expr);
-        Stmt::Return(Return { id })
+        self.body_stack.last_mut().unwrap().push(Stmt::Return(Return { id }));
     }
 
     ///
@@ -119,7 +101,7 @@ impl<'ast> ConvertToSsa<'ast> {
             Tensor { expr, iv, lb, ub } => self.trav_tensor_expr(*expr, iv, *lb, *ub),
             Binary { l, r, op } => self.trav_binary(*l, *r, op),
             Unary { r, op } => self.trav_unary(*r, op),
-            Identifier(id) => self.trav_id_expr(id),
+            Id(id) => Expr::Id(self.trav_id(id)),
             Bool(v) => self.trav_bool(v),
             U32(v) => self.trav_u32(v),
         };
@@ -132,10 +114,7 @@ impl<'ast> ConvertToSsa<'ast> {
         let avis = self.alloc_avis(name, MaybeType(None));
         self.ids.push(avis);
         let expr_ref = self.alloc_expr(expr);
-        self.scopes.last_mut().unwrap().push(ScopeEntry::Assign {
-            avis,
-            expr: expr_ref,
-        });
+        self.body_stack.last_mut().unwrap().push(Stmt::Assign(Assign { avis, expr: expr_ref }));
         Id::Var(avis)
     }
 
@@ -150,21 +129,10 @@ impl<'ast> ConvertToSsa<'ast> {
         scope.insert(iv, Id::Var(iv_avis));
 
         self.name_to_id.push(scope);
-        self.scopes.push(vec![ScopeEntry::IndexRange {
-            iv: iv_avis,
-            lb,
-            ub,
-        }]);
+        self.body_stack.push(Vec::new());
         let ret = self.trav_expr(expr);
-        let scope = self.scopes.pop().unwrap();
+        let body = self.body_stack.pop().unwrap();
         self.name_to_id.pop().unwrap();
-
-        let mut body = Vec::new();
-        for entry in scope {
-            if let ScopeEntry::Assign { avis, expr } = entry {
-                body.push(Stmt::Assign(Assign { avis, expr }));
-            }
-        }
 
         Expr::Tensor(Tensor {
             iv: iv_avis,
@@ -186,10 +154,6 @@ impl<'ast> ConvertToSsa<'ast> {
         Expr::Unary(Unary { r, op })
     }
 
-    fn trav_id_expr(&mut self, id: String) -> Expr<'ast, UntypedAst> {
-        Expr::Id(self.trav_id(id))
-    }
-
     ///
     /// Terminals
     ///
@@ -203,11 +167,11 @@ impl<'ast> ConvertToSsa<'ast> {
         unreachable!("could not find {id}")
     }
 
-    fn trav_bool(&mut self, value: bool) -> Expr<'ast, UntypedAst> {
-        Expr::Bool(value)
+    fn trav_bool(&mut self, v: bool) -> Expr<'ast, UntypedAst> {
+        Expr::Bool(v)
     }
 
-    fn trav_u32(&mut self, value: u32) -> Expr<'ast, UntypedAst> {
-        Expr::U32(value)
+    fn trav_u32(&mut self, v: u32) -> Expr<'ast, UntypedAst> {
+        Expr::U32(v)
     }
 }

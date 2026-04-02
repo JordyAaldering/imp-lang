@@ -91,15 +91,16 @@ pub trait Traverse<'ast> {
 
     type IdOut = Id<'ast, Self::OutAst>;
 
+    /// An identifier occurring in an expression-position.
     fn trav_id(&mut self, id: Id<'ast, Self::InAst>) -> Self::IdOut;
 
     type BoolOut = bool;
 
-    fn trav_bool(&mut self, value: bool) -> Self::BoolOut;
+    fn trav_bool(&mut self, v: bool) -> Self::BoolOut;
 
     type U32Out = u32;
 
-    fn trav_u32(&mut self, value: u32) -> Self::U32Out;
+    fn trav_u32(&mut self, v: u32) -> Self::U32Out;
 }
 
 pub trait Visit<'ast> {
@@ -192,11 +193,12 @@ pub trait Visit<'ast> {
     /// Terminals
     ///
 
+    /// An identifier occurring in an expression-position.
     fn visit_id(&mut self, _id: &Id<'ast, Self::Ast>) { }
 
-    fn visit_bool(&mut self, _value: &bool) { }
+    fn visit_bool(&mut self, _v: &bool) { }
 
-    fn visit_u32(&mut self, _value: &u32) { }
+    fn visit_u32(&mut self, _v: &u32) { }
 }
 
 // impl<'ast, T> Traverse<'ast> for T
