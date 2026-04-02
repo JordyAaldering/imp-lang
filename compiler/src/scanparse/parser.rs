@@ -174,7 +174,7 @@ impl<'src> Parser<'src> {
         let (token, span_start) = self.next()?;
 
         let mut left = match token {
-            Token::Identifier(id) => Expr::Identifier(id),
+            Token::Identifier(id) => Expr::Id(id),
             Token::BoolValue(v) => Expr::Bool(v),
             Token::U32Value(v) => Expr::U32(v),
             // Nested expression

@@ -43,7 +43,7 @@ pub enum Expr {
         r: Box<Expr>,
         op: Uop,
     },
-    Identifier(String),
+    Id(String),
     Bool(bool),
     U32(u32),
 }
@@ -104,7 +104,7 @@ impl fmt::Display for Expr {
                 write!(f, "{}{}", op, r)
             },
             // Terminals
-            Identifier(v) => write!(f, "{}", v),
+            Id(v) => write!(f, "{}", v),
             Bool(v) => write!(f, "{}", v),
             U32(v) => write!(f, "{}", v),
         }
