@@ -98,6 +98,90 @@ pub trait Visit<'ast> {
     fn visit_u32(&mut self, _v: &u32) { }
 }
 
+pub trait Rewrite<'ast> {
+    type Ast: AstConfig + 'ast;
+
+    ///
+    /// Declarations
+    ///
+
+    fn rewrite_program(&mut self, program: Program<'ast, Self::Ast>) -> Program<'ast, Self::Ast> {
+        let fundefs = program.fundefs.into_iter().map(|f| self.rewrite_fundef(f)).collect();
+        Program { fundefs }
+    }
+
+    fn rewrite_fundef(&mut self, fundef: Fundef<'ast, Self::Ast>) -> Fundef<'ast, Self::Ast> {
+        let body = fundef.body.into_iter().map(|s| self.rewrite_stmt(s)).collect();
+        Fundef { body, ..fundef }
+    }
+
+    ///
+    /// Statements
+    ///
+
+    fn rewrite_stmt(&mut self, stmt: Stmt<'ast, Self::Ast>) -> Stmt<'ast, Self::Ast> {
+        match stmt {
+            Stmt::Assign(assign) => Stmt::Assign(self.rewrite_assign(assign)),
+            Stmt::Return(ret) => Stmt::Return(self.rewrite_return(ret)),
+        }
+    }
+
+    fn rewrite_assign(&mut self, assign: Assign<'ast, Self::Ast>) -> Assign<'ast, Self::Ast> {
+        let new_expr = self.rewrite_expr((*assign.expr).clone());
+        let new_expr = Box::leak(Box::new(new_expr));
+        Assign { expr: new_expr, ..assign }
+    }
+
+    fn rewrite_return(&mut self, ret: Return<'ast, Self::Ast>) -> Return<'ast, Self::Ast> {
+        ret
+    }
+
+    ///
+    /// Expressions
+    ///
+
+    fn rewrite_expr(&mut self, expr: Expr<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
+        use Expr::*;
+        match expr {
+            Tensor(n) => Tensor(self.rewrite_tensor(n)),
+            Binary(n) => self.rewrite_binary(n),
+            Unary(n) => self.rewrite_unary(n),
+            Id(n) => Id(self.rewrite_id(n)),
+            Bool(v) => Bool(self.rewrite_bool(v)),
+            U32(v) => U32(self.rewrite_u32(v)),
+        }
+    }
+
+    fn rewrite_tensor(&mut self, tensor: Tensor<'ast, Self::Ast>) -> Tensor<'ast, Self::Ast> {
+        let body = tensor.body.into_iter().map(|s| self.rewrite_stmt(s)).collect();
+        Tensor { body, ..tensor }
+    }
+
+    fn rewrite_binary(&mut self, binary: Binary<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
+        Expr::Binary(binary)
+    }
+
+    fn rewrite_unary(&mut self, unary: Unary<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
+        Expr::Unary(unary)
+    }
+
+    ///
+    /// Terminals
+    ///
+
+    fn rewrite_id(&mut self, id: Id<'ast, Self::Ast>) -> Id<'ast, Self::Ast> {
+        id
+    }
+
+    fn rewrite_bool(&mut self, v: bool) -> bool {
+        v
+    }
+
+    fn rewrite_u32(&mut self, v: u32) -> u32 {
+        v
+    }
+}
+
 pub trait Traverse<'ast> {
     type InAst: AstConfig;
 

@@ -10,7 +10,7 @@ pub mod tc;
 pub mod opt;
 pub mod cg;
 
-pub use crate::traverse::{Traverse, Visit};
+pub use crate::traverse::{Rewrite, Traverse, Visit};
 
 use crate::ast::*;
 
