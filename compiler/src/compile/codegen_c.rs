@@ -139,7 +139,7 @@ impl<'ast> Visit<'ast> for CompileC {
         let args: Vec<String> = fundef.args.iter().map(|avis| format!("{} {}", to_ctype(&avis.ty), avis.name)).collect();
         let ret = fundef.ret_id();
         let ret_type = fundef.typof(ret);
-        res.push_str(&format!("{} DSL_{}({}) {{\n", to_ctype(ret_type), fundef.name, args.join(", ")));
+        res.push_str(&format!("{} IMP_{}({}) {{\n", to_ctype(ret_type), fundef.name, args.join(", ")));
 
         let ret_code = self.expr_for(ret, &fundef, &[]);
 
