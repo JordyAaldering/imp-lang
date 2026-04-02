@@ -1,10 +1,10 @@
-use super::{AstConfig, Avis, ScopeBlock, Stmt, Id};
+use super::{AstConfig, Lvis, ScopeBlock, Stmt, Id};
 
 #[derive(Clone, Debug)]
 pub struct Tensor<'ast, Ast: AstConfig> {
     pub body: Vec<Stmt<'ast, Ast>>,
     pub ret: Ast::Operand<'ast>,
-    pub iv: &'ast Avis<Ast>,
+    pub iv: &'ast Lvis<'ast, Ast>,
     pub lb: Ast::Operand<'ast>,
     pub ub: Ast::Operand<'ast>,
 }

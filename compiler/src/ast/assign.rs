@@ -1,7 +1,7 @@
-use super::{AstConfig, Avis, Expr};
+use super::{AstConfig, Lvis, Expr};
 
 #[derive(Clone, Copy, Debug)]
 pub struct Assign<'ast, Ast: AstConfig> {
-    pub avis: &'ast Avis<Ast>,
+    pub lvis: &'ast Lvis<'ast, Ast>,
     pub expr: &'ast Expr<'ast, Ast>,
 }

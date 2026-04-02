@@ -31,8 +31,12 @@ impl<'ast> Flatten<'ast> {
         format!("_flat_{}", self.uid)
     }
 
-    fn alloc_avis(&self, name: String, ty: MaybeType) -> &'ast Avis<FlattenedAst> {
-        Box::leak(Box::new(Avis { name, ty }))
+    fn alloc_farg(&self, name: String, ty: MaybeType) -> &'ast Farg<FlattenedAst> {
+        Box::leak(Box::new(Farg { name, ty }))
+    }
+
+    fn alloc_lvis(&self, name: String, ty: MaybeType) -> &'ast Lvis<'ast, FlattenedAst> {
+        Box::leak(Box::new(Lvis { name, ty, ssa: () }))
     }
 
     fn alloc_expr(&self, expr: Expr<'ast, FlattenedAst>) -> &'ast Expr<'ast, FlattenedAst> {
@@ -62,12 +66,12 @@ impl<'ast> Flatten<'ast> {
 
     fn emit_expr(&mut self, expr: Expr<'ast, FlattenedAst>) -> Id<'ast, FlattenedAst> {
         let name = self.fresh_uid();
-        let avis = self.alloc_avis(name.clone(), MaybeType(None));
+        let lvis = self.alloc_lvis(name.clone(), MaybeType(None));
         let expr = self.alloc_expr(expr);
         self.body_stack
             .last_mut()
             .expect("missing body")
-            .push(Stmt::Assign(Assign { avis, expr }));
+            .push(Stmt::Assign(Assign { lvis, expr }));
         let id = Id::Var(name.clone());
         self.bind_env(name, id.clone());
         id
@@ -76,7 +80,7 @@ impl<'ast> Flatten<'ast> {
     fn trav_fundef(&mut self, fundef: Fundef<'ast, ParsedAst>) -> Fundef<'ast, FlattenedAst> {
         let mut args = Vec::with_capacity(fundef.args.len());
         for arg in fundef.args {
-            args.push(self.alloc_avis(arg.name.clone(), arg.ty.clone()));
+            args.push(self.alloc_farg(arg.name.clone(), arg.ty.clone()));
         }
 
         self.push_env();
@@ -105,14 +109,14 @@ impl<'ast> Flatten<'ast> {
         match stmt {
             Stmt::Assign(assign) => {
                 let rhs = self.trav_expr((*assign.expr).clone());
-                let lhs_name = assign.avis.name.clone();
-                let lhs_avis = self.alloc_avis(lhs_name.clone(), assign.avis.ty.clone());
+                let lhs_name = assign.lvis.name.clone();
+                let lhs_lvis = self.alloc_lvis(lhs_name.clone(), assign.lvis.ty.clone());
                 let rhs_expr = self.alloc_expr(Expr::Id(rhs));
                 self.body_stack
                     .last_mut()
                     .expect("missing body")
                     .push(Stmt::Assign(Assign {
-                        avis: lhs_avis,
+                        lvis: lhs_lvis,
                         expr: rhs_expr,
                     }));
                 self.bind_env(lhs_name.clone(), Id::Var(lhs_name));
@@ -161,7 +165,7 @@ impl<'ast> Flatten<'ast> {
 
                 self.pop_env();
 
-                let iv = self.alloc_avis(tensor.iv.name.clone(), tensor.iv.ty.clone());
+                let iv = self.alloc_lvis(tensor.iv.name.clone(), tensor.iv.ty.clone());
                 self.emit_expr(Expr::Tensor(Tensor {
                     body,
                     ret,

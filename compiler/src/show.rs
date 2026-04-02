@@ -7,7 +7,7 @@ pub fn show<'ast, Ast: AstConfig + 'ast>(program: &Program<'ast, Ast>) -> String
 }
 
 struct Show<'ast, Ast: AstConfig> {
-    args: Vec<&'ast Avis<Ast>>,
+    args: Vec<&'ast Farg<Ast>>,
     depth: usize,
     output: String,
 }
@@ -60,7 +60,7 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
         self.push("}");
     }
 
-    fn visit_farg(&mut self, arg: &'ast Avis<Self::Ast>) {
+    fn visit_farg(&mut self, arg: &'ast Farg<Self::Ast>) {
         self.output.push_str(&format!("{} {}, ", arg.ty, arg.name));
     }
 
@@ -73,7 +73,7 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
     }
 
     fn visit_assign(&mut self, assign: &Assign<'ast, Self::Ast>) {
-        self.push(&assign.avis.name);
+        self.push(&assign.lvis.name);
         self.output.push_str(" = ");
         self.visit_expr(assign.expr);
     }

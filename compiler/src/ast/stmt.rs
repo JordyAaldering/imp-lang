@@ -1,4 +1,4 @@
-use super::{Id, Assign, AstConfig, Avis, Return};
+use super::{Id, Assign, AstConfig, Lvis, Return};
 
 pub type ScopeBlock<'ast, Ast> = Vec<ScopeEntry<'ast, Ast>>;
 
@@ -13,11 +13,11 @@ pub enum Stmt<'ast, Ast: AstConfig> {
 #[derive(Clone, Debug)]
 pub enum ScopeEntry<'ast, Ast: AstConfig> {
     Assign {
-        avis: &'ast Avis<Ast>,
+        lvis: &'ast Lvis<'ast, Ast>,
         expr: &'ast super::Expr<'ast, Ast>,
     },
     IndexRange {
-        iv: &'ast Avis<Ast>,
+        iv: &'ast Lvis<'ast, Ast>,
         lb: Id<'ast, Ast>,
         ub: Id<'ast, Ast>,
     },
@@ -35,16 +35,16 @@ pub enum LocalDef<'ast, Ast: AstConfig> {
 impl<'ast, Ast: AstConfig> Stmt<'ast, Ast> {
     pub fn as_scope_entry(&self) -> Option<ScopeEntry<'ast, Ast>> {
         match self {
-            Self::Assign(Assign { avis, expr }) => Some(ScopeEntry::Assign { avis: *avis, expr: *expr }),
+            Self::Assign(Assign { lvis, expr }) => Some(ScopeEntry::Assign { lvis: *lvis, expr: *expr }),
             Self::Return(_) => None,
         }
     }
 }
 
 impl<'ast, Ast: AstConfig> ScopeEntry<'ast, Ast> {
-    pub fn avis(&self) -> &'ast Avis<Ast> {
+    pub fn lvis(&self) -> &'ast Lvis<'ast, Ast> {
         match self {
-            Self::Assign { avis, .. } | Self::IndexRange { iv: avis, .. } => avis,
+            Self::Assign { lvis, .. } | Self::IndexRange { iv: lvis, .. } => lvis,
         }
     }
 
