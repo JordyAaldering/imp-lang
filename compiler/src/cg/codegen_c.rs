@@ -43,6 +43,13 @@ impl<'ast> Visit<'ast> for CompileC {
         self.output.push_str("#include <stdbool.h>\n");
         self.output.push_str("#include <stdint.h>\n");
         self.output.push('\n');
+        self.output.push_str("typedef struct {\n");
+        self.output.push_str("    size_t *shp;\n");
+        self.output.push_str("    size_t shp_len;\n");
+        self.output.push_str("    uint32_t *data;\n");
+        self.output.push_str("    size_t data_len;\n");
+        self.output.push_str("    size_t *refc;\n");
+        self.output.push_str("} ImpArrayu32Raw;\n\n");
 
         for fundef in &program.fundefs {
             self.visit_fundef(fundef);
@@ -89,16 +96,17 @@ impl<'ast> Visit<'ast> for CompileC {
 
     fn visit_tensor(&mut self, tensor: &Tensor<'ast, Self::Ast>) {
         let (target_name, target_ty) = self.tensor_target.clone().expect("tensor target must be set");
+        let data_name = format!("{}_data", target_name);
+        let shp_name = format!("{}_shp", target_name);
+        let len_name = format!("{}_len", target_name);
 
         let lb = self.render_expr(&Expr::Id(tensor.lb.clone()));
         let ub = self.render_expr(&Expr::Id(tensor.ub.clone()));
         let iv = &tensor.iv.name;
         let base = base_ctype(&target_ty);
 
-        self.push_line(&format!(
-            "{} *{} = ({} *)malloc({} * sizeof({}));",
-            base, target_name, base, ub, base
-        ));
+        self.push_line(&format!("size_t {} = (size_t)({} - {});", len_name, ub, lb));
+        self.push_line(&format!("{} *{} = ({} *)malloc({} * sizeof({}));", base, data_name, base, len_name, base));
         self.push_line(&format!(
             "for (size_t {} = {}; {} < {}; {} += 1) {{",
             iv, lb, iv, ub, iv
@@ -109,10 +117,16 @@ impl<'ast> Visit<'ast> for CompileC {
             self.visit_stmt(stmt);
         }
         let ret = self.render_expr(&Expr::Id(tensor.ret.clone()));
-        self.push_line(&format!("{}[{}] = {};", target_name, iv, ret));
+        self.push_line(&format!("{}[{} - {}] = {};", data_name, iv, lb, ret));
         self.indent -= 1;
 
         self.push_line("}");
+        self.push_line(&format!("size_t *{} = (size_t *)malloc(sizeof(size_t));", shp_name));
+        self.push_line(&format!("{}[0] = {};", shp_name, len_name));
+        self.push_line(&format!(
+            "ImpArrayu32Raw {} = (ImpArrayu32Raw) {{ .shp = {}, .shp_len = 1, .data = {}, .data_len = {}, .refc = NULL }};",
+            target_name, shp_name, data_name, len_name
+        ));
     }
 
     fn visit_binary(&mut self, binary: &Binary<'ast, Self::Ast>) {
@@ -153,6 +167,6 @@ fn base_ctype(ty: &Type) -> &'static str {
 fn full_ctype(ty: &Type) -> String {
     match &ty.shp {
         Shape::Scalar => base_ctype(ty).to_owned(),
-        Shape::Vector(_) => format!("{} *", base_ctype(ty)),
+        Shape::Vector(_) => "ImpArrayu32Raw".to_owned(),
     }
 }
