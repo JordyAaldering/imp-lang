@@ -162,6 +162,10 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
     type TensorOut = (Tensor<'ast, Self::OutAst>, Type);
 
     fn trav_tensor(&mut self, tensor: Tensor<'ast, Self::InAst>) -> Self::TensorOut {
+        // Bounds are evaluated in the enclosing scope, not in the tensor body scope.
+        let (lb, _check_if_vec) = self.trav_id(tensor.lb);
+        let (ub, _check_if_vec) = self.trav_id(tensor.ub);
+
         self.scopes.last_mut().unwrap().push(
             ScopeEntry::IndexRange {
                 iv: tensor.iv,
@@ -170,9 +174,6 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
             });
         self.scopes.push(tensor.build_scope());
         self.new_ssa.push(Vec::new());
-
-        let (lb, _check_if_vec) = self.trav_id(tensor.lb);
-        let (ub, _check_if_vec) = self.trav_id(tensor.ub);
 
         let iv_new = self.alloc_lvis(tensor.iv.name.clone(), Type::scalar(BaseType::U32), None);
         self.idmap.insert(tensor.iv as *const _, iv_new);
