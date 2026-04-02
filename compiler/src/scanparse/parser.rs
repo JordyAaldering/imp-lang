@@ -1,11 +1,19 @@
 use std::iter::Peekable;
 
-use crate::ast::{BaseType, Bop, Shape, Type, Uop};
+use crate::ast::{
+    Assign, Avis, BaseType, Binary, Bop, Expr, Fundef, Id, MaybeType, Program, Return, Shape,
+    Stmt, Tensor, Type, Uop, Unary, UnflattenedAst,
+};
 
-use super::{lexer::{Lexer, Token}, operator::{self, Operator}, parse_ast::*, span::Span};
+use super::{
+    lexer::{Lexer, Token},
+    operator::{self, Operator},
+    span::Span,
+};
 
 pub struct Parser<'src> {
     lexer: Peekable<Lexer<'src>>,
+    uid: usize,
 }
 
 #[derive(Debug)]
@@ -17,35 +25,43 @@ pub enum ParseError {
     UnexpectedEof,
 }
 
-// Alternatively: type ParseResult<T> = Result<(T, Span), ParseError>;
 type ParseResult<T> = Result<T, ParseError>;
 
 impl<'src> Parser<'src> {
     pub fn new(lexer: Lexer<'src>) -> Self {
-        Self { lexer: lexer.peekable() }
+        Self {
+            lexer: lexer.peekable(),
+            uid: 0,
+        }
     }
 
-    /// ```bnf
-    /// <program> := <fundef>*
-    /// ```
-    pub fn parse_program(&mut self) -> ParseResult<Program> {
+    fn fresh_uid(&mut self) -> String {
+        self.uid += 1;
+        format!("_ret_{}", self.uid)
+    }
+
+    fn alloc_avis(&self, name: String, ty: MaybeType) -> &'static Avis<UnflattenedAst> {
+        Box::leak(Box::new(Avis { name, ty }))
+    }
+
+    fn alloc_expr(&self, expr: Expr<'static, UnflattenedAst>) -> &'static Expr<'static, UnflattenedAst> {
+        Box::leak(Box::new(expr))
+    }
+
+    pub fn parse_program(&mut self) -> ParseResult<Program<'static, UnflattenedAst>> {
         let mut fundefs = Vec::new();
 
         while self.lexer.peek().is_some() {
             fundefs.push(self.parse_fundef()?);
         }
 
-        Ok(Program { fundefs } )
+        Ok(Program { fundefs })
     }
 
-    /// ```bnf
-    /// <fundef> := "fn" <id> "(" [<farg> ("," <farg>)*]? ")" "->" <type>
-    ///                 "{" <stmt>* "}"
-    /// ```
-    fn parse_fundef(&mut self) -> ParseResult<Fundef> {
+    fn parse_fundef(&mut self) -> ParseResult<Fundef<'static, UnflattenedAst>> {
         let (_, _span_start) = self.expect(Token::Fn)?;
 
-        let (id, _) = self.parse_id()?;
+        let (name, _) = self.parse_id()?;
 
         let mut args = Vec::new();
 
@@ -69,7 +85,7 @@ impl<'src> Parser<'src> {
         let mut body = Vec::new();
 
         while self.peek()?.0 != Token::RBrace {
-            body.push(self.parse_stmt()?);
+            body.extend(self.parse_stmt()?);
         }
 
         self.expect(Token::RBrace)?;
@@ -78,58 +94,62 @@ impl<'src> Parser<'src> {
             return Err(ParseError::MissingReturn);
         }
 
-        Ok(Fundef { id, args, ret_type, body })
+        Ok(Fundef {
+            name,
+            args,
+            decs: Vec::new(),
+            body,
+            ret_type: MaybeType(Some(ret_type)),
+        })
     }
 
-    /// ```bnf
-    /// <farg> := <type> <id>
-    /// ```
-    fn parse_farg(&mut self) -> ParseResult<(Type, String)> {
+    fn parse_farg(&mut self) -> ParseResult<&'static Avis<UnflattenedAst>> {
         let (ty, _) = self.parse_type()?;
-
         let (id, _) = self.parse_id()?;
-
-        Ok((ty, id))
+        Ok(self.alloc_avis(id, MaybeType(Some(ty))))
     }
 
-    /// ```bnf
-    /// <stmt> := <assign>
-    ///         | <return>
-    ///
-    /// <vardec> := <type> <id> "=" <expr> ";"
-    ///           | <type> <id> ";"
-    ///
-    /// <assign> := <id> "=" <expr> ";"
-    /// ```
-    fn parse_stmt(&mut self) -> ParseResult<Stmt> {
+    fn parse_stmt(&mut self) -> ParseResult<Vec<Stmt<'static, UnflattenedAst>>> {
         let (token, span) = self.next()?;
 
-        let stmt = match token {
+        let stmts = match token {
             Token::Identifier(lhs) => {
                 self.expect(Token::Assign)?;
                 let expr = self.parse_expr(None::<Bop>)?;
-                Stmt::Assign(Assign { lhs, expr })
-            },
+                let avis = self.alloc_avis(lhs, MaybeType(None));
+                vec![Stmt::Assign(Assign { avis, expr })]
+            }
             Token::Return => {
                 let expr = self.parse_expr(None::<Bop>)?;
-                Stmt::Return(Return { expr })
+                match expr {
+                    Expr::Id(id) => vec![Stmt::Return(Return { id: id.clone() })],
+                    _ => {
+                        let ret_name = self.fresh_uid();
+                        let ret_avis = self.alloc_avis(ret_name.clone(), MaybeType(None));
+                        vec![
+                            Stmt::Assign(Assign { avis: ret_avis, expr }),
+                            Stmt::Return(Return {
+                                id: Id::Var(ret_name),
+                            }),
+                        ]
+                    }
+                }
             }
-            _ => return Err(ParseError::UnexpectedToken("statement".to_owned(), token, span)),
+            _ => {
+                return Err(ParseError::UnexpectedToken(
+                    "statement".to_owned(),
+                    token,
+                    span,
+                ));
+            }
         };
 
         self.expect(Token::Semicolon)?;
 
-        Ok(stmt)
+        Ok(stmts)
     }
 
-    /// ```bnf
-    /// <expr> := <tensor>
-    ///         | <binary>
-    ///         | <unary>
-    ///         | <literal>
-    ///         | "(" <expr> ")"
-    /// ```
-    fn parse_expr(&mut self, prev_op: Option<impl Operator>) -> ParseResult<Expr> {
+    fn parse_expr(&mut self, prev_op: Option<impl Operator>) -> ParseResult<&'static Expr<'static, UnflattenedAst>> {
         if let Some((Token::LBrace, _)) = self.lexer.peek() {
             self.parse_tensor()
         } else {
@@ -137,13 +157,10 @@ impl<'src> Parser<'src> {
         }
     }
 
-    /// ```bnf
-    /// <tensor> := "{" <expr> "|" <shp> "<=" <id> "<" <shp> "}"
-    /// ```
-    fn parse_tensor(&mut self) -> ParseResult<Expr> {
+    fn parse_tensor(&mut self) -> ParseResult<&'static Expr<'static, UnflattenedAst>> {
         self.expect(Token::LBrace)?;
 
-        let expr = self.parse_expr(None::<Bop>)?;
+        let ret = self.parse_expr(None::<Bop>)?;
 
         self.expect(Token::Bar)?;
 
@@ -159,72 +176,70 @@ impl<'src> Parser<'src> {
 
         self.expect(Token::RBrace)?;
 
-        Ok(Expr::Tensor(Tensor { iv, expr: Box::new(expr), lb: Box::new(lb), ub: Box::new(ub) }))
+        let iv = self.alloc_avis(iv, MaybeType(None));
+        Ok(self.alloc_expr(Expr::Tensor(Tensor {
+            body: Vec::new(),
+            ret,
+            iv,
+            lb,
+            ub,
+        })))
     }
 
-    /// Uses Pratt parsing to handle associativity and operator precedence.
-    ///
-    /// ```bnf
-    /// <binary> := <expr> <bop> <expr>
-    ///
-    /// <bop> := "+" | "-" | "*" | "/"
-    ///        | "==" | "!=" | "<" | "<=" | ">" | ">="
-    /// ```
-    fn parse_binary(&mut self, prev_op: Option<impl Operator>) -> ParseResult<Expr> {
+    fn parse_binary(&mut self, prev_op: Option<impl Operator>) -> ParseResult<&'static Expr<'static, UnflattenedAst>> {
         let (token, span_start) = self.next()?;
 
         let mut left = match token {
-            Token::Identifier(id) => Expr::Id(id),
-            Token::BoolValue(v) => Expr::Bool(v),
-            Token::U32Value(v) => Expr::U32(v),
-            // Nested expression
+            Token::Identifier(id) => self.alloc_expr(Expr::Id(Id::Var(id))),
+            Token::BoolValue(v) => self.alloc_expr(Expr::Bool(v)),
+            Token::U32Value(v) => self.alloc_expr(Expr::U32(v)),
             Token::LParen => {
                 let expr = self.parse_expr(None::<Bop>)?;
 
                 let (token, rloc) = self.next()?;
                 if token != Token::RParen {
-                    // Unbalanced parenthesis
-                    return Err(ParseError::UnexpectedToken("expected ')'".to_owned(), token, rloc));
+                    return Err(ParseError::UnexpectedToken(
+                        "expected ')'".to_owned(),
+                        token,
+                        rloc,
+                    ));
                 }
 
                 expr
-            },
-            // Parse unary expressions before trying to parse binary expressions
+            }
             token => {
-                let op = (&token).try_into()
-                    .map_err(|_| ParseError::UnexpectedToken("expected unary expression".to_owned(), token, span_start))?;
+                let op = (&token).try_into().map_err(|_| {
+                    ParseError::UnexpectedToken(
+                        "expected unary expression".to_owned(),
+                        token,
+                        span_start,
+                    )
+                })?;
                 self.parse_unary(op)?
-            },
+            }
         };
 
         while let Some((op, _loc)) = self.parse_binary_operator(&prev_op)? {
             let right = self.parse_expr(Some(op))?;
-            // Update `left`
-            left = Expr::Binary(Binary {
-                l: Box::new(left),
-                r: Box::new(right),
+            left = self.alloc_expr(Expr::Binary(Binary {
+                l: left,
+                r: right,
                 op,
-            });
+            }));
         }
 
         Ok(left)
     }
 
-    /// ```bnf
-    /// <unary> := <uop> <expr>
-    ///
-    /// <uop> := "!" | "-"
-    /// ```
-    fn parse_unary(&mut self, op: Uop) -> ParseResult<Expr> {
+    fn parse_unary(&mut self, op: Uop) -> ParseResult<&'static Expr<'static, UnflattenedAst>> {
         let r = self.parse_expr(Some(op))?;
-        Ok(Expr::Unary(Unary { r: Box::new(r), op }))
+        Ok(self.alloc_expr(Expr::Unary(Unary { r, op })))
     }
 
     fn parse_binary_operator(&mut self, previous: &Option<impl Operator>) -> ParseResult<Option<(Bop, Span)>> {
         if let Some((token, _)) = self.lexer.peek() {
             if let Ok(op) = token.try_into() {
                 if operator::precedes(&previous, &op)? {
-                    // Consume the token
                     let (_, span) = self.lexer.next().unwrap();
                     return Ok(Some((op, span)));
                 }
@@ -234,10 +249,6 @@ impl<'src> Parser<'src> {
         Ok(None)
     }
 
-    /// ```bnf
-    /// <type> := <basetype>
-    ///         | <basetype> "[" "." "]"
-    /// ```
     fn parse_type(&mut self) -> ParseResult<(Type, Span)> {
         let (token, span) = self.next()?;
         let basetype = match token {
@@ -253,7 +264,7 @@ impl<'src> Parser<'src> {
 
             Type {
                 basetype,
-                shp: Shape::Vector(id)
+                shp: Shape::Vector(id),
             }
         } else {
             Type {
@@ -281,18 +292,20 @@ impl<'src> Parser<'src> {
         if token == expected {
             Ok((token, span))
         } else {
-            Err(ParseError::UnexpectedToken(format!("{:?}", expected), token, span))
+            Err(ParseError::UnexpectedToken(
+                format!("{:?}", expected),
+                token,
+                span,
+            ))
         }
     }
 
     fn peek(&mut self) -> ParseResult<&(Token, Span)> {
-        self.lexer.peek()
-            .ok_or(ParseError::UnexpectedEof)
+        self.lexer.peek().ok_or(ParseError::UnexpectedEof)
     }
 
     fn next(&mut self) -> ParseResult<(Token, Span)> {
-        self.lexer.next()
-            .ok_or(ParseError::UnexpectedEof)
+        self.lexer.next().ok_or(ParseError::UnexpectedEof)
     }
 }
 

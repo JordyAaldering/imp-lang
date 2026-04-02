@@ -8,7 +8,7 @@ fn main() {
 
     println!("=== scanparse ===");
     let ast = scanparse::scanparse(&src).unwrap();
-    println!("{}", ast);
+    println!("{}", show::show(&ast));
 
     println!("=== convert_to_ssa ===");
     let ast = convert_to_ssa::convert_to_ssa(ast);

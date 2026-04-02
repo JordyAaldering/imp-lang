@@ -47,12 +47,12 @@ impl<'ast, Ast: AstConfig> Tensor<'ast, Ast> {
         let mut scope = Vec::with_capacity(1 + self.body.len());
         scope.push(ScopeEntry::IndexRange {
             iv: self.iv,
-            lb: self.lb.into(),
-            ub: self.ub.into(),
+            lb: self.lb.clone().into(),
+            ub: self.ub.clone().into(),
         });
 
         for stmt in &self.body {
-            if let Some(entry) = (*stmt).as_scope_entry() {
+                if let Some(entry) = stmt.as_scope_entry() {
                 scope.push(entry);
             }
         }

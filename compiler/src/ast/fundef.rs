@@ -10,25 +10,31 @@ pub struct Fundef<'ast, Ast: AstConfig> {
 }
 
 impl<'ast, Ast: AstConfig> Fundef<'ast, Ast> {
-    fn avis_of(&self, key: Id<'ast, Ast>) -> &'ast Avis<Ast> {
+    fn avis_of(&self, key: &Id<'ast, Ast>) -> Option<&'ast Avis<Ast>> {
         match key {
-            Id::Arg(i) => self.args[i],
-            Id::Var(v) => v,
+            Id::Arg(i) => Some(self.args[*i]),
+            Id::Var(_) => None,
         }
     }
 
-    pub fn nameof(&self, k: Id<'ast, Ast>) -> &str {
-        &self.avis_of(k).name
+    pub fn nameof(&self, k: &Id<'ast, Ast>) -> String {
+        match k {
+            Id::Arg(i) => self.args[*i].name.clone(),
+            Id::Var(v) => Ast::var_name(v),
+        }
     }
 
-    pub fn typof(&self, k: Id<'ast, Ast>) -> &Ast::ValueType {
-        &self.avis_of(k).ty
+    pub fn typof(&self, k: &Id<'ast, Ast>) -> &Ast::ValueType {
+        &self
+            .avis_of(k)
+            .expect("cannot get variable type for this AST configuration")
+            .ty
     }
 
     pub fn ret_id(&self) -> Id<'ast, Ast> {
         for stmt in self.body.iter().rev() {
-            if let Stmt::Return(ret) = *stmt {
-                return ret.id;
+            if let Stmt::Return(ret) = stmt {
+                return ret.id.clone();
             }
         }
 
@@ -45,7 +51,7 @@ impl<'ast, Ast: AstConfig> Fundef<'ast, Ast> {
     pub fn scope_block(&self) -> ScopeBlock<'ast, Ast> {
         self.body
             .iter()
-            .filter_map(|stmt| (*stmt).as_scope_entry())
+            .filter_map(|stmt| stmt.as_scope_entry())
             .collect()
     }
 

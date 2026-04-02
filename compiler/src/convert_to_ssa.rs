@@ -1,9 +1,11 @@
 use std::collections::HashMap;
 
-use crate::{ast::*, scanparse::parse_ast};
+use crate::ast::*;
 
-pub fn convert_to_ssa<'ast>(program: parse_ast::Program) -> Program<'ast, UntypedAst> {
-    let fundefs = program.fundefs.into_iter()
+pub fn convert_to_ssa<'ast>(program: Program<'ast, UnflattenedAst>) -> Program<'ast, UntypedAst> {
+    let fundefs = program
+        .fundefs
+        .into_iter()
         .map(|f| ConvertToSsa::new().trav_fundef(f))
         .collect();
     Program { fundefs }
@@ -13,7 +15,7 @@ pub struct ConvertToSsa<'ast> {
     uid: usize,
     ids: Vec<&'ast Avis<UntypedAst>>,
     body_stack: Vec<Vec<Stmt<'ast, UntypedAst>>>,
-    name_to_id: Vec<HashMap<String, Id<'ast, UntypedAst>>>,
+    env_stack: Vec<HashMap<String, Id<'ast, UntypedAst>>>,
 }
 
 impl<'ast> ConvertToSsa<'ast> {
@@ -22,7 +24,7 @@ impl<'ast> ConvertToSsa<'ast> {
             uid: 0,
             ids: Vec::new(),
             body_stack: Vec::new(),
-            name_to_id: Vec::new(),
+            env_stack: Vec::new(),
         }
     }
 
@@ -39,73 +41,87 @@ impl<'ast> ConvertToSsa<'ast> {
         Box::leak(Box::new(expr))
     }
 
-    ///
-    /// Declarations
-    ///
+    fn push_env(&mut self) {
+        self.env_stack.push(HashMap::new());
+    }
 
-    fn trav_fundef(&mut self, fundef: parse_ast::Fundef) -> Fundef<'ast, UntypedAst> {
-        let mut args = Vec::new();
-        let mut arg_scope = HashMap::new();
+    fn pop_env(&mut self) {
+        self.env_stack.pop().expect("env stack underflow");
+    }
 
-        for (i, (ty, name)) in fundef.args.into_iter().enumerate() {
-            args.push(self.alloc_avis(name.clone(), MaybeType(Some(ty))));
-            arg_scope.insert(name, Id::Arg(i));
+    fn bind_env(&mut self, name: String, id: Id<'ast, UntypedAst>) {
+        self.env_stack.last_mut().expect("missing env").insert(name, id);
+    }
+
+    fn lookup_env(&self, name: &str) -> Option<Id<'ast, UntypedAst>> {
+        for env in self.env_stack.iter().rev() {
+            if let Some(id) = env.get(name) {
+                return Some(id.clone());
+            }
+        }
+        None
+    }
+
+    fn trav_fundef(&mut self, fundef: Fundef<'ast, UnflattenedAst>) -> Fundef<'ast, UntypedAst> {
+        let mut args = Vec::with_capacity(fundef.args.len());
+
+        for arg in fundef.args {
+            args.push(self.alloc_avis(arg.name.clone(), arg.ty.clone()));
         }
 
-        self.name_to_id = vec![arg_scope, HashMap::new()];
+        self.push_env();
+        for (i, arg) in args.iter().enumerate() {
+            self.bind_env(arg.name.clone(), Id::Arg(i));
+        }
         self.body_stack = vec![Vec::new()];
 
         for stmt in fundef.body {
             self.trav_stmt(stmt);
         }
 
-        let body = self.body_stack.pop().unwrap();
+        let body = self.body_stack.pop().expect("missing body stack");
+        self.pop_env();
 
         Fundef {
-            name: fundef.id,
+            name: fundef.name,
             args,
             decs: self.ids.clone(),
             body,
-            ret_type: MaybeType(Some(fundef.ret_type)),
+            ret_type: fundef.ret_type,
         }
     }
 
-    ///
-    /// Statements
-    ///
-
-    fn trav_stmt(&mut self, stmt: parse_ast::Stmt) {
+    fn trav_stmt(&mut self, stmt: Stmt<'ast, UnflattenedAst>) {
         match stmt {
-            parse_ast::Stmt::Assign(assign) => self.trav_assign(assign),
-            parse_ast::Stmt::Return(ret) => self.trav_return(ret),
+            Stmt::Assign(assign) => self.trav_assign(assign),
+            Stmt::Return(ret) => self.trav_return(ret),
         }
     }
 
-    fn trav_assign(&mut self, assign: parse_ast::Assign) {
-        let id = self.trav_expr(assign.expr);
-        self.name_to_id.last_mut().unwrap().insert(assign.lhs, id);
+    fn trav_assign(&mut self, assign: Assign<'ast, UnflattenedAst>) {
+        let id = self.trav_expr((*assign.expr).clone());
+        self.bind_env(assign.avis.name.clone(), id);
     }
 
-    fn trav_return(&mut self, ret: parse_ast::Return) {
-        let id = self.trav_expr(ret.expr);
-        self.body_stack.last_mut().unwrap().push(Stmt::Return(Return { id }));
+    fn trav_return(&mut self, ret: Return<'ast, UnflattenedAst>) {
+        let id = self.trav_id(ret.id);
+        self.body_stack
+            .last_mut()
+            .expect("missing body")
+            .push(Stmt::Return(Return { id }));
     }
 
-    ///
-    /// Expressions
-    ///
-
-    fn trav_expr(&mut self, expr: parse_ast::Expr) -> Id<'ast, UntypedAst> {
+    fn trav_expr(&mut self, expr: Expr<'ast, UnflattenedAst>) -> Id<'ast, UntypedAst> {
         match expr {
-            parse_ast::Expr::Id(id) => self.trav_id(id),
+            Expr::Id(id) => self.trav_id(id),
             other => {
                 let built = match other {
-                    parse_ast::Expr::Tensor(n) => self.trav_tensor(n),
-                    parse_ast::Expr::Binary(n) => self.trav_binary(n),
-                    parse_ast::Expr::Unary(n) => self.trav_unary(n),
-                    parse_ast::Expr::Bool(v) => Expr::Bool(v),
-                    parse_ast::Expr::U32(v) => Expr::U32(v),
-                    parse_ast::Expr::Id(_) => unreachable!(),
+                    Expr::Tensor(n) => self.trav_tensor(n),
+                    Expr::Binary(n) => self.trav_binary(n),
+                    Expr::Unary(n) => self.trav_unary(n),
+                    Expr::Bool(v) => Expr::Bool(v),
+                    Expr::U32(v) => Expr::U32(v),
+                    Expr::Id(_) => unreachable!(),
                 };
                 self.emit_expr(built)
             }
@@ -117,56 +133,58 @@ impl<'ast> ConvertToSsa<'ast> {
         let avis = self.alloc_avis(name, MaybeType(None));
         self.ids.push(avis);
         let expr_ref = self.alloc_expr(expr);
-        self.body_stack.last_mut().unwrap().push(Stmt::Assign(Assign { avis, expr: expr_ref }));
+        self.body_stack
+            .last_mut()
+            .expect("missing body")
+            .push(Stmt::Assign(Assign { avis, expr: expr_ref }));
         Id::Var(avis)
     }
 
-    fn trav_tensor(&mut self, tensor: parse_ast::Tensor) -> Expr<'ast, UntypedAst> {
-        let lb = self.trav_expr(*tensor.lb);
-        let ub = self.trav_expr(*tensor.ub);
+    fn trav_tensor(&mut self, tensor: Tensor<'ast, UnflattenedAst>) -> Expr<'ast, UntypedAst> {
+        let lb = self.trav_expr((*tensor.lb).clone());
+        let ub = self.trav_expr((*tensor.ub).clone());
 
-        let iv_avis = self.alloc_avis(tensor.iv.clone(), MaybeType(None));
+        let iv_avis = self.alloc_avis(tensor.iv.name.clone(), MaybeType(None));
         self.ids.push(iv_avis);
 
-        let mut scope = HashMap::new();
-        scope.insert(tensor.iv, Id::Var(iv_avis));
+        self.push_env();
+        self.bind_env(tensor.iv.name.clone(), Id::Var(iv_avis));
 
-        self.name_to_id.push(scope);
         self.body_stack.push(Vec::new());
-        let ret = self.trav_expr(*tensor.expr);
-        let body = self.body_stack.pop().unwrap();
-        self.name_to_id.pop().unwrap();
+        for stmt in tensor.body {
+            self.trav_stmt(stmt);
+        }
+        let ret = self.trav_expr((*tensor.ret).clone());
+        let body = self.body_stack.pop().expect("missing tensor body");
+
+        self.pop_env();
 
         Expr::Tensor(Tensor {
+            body,
+            ret,
             iv: iv_avis,
             lb,
             ub,
-            ret,
-            body,
         })
     }
 
-    fn trav_binary(&mut self, binary: parse_ast::Binary) -> Expr<'ast, UntypedAst> {
-        let l = self.trav_expr(*binary.l);
-        let r = self.trav_expr(*binary.r);
+    fn trav_binary(&mut self, binary: Binary<'ast, UnflattenedAst>) -> Expr<'ast, UntypedAst> {
+        let l = self.trav_expr((*binary.l).clone());
+        let r = self.trav_expr((*binary.r).clone());
         Expr::Binary(Binary { l, r, op: binary.op })
     }
 
-    fn trav_unary(&mut self, unary: parse_ast::Unary) -> Expr<'ast, UntypedAst> {
-        let r = self.trav_expr(*unary.r);
+    fn trav_unary(&mut self, unary: Unary<'ast, UnflattenedAst>) -> Expr<'ast, UntypedAst> {
+        let r = self.trav_expr((*unary.r).clone());
         Expr::Unary(Unary { r, op: unary.op })
     }
 
-    ///
-    /// Terminals
-    ///
-
-    fn trav_id(&mut self, id: String) -> Id<'ast, UntypedAst> {
-        for scope in self.name_to_id.iter().rev() {
-            if let Some(v) = scope.get(&id) {
-                return *v;
-            }
+    fn trav_id(&mut self, id: Id<'ast, UnflattenedAst>) -> Id<'ast, UntypedAst> {
+        match id {
+            Id::Arg(i) => Id::Arg(i),
+            Id::Var(v) => self
+                .lookup_env(&v)
+                .unwrap_or_else(|| panic!("could not resolve id {v}")),
         }
-        unreachable!("could not find {id}")
     }
 }
