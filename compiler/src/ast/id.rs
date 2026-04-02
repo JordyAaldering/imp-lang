@@ -1,16 +1,16 @@
-use super::{AstConfig, Avis};
+use super::AstConfig;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub enum Id<'ast, Ast: AstConfig> {
     Arg(usize),
-    Var(&'ast Avis<Ast>),
+    Var(Ast::VarLink<'ast>),
 }
 
 impl<'ast, Ast: AstConfig> Id<'ast, Ast> {
-    pub fn as_local(self) -> Option<&'ast Avis<Ast>> {
+    pub fn as_local(&self) -> Option<&Ast::VarLink<'ast>> {
         match self {
             Self::Arg(_) => None,
-            Self::Var(avis) => Some(avis),
+            Self::Var(link) => Some(link),
         }
     }
 }

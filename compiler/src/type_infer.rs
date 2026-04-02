@@ -111,7 +111,7 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
         let _ = self.trav_id(Id::Var(assign.avis));
         let ssa = self.new_ssa.last().expect("missing output scope in type inference");
         assert!(ssa.len() > before_len, "statement conversion did not emit output");
-        let last = *ssa.last().expect("missing emitted statement");
+        let last = (*ssa.last().expect("missing emitted statement")).clone();
         match last {
             ScopeEntry::Assign { avis, expr } => Assign { avis, expr },
             ScopeEntry::IndexRange { .. } => panic!("expected assignment scope entry"),
@@ -173,8 +173,8 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
         self.new_ids.push(iv_new);
         self.new_ssa.last_mut().unwrap().push(ScopeEntry::IndexRange {
             iv: iv_new,
-            lb,
-            ub,
+            lb: lb.clone(),
+            ub: ub.clone(),
         });
 
         let (ret, _ret_ty) = self.trav_id(tensor.ret);

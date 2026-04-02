@@ -34,13 +34,16 @@ pub use typ::*;
 
 use std::fmt;
 
-pub trait AstConfig: Clone + Copy + fmt::Debug {
+pub trait AstConfig: Clone + fmt::Debug {
     type ValueType: Clone + fmt::Debug + fmt::Display;
-    type Operand<'ast>: Clone + Copy + fmt::Debug;
+    type VarLink<'ast>: Clone + fmt::Debug;
+    type Operand<'ast>: Clone + fmt::Debug;
 
     fn visit_operand<'ast, V>(visitor: &mut V, operand: &Self::Operand<'ast>)
     where
         V: crate::traverse::Visit<'ast, Ast = Self> + ?Sized;
+
+    fn var_name<'ast>(link: &Self::VarLink<'ast>) -> String;
 
     fn trav_operand<'ast, T>(traverser: &mut T, operand: Self::Operand<'ast>) -> T::ExprOut
     where
@@ -53,6 +56,7 @@ pub struct UntypedAst;
 
 impl AstConfig for UntypedAst {
     type ValueType = MaybeType;
+    type VarLink<'ast> = &'ast Avis<UntypedAst>;
     type Operand<'ast> = Id<'ast, UntypedAst>;
 
     fn visit_operand<'ast, V>(visitor: &mut V, operand: &Self::Operand<'ast>)
@@ -60,6 +64,10 @@ impl AstConfig for UntypedAst {
         V: crate::traverse::Visit<'ast, Ast = Self> + ?Sized,
     {
         visitor.visit_id(operand);
+    }
+
+    fn var_name<'ast>(link: &Self::VarLink<'ast>) -> String {
+        link.name.clone()
     }
 
     fn trav_operand<'ast, T>(traverser: &mut T, operand: Self::Operand<'ast>) -> T::ExprOut
@@ -76,6 +84,7 @@ pub struct TypedAst;
 
 impl AstConfig for TypedAst {
     type ValueType = Type;
+    type VarLink<'ast> = &'ast Avis<TypedAst>;
     type Operand<'ast> = Id<'ast, TypedAst>;
 
     fn visit_operand<'ast, V>(visitor: &mut V, operand: &Self::Operand<'ast>)
@@ -83,6 +92,10 @@ impl AstConfig for TypedAst {
         V: crate::traverse::Visit<'ast, Ast = Self> + ?Sized,
     {
         visitor.visit_id(operand);
+    }
+
+    fn var_name<'ast>(link: &Self::VarLink<'ast>) -> String {
+        link.name.clone()
     }
 
     fn trav_operand<'ast, T>(traverser: &mut T, operand: Self::Operand<'ast>) -> T::ExprOut
@@ -99,6 +112,7 @@ pub struct UnflattenedAst;
 
 impl AstConfig for UnflattenedAst {
     type ValueType = MaybeType;
+    type VarLink<'ast> = String;
     type Operand<'ast> = &'ast Expr<'ast, UnflattenedAst>;
 
     fn visit_operand<'ast, V>(visitor: &mut V, operand: &Self::Operand<'ast>)
@@ -106,6 +120,10 @@ impl AstConfig for UnflattenedAst {
         V: crate::traverse::Visit<'ast, Ast = Self> + ?Sized,
     {
         visitor.visit_expr(*operand);
+    }
+
+    fn var_name<'ast>(link: &Self::VarLink<'ast>) -> String {
+        link.clone()
     }
 
     fn trav_operand<'ast, T>(traverser: &mut T, operand: Self::Operand<'ast>) -> T::ExprOut

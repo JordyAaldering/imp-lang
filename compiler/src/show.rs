@@ -133,7 +133,7 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
     fn visit_id(&mut self, id: &Id<'ast, Self::Ast>) {
         match id {
             Id::Arg(i) => self.output.push_str(&self.args[*i].name),
-            Id::Var(v) => self.output.push_str(&v.name),
+            Id::Var(v) => self.output.push_str(&<Ast as AstConfig>::var_name(v)),
         }
     }
 

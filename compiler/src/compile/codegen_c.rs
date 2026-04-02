@@ -45,12 +45,13 @@ impl CompileC {
         fundef: &Fundef<'ast, TypedAst>,
         extra_scopes: &[ScopeBlock<'ast, TypedAst>],
     ) -> String {
-        if let Some(i) = fundef.arg_index(id) {
+        if let Some(i) = fundef.arg_index(id.clone()) {
             return fundef.args[i].name.clone();
         }
 
-        let Some(avis) = id.as_local() else {
-            return fundef.nameof(id).to_owned();
+        let avis = match id {
+            Id::Arg(_) => return fundef.nameof(&id),
+            Id::Var(avis) => avis,
         };
 
         let mut scopes = Vec::with_capacity(1 + extra_scopes.len());
@@ -78,14 +79,14 @@ impl CompileC {
                 let mut tensor_scopes = extra_scopes.to_vec();
                 tensor_scopes.push(tensor.scope_block());
 
-                let ty = to_ctype(fundef.typof(tensor.ret));
+                let ty = to_ctype(fundef.typof(&tensor.ret));
                 let iv_name = tensor.iv.name.clone();
-                let lb_name = self.expr_for(tensor.lb, fundef, &tensor_scopes);
-                let ub_name = self.expr_for(tensor.ub, fundef, &tensor_scopes);
+                let lb_name = self.expr_for(tensor.lb.clone(), fundef, &tensor_scopes);
+                let ub_name = self.expr_for(tensor.ub.clone(), fundef, &tensor_scopes);
 
                 let mut outer_stmts = Vec::new();
                 mem::swap(&mut outer_stmts, &mut self.stmts);
-                let expr_code = self.expr_for(tensor.ret, fundef, &tensor_scopes);
+                let expr_code = self.expr_for(tensor.ret.clone(), fundef, &tensor_scopes);
                 let mut body_stmts = Vec::new();
                 mem::swap(&mut body_stmts, &mut self.stmts);
                 self.stmts = outer_stmts;
@@ -101,15 +102,15 @@ impl CompileC {
                 "res".to_owned()
             }
             Expr::Binary(Binary { l, r, op }) => {
-                let l = self.expr_for(*l, fundef, extra_scopes);
-                let r = self.expr_for(*r, fundef, extra_scopes);
+                let l = self.expr_for(l.clone(), fundef, extra_scopes);
+                let r = self.expr_for(r.clone(), fundef, extra_scopes);
                 format!("{} {} {}", l, op, r)
             }
             Expr::Unary(Unary { r, op }) => {
-                let r = self.expr_for(*r, fundef, extra_scopes);
+                let r = self.expr_for(r.clone(), fundef, extra_scopes);
                 format!("{} {}", op, r)
             }
-            Expr::Id(id) => self.expr_for(*id, fundef, extra_scopes),
+            Expr::Id(id) => self.expr_for(id.clone(), fundef, extra_scopes),
             Expr::Bool(v) => if *v { "true".to_owned() } else { "false".to_owned() },
             Expr::U32(v) => format!("{}", *v),
         }

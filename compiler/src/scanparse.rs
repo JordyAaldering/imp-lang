@@ -2,13 +2,12 @@ mod span;
 mod operator;
 mod lexer;
 mod parser;
-pub(crate) mod parse_ast;
 
 use lexer::Lexer;
 use parser::Parser;
-use parse_ast::Program as ParseAstProgram;
+use crate::ast::{Program, UnflattenedAst};
 
-pub fn scanparse(src: &str) -> Result<ParseAstProgram, String> {
+pub fn scanparse(src: &str) -> Result<Program<'static, UnflattenedAst>, String> {
     let lexer = Lexer::new(src);
     let mut parser = Parser::new(lexer);
     parser.parse_program()
