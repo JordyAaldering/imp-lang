@@ -105,36 +105,35 @@ pub trait Rewrite<'ast> {
     /// Declarations
     ///
 
-    fn rewrite_program(&mut self, program: Program<'ast, Self::Ast>) -> Program<'ast, Self::Ast> {
-        let fundefs = program.fundefs.into_iter().map(|f| self.rewrite_fundef(f)).collect();
-        Program { fundefs }
+    fn rewrite_program(&mut self, program: &mut Program<'ast, Self::Ast>) {
+        for fundef in &mut program.fundefs {
+            self.rewrite_fundef(fundef);
+        }
     }
 
-    fn rewrite_fundef(&mut self, fundef: Fundef<'ast, Self::Ast>) -> Fundef<'ast, Self::Ast> {
-        let body = fundef.body.into_iter().map(|s| self.rewrite_stmt(s)).collect();
-        Fundef { body, ..fundef }
+    fn rewrite_fundef(&mut self, fundef: &mut Fundef<'ast, Self::Ast>) {
+        for stmt in &mut fundef.body {
+            self.rewrite_stmt(stmt);
+        }
     }
 
     ///
     /// Statements
     ///
 
-    fn rewrite_stmt(&mut self, stmt: Stmt<'ast, Self::Ast>) -> Stmt<'ast, Self::Ast> {
+    fn rewrite_stmt(&mut self, stmt: &mut Stmt<'ast, Self::Ast>) {
         match stmt {
-            Stmt::Assign(assign) => Stmt::Assign(self.rewrite_assign(assign)),
-            Stmt::Return(ret) => Stmt::Return(self.rewrite_return(ret)),
+            Stmt::Assign(assign) => self.rewrite_assign(assign),
+            Stmt::Return(ret) => self.rewrite_return(ret),
         }
     }
 
-    fn rewrite_assign(&mut self, assign: Assign<'ast, Self::Ast>) -> Assign<'ast, Self::Ast> {
+    fn rewrite_assign(&mut self, assign: &mut Assign<'ast, Self::Ast>) {
         let new_expr = self.rewrite_expr((*assign.expr).clone());
-        let new_expr = Box::leak(Box::new(new_expr));
-        Assign { expr: new_expr, ..assign }
+        assign.expr = Box::leak(Box::new(new_expr));
     }
 
-    fn rewrite_return(&mut self, ret: Return<'ast, Self::Ast>) -> Return<'ast, Self::Ast> {
-        ret
-    }
+    fn rewrite_return(&mut self, _ret: &mut Return<'ast, Self::Ast>) { }
 
     ///
     /// Expressions
@@ -153,8 +152,11 @@ pub trait Rewrite<'ast> {
     }
 
     fn rewrite_tensor(&mut self, tensor: Tensor<'ast, Self::Ast>) -> Tensor<'ast, Self::Ast> {
-        let body = tensor.body.into_iter().map(|s| self.rewrite_stmt(s)).collect();
-        Tensor { body, ..tensor }
+        let mut tensor = tensor;
+        for stmt in &mut tensor.body {
+            self.rewrite_stmt(stmt);
+        }
+        tensor
     }
 
     fn rewrite_binary(&mut self, binary: Binary<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
