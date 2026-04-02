@@ -174,23 +174,23 @@ pub trait Visit<'ast> {
     }
 
     fn visit_tensor(&mut self, tensor: &Tensor<'ast, Self::Ast>) {
-        self.visit_id(&tensor.lb);
-        self.visit_id(&tensor.ub);
+        <Self::Ast as AstConfig>::visit_operand(self, &tensor.lb);
+        <Self::Ast as AstConfig>::visit_operand(self, &tensor.ub);
 
         for stmt in &tensor.body {
             self.visit_stmt(stmt);
         }
 
-        self.visit_id(&tensor.ret);
+        <Self::Ast as AstConfig>::visit_operand(self, &tensor.ret);
     }
 
     fn visit_binary(&mut self, binary: &Binary<'ast, Self::Ast>) {
-        self.visit_id(&binary.l);
-        self.visit_id(&binary.r);
+        <Self::Ast as AstConfig>::visit_operand(self, &binary.l);
+        <Self::Ast as AstConfig>::visit_operand(self, &binary.r);
     }
 
     fn visit_unary(&mut self, unary: &Unary<'ast, Self::Ast>) {
-        self.visit_id(&unary.r);
+        <Self::Ast as AstConfig>::visit_operand(self, &unary.r);
     }
 
     ///

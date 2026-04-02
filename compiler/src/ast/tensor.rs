@@ -1,4 +1,4 @@
-use super::{Id, AstConfig, Avis, ScopeBlock, ScopeEntry, Stmt};
+use super::{AstConfig, Avis, ScopeBlock, ScopeEntry, Stmt, Id};
 
 /// ```
 /// { iv + 1 | 0 <= iv < 3;
@@ -33,19 +33,22 @@ use super::{Id, AstConfig, Avis, ScopeBlock, ScopeEntry, Stmt};
 #[derive(Clone, Debug)]
 pub struct Tensor<'ast, Ast: AstConfig> {
     pub body: Vec<Stmt<'ast, Ast>>,
-    pub ret: Id<'ast, Ast>,
+    pub ret: Ast::Operand<'ast>,
     pub iv: &'ast Avis<Ast>,
-    pub lb: Id<'ast, Ast>,
-    pub ub: Id<'ast, Ast>,
+    pub lb: Ast::Operand<'ast>,
+    pub ub: Ast::Operand<'ast>,
 }
 
 impl<'ast, Ast: AstConfig> Tensor<'ast, Ast> {
-    pub fn scope_block(&self) -> ScopeBlock<'ast, Ast> {
+    pub fn body_scope_block(&self) -> ScopeBlock<'ast, Ast>
+    where
+        Ast::Operand<'ast>: Into<Id<'ast, Ast>>,
+    {
         let mut scope = Vec::with_capacity(1 + self.body.len());
         scope.push(ScopeEntry::IndexRange {
             iv: self.iv,
-            lb: self.lb,
-            ub: self.ub,
+            lb: self.lb.into(),
+            ub: self.ub.into(),
         });
 
         for stmt in &self.body {
@@ -55,5 +58,15 @@ impl<'ast, Ast: AstConfig> Tensor<'ast, Ast> {
         }
 
         scope
+    }
+}
+
+// Convenience impl for operating on Tensors where operands are Ids
+impl<'ast, Ast: AstConfig> Tensor<'ast, Ast>
+where
+    Ast::Operand<'ast>: Into<Id<'ast, Ast>>,
+{
+    pub fn scope_block(&self) -> ScopeBlock<'ast, Ast> {
+        self.body_scope_block()
     }
 }

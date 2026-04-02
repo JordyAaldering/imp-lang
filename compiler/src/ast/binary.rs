@@ -1,11 +1,11 @@
 use std::fmt;
 
-use super::{Id, AstConfig};
+use super::AstConfig;
 
 #[derive(Clone, Debug)]
 pub struct Binary<'ast, Ast: AstConfig> {
-    pub l: Id<'ast, Ast>,
-    pub r: Id<'ast, Ast>,
+    pub l: Ast::Operand<'ast>,
+    pub r: Ast::Operand<'ast>,
     pub op: Bop,
 }
 

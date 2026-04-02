@@ -1,10 +1,10 @@
 use std::fmt;
 
-use super::{Id, AstConfig};
+use super::AstConfig;
 
 #[derive(Clone, Debug)]
 pub struct Unary<'ast, Ast: AstConfig> {
-    pub r: Id<'ast, Ast>,
+    pub r: Ast::Operand<'ast>,
     pub op: Uop,
 }
 
