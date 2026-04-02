@@ -1,7 +1,7 @@
 use std::iter::Peekable;
 
 use crate::ast::{
-    Assign, Farg, LocalVar, BaseType, Binary, Bop, Expr, Fundef, Id, MaybeType, Program, Return, Shape,
+    Assign, Farg, VarInfo, BaseType, Binary, Bop, Expr, Fundef, Id, MaybeType, Program, Return, Shape,
     Stmt, Tensor, Type, Uop, Unary, ParsedAst,
 };
 
@@ -44,8 +44,8 @@ impl<'src> Parser<'src> {
         Box::leak(Box::new(Farg { name, ty }))
     }
 
-    fn alloc_lvis(&self, name: String, ty: MaybeType) -> &'static LocalVar<'static, ParsedAst> {
-        Box::leak(Box::new(LocalVar { name, ty, ssa: () }))
+    fn alloc_lvis(&self, name: String, ty: MaybeType) -> &'static VarInfo<'static, ParsedAst> {
+        Box::leak(Box::new(VarInfo { name, ty, ssa: () }))
     }
 
     fn alloc_expr(&self, expr: Expr<'static, ParsedAst>) -> &'static Expr<'static, ParsedAst> {

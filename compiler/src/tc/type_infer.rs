@@ -9,8 +9,8 @@ pub fn type_infer<'ast>(program: Program<'ast, UntypedAst>) -> Result<Program<'a
 pub struct TypeInfer<'ast> {
     args: Vec<&'ast Farg>,
     scopes: Vec<ScopeBlock<'ast, UntypedAst>>,
-    idmap: HashMap<*const LocalVar<'ast, UntypedAst>, &'ast LocalVar<'ast, TypedAst>>,
-    new_ids: Vec<&'ast LocalVar<'ast, TypedAst>>,
+    idmap: HashMap<*const VarInfo<'ast, UntypedAst>, &'ast VarInfo<'ast, TypedAst>>,
+    new_ids: Vec<&'ast VarInfo<'ast, TypedAst>>,
     new_ssa: Vec<ScopeBlock<'ast, TypedAst>>,
 }
 
@@ -32,8 +32,8 @@ impl<'ast> TypeInfer<'ast> {
         Box::leak(Box::new(Farg { name, ty }))
     }
 
-    fn alloc_lvis(&self, name: String, ty: Type, ssa: Option<&'ast Expr<'ast, TypedAst>>) -> &'ast LocalVar<'ast, TypedAst> {
-        Box::leak(Box::new(LocalVar { name, ty, ssa }))
+    fn alloc_lvis(&self, name: String, ty: Type, ssa: Option<&'ast Expr<'ast, TypedAst>>) -> &'ast VarInfo<'ast, TypedAst> {
+        Box::leak(Box::new(VarInfo { name, ty, ssa }))
     }
 
     fn alloc_expr(&self, expr: Expr<'ast, TypedAst>) -> &'ast Expr<'ast, TypedAst> {
@@ -91,7 +91,7 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
         self.alloc_farg(arg.name.clone(), arg.ty.clone())
     }
 
-    fn trav_vardec(&mut self, _: &'ast LocalVar<'ast, Self::InAst>) -> &'ast LocalVar<'ast, Self::OutAst> {
+    fn trav_vardec(&mut self, _: &'ast VarInfo<'ast, Self::InAst>) -> &'ast VarInfo<'ast, Self::OutAst> {
         unreachable!("Vardecs should be replaced manually")
     }
 

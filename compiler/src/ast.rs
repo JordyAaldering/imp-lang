@@ -45,7 +45,7 @@ pub trait AstConfig: Clone + fmt::Debug {
 
     fn var_name<'ast>(link: &Self::VarLink<'ast>) -> String;
 
-    fn var_lvis<'ast>(link: &Self::VarLink<'ast>) -> &'ast LocalVar<'ast, Self>;
+    fn var_lvis<'ast>(link: &Self::VarLink<'ast>) -> &'ast VarInfo<'ast, Self>;
 
     fn visit_operand<'ast, V>(visitor: &mut V, operand: &Self::Operand<'ast>)
     where
@@ -73,7 +73,7 @@ impl AstConfig for ParsedAst {
         link.clone()
     }
 
-    fn var_lvis<'ast>(_link: &Self::VarLink<'ast>) -> &'ast LocalVar<'ast, Self> {
+    fn var_lvis<'ast>(_link: &Self::VarLink<'ast>) -> &'ast VarInfo<'ast, Self> {
         unreachable!("Tried calling var_lvis before SSA construction");
     }
 
@@ -109,7 +109,7 @@ impl AstConfig for FlattenedAst {
         link.clone()
     }
 
-    fn var_lvis<'ast>(_link: &Self::VarLink<'ast>) -> &'ast LocalVar<'ast, Self> {
+    fn var_lvis<'ast>(_link: &Self::VarLink<'ast>) -> &'ast VarInfo<'ast, Self> {
         unreachable!("Tried calling var_lvis before SSA construction");
     }
 
@@ -135,7 +135,7 @@ pub struct UntypedAst;
 impl AstConfig for UntypedAst {
     type VarType = MaybeType;
 
-    type VarLink<'ast> = &'ast LocalVar<'ast, UntypedAst>;
+    type VarLink<'ast> = &'ast VarInfo<'ast, UntypedAst>;
 
     type SsaLink<'ast> = Option<&'ast Expr<'ast, UntypedAst>>;
 
@@ -145,7 +145,7 @@ impl AstConfig for UntypedAst {
         link.name.clone()
     }
 
-    fn var_lvis<'ast>(link: &Self::VarLink<'ast>) -> &'ast LocalVar<'ast, Self> {
+    fn var_lvis<'ast>(link: &Self::VarLink<'ast>) -> &'ast VarInfo<'ast, Self> {
         link
     }
 
@@ -171,7 +171,7 @@ pub struct TypedAst;
 impl AstConfig for TypedAst {
     type VarType = Type;
 
-    type VarLink<'ast> = &'ast LocalVar<'ast, TypedAst>;
+    type VarLink<'ast> = &'ast VarInfo<'ast, TypedAst>;
 
     type SsaLink<'ast> = Option<&'ast Expr<'ast, TypedAst>>;
 
@@ -181,7 +181,7 @@ impl AstConfig for TypedAst {
         link.name.clone()
     }
 
-    fn var_lvis<'ast>(link: &Self::VarLink<'ast>) -> &'ast LocalVar<'ast, Self> {
+    fn var_lvis<'ast>(link: &Self::VarLink<'ast>) -> &'ast VarInfo<'ast, Self> {
         link
     }
 

@@ -19,7 +19,7 @@ impl ConstantFold {
         }
     }
 
-    fn ptr<'ast>(lvis: &'ast LocalVar<'ast, TypedAst>) -> *const () {
+    fn ptr<'ast>(lvis: &'ast VarInfo<'ast, TypedAst>) -> *const () {
         lvis as *const _ as *const ()
     }
 

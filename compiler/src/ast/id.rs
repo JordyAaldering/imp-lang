@@ -7,7 +7,7 @@ pub enum Id<'ast, Ast: AstConfig> {
 }
 
 #[derive(Clone, Debug)]
-pub struct LocalVar<'ast, Ast: AstConfig> {
+pub struct VarInfo<'ast, Ast: AstConfig> {
     pub name: String,
     pub ty: Ast::VarType,
     pub ssa: Ast::SsaLink<'ast>,
