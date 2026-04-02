@@ -45,6 +45,8 @@ pub trait AstConfig: Clone + fmt::Debug {
 
     fn var_name<'ast>(link: &Self::VarLink<'ast>) -> String;
 
+    fn var_avis<'ast>(link: &Self::VarLink<'ast>) -> Option<&'ast Avis<Self>>;
+
     fn visit_operand<'ast, V>(visitor: &mut V, operand: &Self::Operand<'ast>)
     where
         V: Visit<'ast, Ast = Self> + ?Sized;
@@ -67,6 +69,10 @@ impl AstConfig for ParsedAst {
 
     fn var_name<'ast>(link: &Self::VarLink<'ast>) -> String {
         link.clone()
+    }
+
+    fn var_avis<'ast>(_link: &Self::VarLink<'ast>) -> Option<&'ast Avis<Self>> {
+        None
     }
 
     fn visit_operand<'ast, V>(visitor: &mut V, operand: &Self::Operand<'ast>)
@@ -99,6 +105,10 @@ impl AstConfig for FlattenedAst {
         link.clone()
     }
 
+    fn var_avis<'ast>(_link: &Self::VarLink<'ast>) -> Option<&'ast Avis<Self>> {
+        None
+    }
+
     fn visit_operand<'ast, V>(visitor: &mut V, operand: &Self::Operand<'ast>)
     where
         V: Visit<'ast, Ast = Self> + ?Sized,
@@ -129,6 +139,10 @@ impl AstConfig for UntypedAst {
         link.name.clone()
     }
 
+    fn var_avis<'ast>(link: &Self::VarLink<'ast>) -> Option<&'ast Avis<Self>> {
+        Some(*link)
+    }
+
     fn visit_operand<'ast, V>(visitor: &mut V, operand: &Self::Operand<'ast>)
     where
         V: Visit<'ast, Ast = Self> + ?Sized,
@@ -157,6 +171,10 @@ impl AstConfig for TypedAst {
 
     fn var_name<'ast>(link: &Self::VarLink<'ast>) -> String {
         link.name.clone()
+    }
+
+    fn var_avis<'ast>(link: &Self::VarLink<'ast>) -> Option<&'ast Avis<Self>> {
+        Some(*link)
     }
 
     fn visit_operand<'ast, V>(visitor: &mut V, operand: &Self::Operand<'ast>)

@@ -15,7 +15,7 @@ impl<'ast, Ast: AstConfig> Fundef<'ast, Ast> {
     fn avis_of(&self, key: &Id<'ast, Ast>) -> Option<&'ast Avis<Ast>> {
         match key {
             Id::Arg(i) => Some(self.args[*i]),
-            Id::Var(_) => None,
+            Id::Var(v) => Ast::var_avis(v),
         }
     }
 

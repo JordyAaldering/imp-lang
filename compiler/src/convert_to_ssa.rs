@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::ast::*;
 
-pub fn convert_to_ssa<'ast>(program: Program<'ast, ParsedAst>) -> Program<'ast, UntypedAst> {
+pub fn convert_to_ssa<'ast>(program: Program<'ast, FlattenedAst>) -> Program<'ast, UntypedAst> {
     let fundefs = program
         .fundefs
         .into_iter()
@@ -62,7 +62,7 @@ impl<'ast> ConvertToSsa<'ast> {
         None
     }
 
-    fn trav_fundef(&mut self, fundef: Fundef<'ast, ParsedAst>) -> Fundef<'ast, UntypedAst> {
+    fn trav_fundef(&mut self, fundef: Fundef<'ast, FlattenedAst>) -> Fundef<'ast, UntypedAst> {
         let mut args = Vec::with_capacity(fundef.args.len());
 
         for arg in fundef.args {
@@ -91,19 +91,19 @@ impl<'ast> ConvertToSsa<'ast> {
         }
     }
 
-    fn trav_stmt(&mut self, stmt: Stmt<'ast, ParsedAst>) {
+    fn trav_stmt(&mut self, stmt: Stmt<'ast, FlattenedAst>) {
         match stmt {
             Stmt::Assign(assign) => self.trav_assign(assign),
             Stmt::Return(ret) => self.trav_return(ret),
         }
     }
 
-    fn trav_assign(&mut self, assign: Assign<'ast, ParsedAst>) {
+    fn trav_assign(&mut self, assign: Assign<'ast, FlattenedAst>) {
         let id = self.trav_expr((*assign.expr).clone());
         self.bind_env(assign.avis.name.clone(), id);
     }
 
-    fn trav_return(&mut self, ret: Return<'ast, ParsedAst>) {
+    fn trav_return(&mut self, ret: Return<'ast, FlattenedAst>) {
         let id = self.trav_id(ret.id);
         self.body_stack
             .last_mut()
@@ -111,20 +111,23 @@ impl<'ast> ConvertToSsa<'ast> {
             .push(Stmt::Return(Return { id }));
     }
 
-    fn trav_expr(&mut self, expr: Expr<'ast, ParsedAst>) -> Id<'ast, UntypedAst> {
+    fn trav_expr(&mut self, expr: Expr<'ast, FlattenedAst>) -> Id<'ast, UntypedAst> {
         match expr {
             Expr::Id(id) => self.trav_id(id),
-            other => {
-                let built = match other {
-                    Expr::Tensor(n) => self.trav_tensor(n),
-                    Expr::Binary(n) => self.trav_binary(n),
-                    Expr::Unary(n) => self.trav_unary(n),
-                    Expr::Bool(v) => Expr::Bool(v),
-                    Expr::U32(v) => Expr::U32(v),
-                    Expr::Id(_) => unreachable!(),
-                };
-                self.emit_expr(built)
+            Expr::Tensor(n) => {
+                let n = self.trav_tensor(n);
+                self.emit_expr(Expr::Tensor(n))
             }
+            Expr::Binary(n) => {
+                let n = self.trav_binary(n);
+                self.emit_expr(Expr::Binary(n))
+            }
+            Expr::Unary(n) => {
+                let n = self.trav_unary(n);
+                self.emit_expr(Expr::Unary(n))
+            }
+            Expr::Bool(v) => self.emit_expr(Expr::Bool(v)),
+            Expr::U32(v) => self.emit_expr(Expr::U32(v)),
         }
     }
 
@@ -140,9 +143,9 @@ impl<'ast> ConvertToSsa<'ast> {
         Id::Var(avis)
     }
 
-    fn trav_tensor(&mut self, tensor: Tensor<'ast, ParsedAst>) -> Expr<'ast, UntypedAst> {
-        let lb = self.trav_expr((*tensor.lb).clone());
-        let ub = self.trav_expr((*tensor.ub).clone());
+    fn trav_tensor(&mut self, tensor: Tensor<'ast, FlattenedAst>) -> Tensor<'ast, UntypedAst> {
+        let lb = self.trav_id(tensor.lb);
+        let ub = self.trav_id(tensor.ub);
 
         let iv_avis = self.alloc_avis(tensor.iv.name.clone(), MaybeType(None));
         self.ids.push(iv_avis);
@@ -154,32 +157,32 @@ impl<'ast> ConvertToSsa<'ast> {
         for stmt in tensor.body {
             self.trav_stmt(stmt);
         }
-        let ret = self.trav_expr((*tensor.ret).clone());
+        let ret = self.trav_id(tensor.ret);
         let body = self.body_stack.pop().expect("missing tensor body");
 
         self.pop_env();
 
-        Expr::Tensor(Tensor {
+        Tensor {
             body,
             ret,
             iv: iv_avis,
             lb,
             ub,
-        })
+        }
     }
 
-    fn trav_binary(&mut self, binary: Binary<'ast, ParsedAst>) -> Expr<'ast, UntypedAst> {
-        let l = self.trav_expr((*binary.l).clone());
-        let r = self.trav_expr((*binary.r).clone());
-        Expr::Binary(Binary { l, r, op: binary.op })
+    fn trav_binary(&mut self, binary: Binary<'ast, FlattenedAst>) -> Binary<'ast, UntypedAst> {
+        let l = self.trav_id(binary.l);
+        let r = self.trav_id(binary.r);
+        Binary { l, r, op: binary.op }
     }
 
-    fn trav_unary(&mut self, unary: Unary<'ast, ParsedAst>) -> Expr<'ast, UntypedAst> {
-        let r = self.trav_expr((*unary.r).clone());
-        Expr::Unary(Unary { r, op: unary.op })
+    fn trav_unary(&mut self, unary: Unary<'ast, FlattenedAst>) -> Unary<'ast, UntypedAst> {
+        let r = self.trav_id(unary.r);
+        Unary { r, op: unary.op }
     }
 
-    fn trav_id(&mut self, id: Id<'ast, ParsedAst>) -> Id<'ast, UntypedAst> {
+    fn trav_id(&mut self, id: Id<'ast, FlattenedAst>) -> Id<'ast, UntypedAst> {
         match id {
             Id::Arg(i) => Id::Arg(i),
             Id::Var(v) => self

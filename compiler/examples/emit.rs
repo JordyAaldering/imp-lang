@@ -10,6 +10,10 @@ fn main() {
     let ast = scanparse::scanparse(&src).unwrap();
     println!("{}", show::show(&ast));
 
+    println!("=== flatten ===");
+    let ast = flatten::flatten(ast);
+    println!("{}", show::show(&ast));
+
     println!("=== convert_to_ssa ===");
     let ast = convert_to_ssa::convert_to_ssa(ast);
     println!("{}", show::show(&ast));
