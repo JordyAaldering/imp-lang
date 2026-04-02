@@ -243,21 +243,25 @@ pub trait Traverse<'ast> {
         arg
     }
 
-    fn trav_vardec(&mut self, decl: &'ast VarInfo<'ast, Self::InAst>) -> &'ast VarInfo<'ast, Self::OutAst>;
+    fn trav_vardec(&mut self, _decl: &'ast VarInfo<'ast, Self::InAst>) -> &'ast VarInfo<'ast, Self::OutAst> {
+        unimplemented!()
+    }
 
     ///
     /// Statements
     ///
 
-    fn trav_stmt(&mut self, stmt: Stmt<'ast, Self::InAst>) -> Stmt<'ast, Self::OutAst>;
+    fn trav_stmt(&mut self, stmt: Stmt<'ast, Self::InAst>) -> Stmt<'ast, Self::OutAst> {
+        use Stmt::*;
+        match stmt {
+            Assign(n) => Assign(self.trav_assign(n)),
+            Return(n) => Return(self.trav_return(n)),
+        }
+    }
 
-    type AssignOut = Assign<'ast, Self::OutAst>;
+    fn trav_assign(&mut self, assign: Assign<'ast, Self::InAst>) -> Assign<'ast, Self::OutAst>;
 
-    fn trav_assign(&mut self, assign: Assign<'ast, Self::InAst>) -> Self::AssignOut;
-
-    type ReturnOut = Return<'ast, Self::OutAst>;
-
-    fn trav_return(&mut self, ret: Return<'ast, Self::InAst>) -> Self::ReturnOut;
+    fn trav_return(&mut self, ret: Return<'ast, Self::InAst>) -> Return<'ast, Self::OutAst>;
 
     ///
     /// Expressions
@@ -285,17 +289,25 @@ pub trait Traverse<'ast> {
 
     type IdOut = Id<'ast, Self::OutAst>;
 
-    fn trav_id(&mut self, id: Id<'ast, Self::InAst>) -> Self::IdOut;
+    fn trav_id(&mut self, _id: Id<'ast, Self::InAst>) -> Self::IdOut {
+        unimplemented!()
+    }
 
     type BoolOut = bool;
 
-    fn trav_bool(&mut self, v: bool) -> Self::BoolOut;
+    fn trav_bool(&mut self, _v: bool) -> Self::BoolOut {
+        unimplemented!()
+    }
 
     type U32Out = u32;
 
-    fn trav_u32(&mut self, v: u32) -> Self::U32Out;
+    fn trav_u32(&mut self, _v: u32) -> Self::U32Out {
+        unimplemented!()
+    }
 
     type TypeOut = Type;
 
-    fn trav_type(&mut self, ty: Type) -> Self::TypeOut;
+    fn trav_type(&mut self, _ty: Type) -> Self::TypeOut {
+        unimplemented!()
+    }
 }
