@@ -74,20 +74,19 @@ impl<'ast> ConvertToSsa<'ast> {
     ///
 
     fn trav_stmt(&mut self, stmt: parse_ast::Stmt) {
-        use parse_ast::Stmt::*;
         match stmt {
-            Assign { lhs, expr } => self.trav_assign(lhs, expr),
-            Return { expr } => self.trav_return(expr),
+            parse_ast::Stmt::Assign(assign) => self.trav_assign(assign),
+            parse_ast::Stmt::Return(ret) => self.trav_return(ret),
         }
     }
 
-    fn trav_assign(&mut self, lhs: String, expr: parse_ast::Expr) {
-        let id = self.trav_expr(expr);
-        self.name_to_id.last_mut().unwrap().insert(lhs, id);
+    fn trav_assign(&mut self, assign: parse_ast::Assign) {
+        let id = self.trav_expr(assign.expr);
+        self.name_to_id.last_mut().unwrap().insert(assign.lhs, id);
     }
 
-    fn trav_return(&mut self, expr: parse_ast::Expr) {
-        let id = self.trav_expr(expr);
+    fn trav_return(&mut self, ret: parse_ast::Return) {
+        let id = self.trav_expr(ret.expr);
         self.body_stack.last_mut().unwrap().push(Stmt::Return(Return { id }));
     }
 
@@ -96,19 +95,18 @@ impl<'ast> ConvertToSsa<'ast> {
     ///
 
     fn trav_expr(&mut self, expr: parse_ast::Expr) -> Id<'ast, UntypedAst> {
-        use parse_ast::Expr::*;
         match expr {
-            Id(id) => self.trav_id(id),
-            expr => {
-                let expr = match expr {
-                    Tensor { expr, iv, lb, ub } => self.trav_tensor(*expr, iv, *lb, *ub),
-                    Binary { l, r, op } => self.trav_binary(*l, *r, op),
-                    Unary { r, op } => self.trav_unary(*r, op),
-                    Bool(v) => Expr::Bool(v),
-                    U32(v) => Expr::U32(v),
-                    Id(_) => unreachable!(),
+            parse_ast::Expr::Id(id) => self.trav_id(id),
+            other => {
+                let built = match other {
+                    parse_ast::Expr::Tensor(n) => self.trav_tensor(n),
+                    parse_ast::Expr::Binary(n) => self.trav_binary(n),
+                    parse_ast::Expr::Unary(n) => self.trav_unary(n),
+                    parse_ast::Expr::Bool(v) => Expr::Bool(v),
+                    parse_ast::Expr::U32(v) => Expr::U32(v),
+                    parse_ast::Expr::Id(_) => unreachable!(),
                 };
-                self.emit_expr(expr)
+                self.emit_expr(built)
             }
         }
     }
@@ -122,19 +120,19 @@ impl<'ast> ConvertToSsa<'ast> {
         Id::Var(avis)
     }
 
-    fn trav_tensor(&mut self, expr: parse_ast::Expr, iv: String, lb: parse_ast::Expr, ub: parse_ast::Expr) -> Expr<'ast, UntypedAst> {
-        let lb = self.trav_expr(lb);
-        let ub = self.trav_expr(ub);
+    fn trav_tensor(&mut self, tensor: parse_ast::Tensor) -> Expr<'ast, UntypedAst> {
+        let lb = self.trav_expr(*tensor.lb);
+        let ub = self.trav_expr(*tensor.ub);
 
-        let iv_avis = self.alloc_avis(iv.clone(), MaybeType(None));
+        let iv_avis = self.alloc_avis(tensor.iv.clone(), MaybeType(None));
         self.ids.push(iv_avis);
 
         let mut scope = HashMap::new();
-        scope.insert(iv, Id::Var(iv_avis));
+        scope.insert(tensor.iv, Id::Var(iv_avis));
 
         self.name_to_id.push(scope);
         self.body_stack.push(Vec::new());
-        let ret = self.trav_expr(expr);
+        let ret = self.trav_expr(*tensor.expr);
         let body = self.body_stack.pop().unwrap();
         self.name_to_id.pop().unwrap();
 
@@ -147,15 +145,15 @@ impl<'ast> ConvertToSsa<'ast> {
         })
     }
 
-    fn trav_binary(&mut self, l: parse_ast::Expr, r: parse_ast::Expr, op: Bop) -> Expr<'ast, UntypedAst> {
-        let l = self.trav_expr(l);
-        let r = self.trav_expr(r);
-        Expr::Binary(Binary { l, r, op })
+    fn trav_binary(&mut self, binary: parse_ast::Binary) -> Expr<'ast, UntypedAst> {
+        let l = self.trav_expr(*binary.l);
+        let r = self.trav_expr(*binary.r);
+        Expr::Binary(Binary { l, r, op: binary.op })
     }
 
-    fn trav_unary(&mut self, r: parse_ast::Expr, op: Uop) -> Expr<'ast, UntypedAst> {
-        let r = self.trav_expr(r);
-        Expr::Unary(Unary { r, op })
+    fn trav_unary(&mut self, unary: parse_ast::Unary) -> Expr<'ast, UntypedAst> {
+        let r = self.trav_expr(*unary.r);
+        Expr::Unary(Unary { r, op: unary.op })
     }
 
     ///
