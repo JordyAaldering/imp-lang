@@ -1,5 +1,9 @@
+/// # Pre-processing (`pre`)
+///
+/// Prepare the parsed AST for safe internal use.
+
 mod flatten;
-mod convert_to_ssa;
+mod to_ssa;
 
 pub use flatten::flatten;
-pub use convert_to_ssa::convert_to_ssa;
+pub use to_ssa::to_ssa;

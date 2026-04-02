@@ -15,7 +15,7 @@ fn main() {
     println!("{}", show::show(&ast));
 
     println!("=== convert_to_ssa ===");
-    let ast = pre::convert_to_ssa(ast);
+    let ast = pre::to_ssa(ast);
     println!("{}", show::show(&ast));
 
     println!("=== type_infer ===");
