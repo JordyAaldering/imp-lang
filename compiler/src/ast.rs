@@ -56,14 +56,14 @@ pub trait AstConfig: Clone + fmt::Debug {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct ParseAst;
+pub struct ParsedAst;
 
-impl AstConfig for ParseAst {
+impl AstConfig for ParsedAst {
     type VarType = MaybeType;
 
     type VarLink<'ast> = String;
 
-    type Operand<'ast> = &'ast Expr<'ast, ParseAst>;
+    type Operand<'ast> = &'ast Expr<'ast, ParsedAst>;
 
     fn var_name<'ast>(link: &Self::VarLink<'ast>) -> String {
         link.clone()
@@ -82,6 +82,36 @@ impl AstConfig for ParseAst {
         T::IdOut: Into<T::ExprOut>,
     {
         traverser.trav_expr((*operand).clone()).into()
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct FlattenedAst;
+
+impl AstConfig for FlattenedAst {
+    type VarType = MaybeType;
+
+    type VarLink<'ast> = String;
+
+    type Operand<'ast> = Id<'ast, FlattenedAst>;
+
+    fn var_name<'ast>(link: &Self::VarLink<'ast>) -> String {
+        link.clone()
+    }
+
+    fn visit_operand<'ast, V>(visitor: &mut V, operand: &Self::Operand<'ast>)
+    where
+        V: Visit<'ast, Ast = Self> + ?Sized,
+    {
+        visitor.visit_id(operand);
+    }
+
+    fn trav_operand<'ast, T>(traverser: &mut T, operand: Self::Operand<'ast>) -> T::ExprOut
+    where
+        T: Traverse<'ast, InAst = Self> + ?Sized,
+        T::IdOut: Into<T::ExprOut>,
+    {
+        traverser.trav_id(operand).into()
     }
 }
 
