@@ -186,9 +186,9 @@ pub trait Rewrite<'ast> {
         v
     }
 
-    fn rewrite_type(&mut self, ty: Type) -> Type {
-        ty
-    }
+    // fn rewrite_type(&mut self, ty: Type) -> Type {
+    //     ty
+    // }
 }
 
 pub trait Traverse<'ast> {

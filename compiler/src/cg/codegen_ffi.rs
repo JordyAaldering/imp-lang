@@ -58,7 +58,7 @@ impl<'ast> Visit<'ast> for CompileFfi {
                 fundef.name,
                 call_args.join(", ")
             ));
-            self.push("    unsafe { compiler::core::ImpArrayu32::from_raw(__raw) }\n");
+            self.push("    unsafe { compiler::ImpArrayu32::from_raw(__raw) }\n");
         } else {
             self.push(&format!(
                 "    unsafe {{ IMP_{}({}) }}\n",
@@ -90,7 +90,7 @@ fn rust_api_type(ty: &Type) -> String {
 
     match ty.shp {
         Shape::Scalar => base.to_owned(),
-        Shape::Vector(_) => format!("compiler::core::ImpArray{}", base),
+        Shape::Vector(_) => format!("compiler::ImpArray{}", base),
     }
 }
 
@@ -102,6 +102,6 @@ fn rust_ffi_type(ty: &Type) -> String {
 
     match ty.shp {
         Shape::Scalar => base.to_owned(),
-        Shape::Vector(_) => format!("compiler::core::ImpArray{}Raw", base),
+        Shape::Vector(_) => format!("compiler::ImpArray{}Raw", base),
     }
 }

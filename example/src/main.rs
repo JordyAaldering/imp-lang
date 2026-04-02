@@ -1,6 +1,6 @@
 include!(concat!(env!("OUT_DIR"), "/simple.rs"));
 
-use compiler::core::ImpArrayu32;
+use compiler::ImpArrayu32;
 
 fn main() {
     println!("shouldbefolded = {}", shouldbefolded());

@@ -1,21 +1,19 @@
 #![feature(associated_type_defaults)]
 
-pub mod core;
-pub mod ast;
-pub mod traverse;
+mod core;
+mod ast;
+mod traverse;
 pub mod show;
 // Compiler phases
-pub mod scp;
-pub mod pre;
-pub mod tc;
-pub mod opt;
-pub mod cg;
+mod scp;
+mod pre;
+mod tc;
+mod opt;
+mod cg;
 
 pub use crate::core::*;
 
-pub use crate::traverse::{Rewrite, Traverse, Visit};
-
-use crate::ast::*;
+use crate::{ast::*, traverse::*};
 
 pub fn compile(src: &str) -> Program<'static, TypedAst> {
     let ast = scp::scanparse(&src).unwrap();
