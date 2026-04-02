@@ -279,7 +279,7 @@ impl<'src> Parser<'src> {
 
     fn parse_type(&mut self) -> ParseResult<(Type, Span)> {
         let (token, span) = self.next()?;
-        let basetype = match token {
+        let ty = match token {
             Token::U32Type => BaseType::U32,
             Token::BoolType => BaseType::Bool,
             _ => return Err(ParseError::UnexpectedToken("type".to_owned(), token, span)),
@@ -290,16 +290,11 @@ impl<'src> Parser<'src> {
 
             self.expect(Token::RSquare)?;
 
-            Type {
-                basetype,
-                shp: Shape::Vector(id),
-            }
+            Type { ty, shp: Shape::Vector(id) }
         } else {
-            Type {
-                basetype,
-                shp: Shape::Scalar,
-            }
+            Type { ty, shp: Shape::Scalar }
         };
+
         Ok((ty, span))
     }
 

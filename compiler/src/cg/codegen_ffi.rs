@@ -83,7 +83,7 @@ fn join_args(args: &Vec<&Farg>, map_ty: fn(&Type) -> String) -> String {
 }
 
 fn rust_api_type(ty: &Type) -> String {
-    let base = match ty.basetype {
+    let base = match ty.ty {
         BaseType::U32 => "u32",
         BaseType::Bool => "bool",
     };
@@ -95,7 +95,7 @@ fn rust_api_type(ty: &Type) -> String {
 }
 
 fn rust_ffi_type(ty: &Type) -> String {
-    let base = match ty.basetype {
+    let base = match ty.ty {
         BaseType::U32 => "u32",
         BaseType::Bool => "bool",
     };

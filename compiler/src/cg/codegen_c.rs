@@ -157,7 +157,7 @@ impl<'ast> Visit<'ast> for CompileC {
 }
 
 fn base_ctype(ty: &Type) -> &'static str {
-    match ty.basetype {
+    match ty.ty {
         BaseType::U32 => "uint32_t",
         BaseType::Bool => "bool",
     }

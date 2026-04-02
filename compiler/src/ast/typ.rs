@@ -2,7 +2,7 @@ use std::fmt;
 
 #[derive(Clone, Debug)]
 pub struct Type {
-    pub basetype: BaseType,
+    pub ty: BaseType,
     pub shp: Shape,
 }
 
@@ -19,18 +19,18 @@ pub enum Shape {
 }
 
 impl Type {
-    pub fn scalar(basetype: BaseType) -> Self {
-        Self { basetype, shp: Shape::Scalar }
+    pub fn scalar(ty: BaseType) -> Self {
+        Self { ty, shp: Shape::Scalar }
     }
 
-    pub fn vector(basetype: BaseType, extent: &str) -> Self {
-        Self { basetype, shp: Shape::Vector(extent.to_owned()) }
+    pub fn vector(ty: BaseType, extent: &str) -> Self {
+        Self { ty, shp: Shape::Vector(extent.to_owned()) }
     }
 }
 
 impl fmt::Display for Type {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}{}", self.basetype, self.shp)
+        write!(f, "{}{}", self.ty, self.shp)
     }
 }
 
