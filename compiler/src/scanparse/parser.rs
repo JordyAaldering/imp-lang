@@ -40,7 +40,7 @@ impl<'src> Parser<'src> {
 
     /// ```bnf
     /// <fundef> := "fn" <id> "(" [<farg> ("," <farg>)*]? ")" "->" <type>
-    ///                 "{" <stmt>* <return> "}"
+    ///                 "{" <stmt>* "}"
     /// ```
     fn parse_fundef(&mut self) -> ParseResult<Fundef> {
         let (_, _span_start) = self.expect(Token::Fn)?;
@@ -67,26 +67,18 @@ impl<'src> Parser<'src> {
         self.expect(Token::LBrace)?;
 
         let mut body = Vec::new();
-        let ret_expr;
 
-        loop {
-            match self.peek()?.0 {
-                Token::RBrace => {
-                    return Err(ParseError::MissingReturn);
-                }
-                Token::Return => {
-                    ret_expr = self.parse_return()?;
-                    break;
-                },
-                _ => {
-                    body.push(self.parse_stmt()?);
-                }
-            }
+        while self.peek()?.0 != Token::RBrace {
+            body.push(self.parse_stmt()?);
         }
 
         self.expect(Token::RBrace)?;
 
-        Ok(Fundef { id, args, ret_type, body, ret_expr })
+        if !matches!(body.last(), Some(Stmt::Return { .. })) {
+            return Err(ParseError::MissingReturn);
+        }
+
+        Ok(Fundef { id, args, ret_type, body })
     }
 
     /// ```bnf
@@ -118,22 +110,16 @@ impl<'src> Parser<'src> {
                 let expr = self.parse_expr(None::<Bop>)?;
                 Stmt::Assign { lhs, expr }
             },
+            Token::Return => {
+                let expr = self.parse_expr(None::<Bop>)?;
+                Stmt::Return { expr }
+            }
             _ => return Err(ParseError::UnexpectedToken("statement".to_owned(), token, span)),
         };
 
         self.expect(Token::Semicolon)?;
 
         Ok(stmt)
-    }
-
-    /// ```bnf
-    /// <return> := "return" <expr> ";"
-    /// ```
-    fn parse_return(&mut self) -> ParseResult<Expr> {
-        self.expect(Token::Return)?;
-        let expr = self.parse_expr(None::<Bop>)?;
-        self.expect(Token::Semicolon)?;
-        Ok(expr)
     }
 
     /// ```bnf
