@@ -17,7 +17,7 @@ use crate::ast::*;
 pub fn compile(src: &str) -> Program<'static, TypedAst> {
     let ast = scp::scanparse(&src).unwrap();
     let ast = pre::flatten(ast);
-    let ast = pre::convert_to_ssa(ast);
+    let ast = pre::to_ssa(ast);
     let ast = tc::type_infer(ast).unwrap();
     let ast = opt::constant_fold(ast);
     ast

@@ -2,23 +2,23 @@ use std::collections::HashMap;
 
 use crate::ast::*;
 
-pub fn convert_to_ssa<'ast>(program: Program<'ast, FlattenedAst>) -> Program<'ast, UntypedAst> {
+pub fn to_ssa<'ast>(program: Program<'ast, FlattenedAst>) -> Program<'ast, UntypedAst> {
     let fundefs = program
         .fundefs
         .into_iter()
-        .map(|f| ConvertToSsa::new().trav_fundef(f))
+        .map(|f| ToSsa::new().trav_fundef(f))
         .collect();
     Program { fundefs }
 }
 
-pub struct ConvertToSsa<'ast> {
+pub struct ToSsa<'ast> {
     uid: usize,
     ids: Vec<&'ast Lvis<'ast, UntypedAst>>,
     body_stack: Vec<Vec<Stmt<'ast, UntypedAst>>>,
     env_stack: Vec<HashMap<String, Id<'ast, UntypedAst>>>,
 }
 
-impl<'ast> ConvertToSsa<'ast> {
+impl<'ast> ToSsa<'ast> {
     fn new() -> Self {
         Self {
             uid: 0,
