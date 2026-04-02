@@ -1,19 +1,21 @@
-use std::{collections::HashSet, mem};
-
 use crate::{ast::*, Visit};
 
 pub struct CompileC {
-    emitted: HashSet<*const ()>,
-    stmts: Vec<String>,
     output: String,
+    arg_names: Vec<String>,
+    expr_stack: Vec<String>,
+    tensor_target: Option<(String, Type)>,
+    indent: usize,
 }
 
 impl CompileC {
     pub fn new() -> Self {
         Self {
-            emitted: HashSet::new(),
-            stmts: Vec::new(),
             output: String::new(),
+            arg_names: Vec::new(),
+            expr_stack: Vec::new(),
+            tensor_target: None,
+            indent: 0,
         }
     }
 
@@ -21,105 +23,15 @@ impl CompileC {
         self.output
     }
 
-    fn ensure_local<'ast>(
-        &mut self,
-        lvis: &'ast Lvis<'ast, TypedAst>,
-        expr: &Expr<'ast, TypedAst>,
-        fundef: &Fundef<'ast, TypedAst>,
-        extra_scopes: &Vec<ScopeBlock<'ast, TypedAst>>,
-    ) {
-        let key = lvis as *const _ as *const ();
-        if self.emitted.insert(key) {
-            let rhs = self.render_expr(expr, fundef, extra_scopes);
-            self.stmts.push(format!("{} {} = {};", to_ctype(&lvis.ty), lvis.name, rhs));
-        }
+    fn push_line(&mut self, line: &str) {
+        self.output.push_str(&"    ".repeat(self.indent));
+        self.output.push_str(line);
+        self.output.push('\n');
     }
 
-    fn body_scope<'ast>(&self, fundef: &Fundef<'ast, TypedAst>) -> ScopeBlock<'ast, TypedAst> {
-        fundef.scope_block()
-    }
-
-    fn expr_for<'ast>(
-        &mut self,
-        id: Id<'ast, TypedAst>,
-        fundef: &Fundef<'ast, TypedAst>,
-        extra_scopes: &Vec<ScopeBlock<'ast, TypedAst>>,
-    ) -> String {
-        if let Some(i) = fundef.arg_index(id.clone()) {
-            return fundef.args[i].name.clone();
-        }
-
-        let lvis = match id {
-            Id::Arg(_) => return fundef.nameof(&id),
-            Id::Var(lvis) => lvis,
-        };
-
-        let mut scopes = Vec::with_capacity(1 + extra_scopes.len());
-        scopes.push(self.body_scope(fundef));
-        scopes.extend(extra_scopes.iter().cloned());
-
-        match find_local_in_scopes(&scopes, lvis) {
-            Some(LocalDef::Assign(expr)) => {
-                self.ensure_local(lvis, expr, fundef, extra_scopes);
-                lvis.name.clone()
-            }
-            Some(LocalDef::IndexRange { .. }) | None => lvis.name.clone(),
-        }
-    }
-
-    fn render_expr<'ast>(
-        &mut self,
-        expr: &Expr<'ast, TypedAst>,
-        fundef: &Fundef<'ast, TypedAst>,
-        extra_scopes: &Vec<ScopeBlock<'ast, TypedAst>>,
-    ) -> String {
-        match expr {
-            Expr::Tensor(tensor) => {
-                let mut forloop = String::new();
-                let mut tensor_scopes = extra_scopes.to_vec();
-                tensor_scopes.last_mut().get_or_insert(&mut vec![]).push(
-                    ScopeEntry::IndexRange {
-                        iv: tensor.iv,
-                        lb: tensor.lb.clone().into(),
-                        ub: tensor.ub.clone().into(),
-                    });
-                tensor_scopes.push(tensor.build_scope());
-
-                let ty = to_ctype(fundef.typof(&tensor.ret));
-                let iv_name = tensor.iv.name.clone();
-                let lb_name = self.expr_for(tensor.lb.clone(), fundef, &tensor_scopes);
-                let ub_name = self.expr_for(tensor.ub.clone(), fundef, &tensor_scopes);
-
-                let mut outer_stmts = Vec::new();
-                mem::swap(&mut outer_stmts, &mut self.stmts);
-                let expr_code = self.expr_for(tensor.ret.clone(), fundef, &tensor_scopes);
-                let mut body_stmts = Vec::new();
-                mem::swap(&mut body_stmts, &mut self.stmts);
-                self.stmts = outer_stmts;
-
-                forloop.push_str(&format!("for (size_t {} = {}; {} < {}; {} += 1) {{\n", iv_name, lb_name, iv_name, ub_name, iv_name));
-                for stmt in body_stmts {
-                    forloop.push_str(&format!("        {}\n", stmt));
-                }
-                forloop.push_str(&format!("        res[{}] = {};\n", iv_name, expr_code));
-                forloop.push_str("    }");
-                self.stmts.push(format!("{} *res = ({} *)malloc({} * sizeof({}));", ty, ty, ub_name, ty));
-                self.stmts.push(forloop);
-                "res".to_owned()
-            }
-            Expr::Binary(Binary { l, r, op }) => {
-                let l = self.expr_for(l.clone(), fundef, extra_scopes);
-                let r = self.expr_for(r.clone(), fundef, extra_scopes);
-                format!("{} {} {}", l, op, r)
-            }
-            Expr::Unary(Unary { r, op }) => {
-                let r = self.expr_for(r.clone(), fundef, extra_scopes);
-                format!("{} {}", op, r)
-            }
-            Expr::Id(id) => self.expr_for(id.clone(), fundef, extra_scopes),
-            Expr::Bool(v) => if *v { "true".to_owned() } else { "false".to_owned() },
-            Expr::U32(v) => format!("{}", *v),
-        }
+    fn render_expr<'ast>(&mut self, expr: &Expr<'ast, TypedAst>) -> String {
+        self.visit_expr(expr);
+        self.expr_stack.pop().expect("expression stack underflow")
     }
 }
 
@@ -127,7 +39,6 @@ impl<'ast> Visit<'ast> for CompileC {
     type Ast = TypedAst;
 
     fn visit_program(&mut self, program: &Program<'ast, TypedAst>) {
-
         self.output.push_str("#include <stdlib.h>\n");
         self.output.push_str("#include <stdbool.h>\n");
         self.output.push_str("#include <stdint.h>\n");
@@ -140,37 +51,108 @@ impl<'ast> Visit<'ast> for CompileC {
     }
 
     fn visit_fundef(&mut self, fundef: &Fundef<'ast, TypedAst>) {
-        let mut res = String::new();
+        self.arg_names = fundef.args.iter().map(|arg| arg.name.clone()).collect();
+        let args: Vec<String> = fundef.args.iter()
+            .map(|arg| format!("{} {}", full_ctype(&arg.ty), arg.name))
+            .collect();
 
-        self.emitted.clear();
+        self.push_line(&format!(
+            "{} IMP_{}({}) {{",
+            full_ctype(&fundef.ret_type), fundef.name, args.join(", ")
+        ));
 
-        let args: Vec<String> = fundef.args.iter().map(|avis| format!("{} {}", to_ctype(&avis.ty), avis.name)).collect();
-        let ret = fundef.ret_id();
-        res.push_str(&format!("{} IMP_{}({}) {{\n", to_ctype(&fundef.ret_type), fundef.name, args.join(", ")));
+        self.indent += 1;
+        for stmt in &fundef.body {
+            self.visit_stmt(stmt);
+        }
+        self.indent -= 1;
 
-        let ret_code = self.expr_for(ret, &fundef, &Vec::new());
+        self.push_line("}");
+    }
 
-        for stmt in &self.stmts {
-            res.push_str(&format!("    {}\n", stmt));
+    fn visit_assign(&mut self, assign: &Assign<'ast, Self::Ast>) {
+        if let Expr::Tensor(tensor) = assign.expr {
+            self.tensor_target = Some((assign.lvis.name.clone(), assign.lvis.ty.clone()));
+            self.visit_tensor(tensor);
+            self.tensor_target = None;
+            return;
         }
 
-        res.push_str(&format!("    return {};\n", ret_code));
-        res.push_str("}\n");
+        let rhs = self.render_expr(assign.expr);
+        self.push_line(&format!("{} {} = {};", full_ctype(&assign.lvis.ty), assign.lvis.name, rhs));
+    }
 
-        self.output.push_str(&res);
+    fn visit_return(&mut self, ret: &Return<'ast, Self::Ast>) {
+        let name = self.render_expr(&Expr::Id(ret.id.clone()));
+        self.push_line(&format!("return {};", name));
+    }
+
+    fn visit_tensor(&mut self, tensor: &Tensor<'ast, Self::Ast>) {
+        let (target_name, target_ty) = self.tensor_target.clone().expect("tensor target must be set");
+
+        let lb = self.render_expr(&Expr::Id(tensor.lb.clone()));
+        let ub = self.render_expr(&Expr::Id(tensor.ub.clone()));
+        let iv = &tensor.iv.name;
+        let base = base_ctype(&target_ty);
+
+        self.push_line(&format!(
+            "{} *{} = ({} *)malloc({} * sizeof({}));",
+            base, target_name, base, ub, base
+        ));
+        self.push_line(&format!(
+            "for (size_t {} = {}; {} < {}; {} += 1) {{",
+            iv, lb, iv, ub, iv
+        ));
+
+        self.indent += 1;
+        for stmt in &tensor.body {
+            self.visit_stmt(stmt);
+        }
+        let ret = self.render_expr(&Expr::Id(tensor.ret.clone()));
+        self.push_line(&format!("{}[{}] = {};", target_name, iv, ret));
+        self.indent -= 1;
+
+        self.push_line("}");
+    }
+
+    fn visit_binary(&mut self, binary: &Binary<'ast, Self::Ast>) {
+        let l = self.render_expr(&Expr::Id(binary.l.clone()));
+        let r = self.render_expr(&Expr::Id(binary.r.clone()));
+        self.expr_stack.push(format!("{} {} {}", l, binary.op, r));
+    }
+
+    fn visit_unary(&mut self, unary: &Unary<'ast, Self::Ast>) {
+        let r = self.render_expr(&Expr::Id(unary.r.clone()));
+        self.expr_stack.push(format!("{}{}", unary.op, r));
+    }
+
+    fn visit_id(&mut self, id: &Id<'ast, Self::Ast>) {
+        let name = match id {
+            Id::Arg(i) => self.arg_names[*i].clone(),
+            Id::Var(lvis) => lvis.name.clone(),
+        };
+        self.expr_stack.push(name);
+    }
+
+    fn visit_bool(&mut self, v: &bool) {
+        self.expr_stack.push(if *v { "true".to_owned() } else { "false".to_owned() });
+    }
+
+    fn visit_u32(&mut self, v: &u32) {
+        self.expr_stack.push(v.to_string());
     }
 }
 
-fn to_ctype(ty: &Type) -> String {
-    let base = match ty.basetype {
+fn base_ctype(ty: &Type) -> &'static str {
+    match ty.basetype {
         BaseType::U32 => "uint32_t",
         BaseType::Bool => "bool",
-    };
+    }
+}
 
-    let shp = match ty.shp {
-        Shape::Scalar => "",
-        Shape::Vector(_) => "*",
-    };
-
-    format!("{}{}", base, shp)
+fn full_ctype(ty: &Type) -> String {
+    match &ty.shp {
+        Shape::Scalar => base_ctype(ty).to_owned(),
+        Shape::Vector(_) => format!("{} *", base_ctype(ty)),
+    }
 }
