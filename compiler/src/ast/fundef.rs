@@ -59,11 +59,11 @@ impl<'ast, Ast: AstConfig> Fundef<'ast, Ast> {
 
     pub fn find_local_def(&self, key: &'ast Avis<Ast>) -> Option<LocalDef<'ast, Ast>> {
         let body_scope = self.scope_block();
-        find_local_in_scopes(std::slice::from_ref(&body_scope), key)
+        find_local_in_scopes(&vec![body_scope], key)
     }
 }
 
-pub fn find_local_in_scopes<'ast, Ast: AstConfig>(scopes: &[ScopeBlock<'ast, Ast>], key: &'ast Avis<Ast>) -> Option<LocalDef<'ast, Ast>> {
+pub fn find_local_in_scopes<'ast, Ast: AstConfig>(scopes: &Vec<ScopeBlock<'ast, Ast>>, key: &'ast Avis<Ast>) -> Option<LocalDef<'ast, Ast>> {
     for scope in scopes.iter().rev() {
         for stmt in scope.iter().rev() {
             let avis = stmt.avis();

@@ -158,7 +158,13 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
     type TensorOut = (Tensor<'ast, Self::OutAst>, Type);
 
     fn trav_tensor(&mut self, tensor: Tensor<'ast, Self::InAst>) -> Self::TensorOut {
-        self.scopes.push(tensor.scope_block());
+        self.scopes.last_mut().unwrap().push(
+            ScopeEntry::IndexRange {
+                iv: tensor.iv,
+                lb: tensor.lb.clone().into(),
+                ub: tensor.ub.clone().into(),
+            });
+        self.scopes.push(tensor.build_scope());
         self.new_ssa.push(Vec::new());
 
         let (lb, _check_if_vec) = self.trav_id(tensor.lb);

@@ -26,7 +26,7 @@ impl CompileC {
         avis: &'ast Avis<TypedAst>,
         expr: &Expr<'ast, TypedAst>,
         fundef: &Fundef<'ast, TypedAst>,
-        extra_scopes: &[ScopeBlock<'ast, TypedAst>],
+        extra_scopes: &Vec<ScopeBlock<'ast, TypedAst>>,
     ) {
         let key = avis as *const _;
         if self.emitted.insert(key) {
@@ -43,7 +43,7 @@ impl CompileC {
         &mut self,
         id: Id<'ast, TypedAst>,
         fundef: &Fundef<'ast, TypedAst>,
-        extra_scopes: &[ScopeBlock<'ast, TypedAst>],
+        extra_scopes: &Vec<ScopeBlock<'ast, TypedAst>>,
     ) -> String {
         if let Some(i) = fundef.arg_index(id.clone()) {
             return fundef.args[i].name.clone();
@@ -71,13 +71,19 @@ impl CompileC {
         &mut self,
         expr: &Expr<'ast, TypedAst>,
         fundef: &Fundef<'ast, TypedAst>,
-        extra_scopes: &[ScopeBlock<'ast, TypedAst>],
+        extra_scopes: &Vec<ScopeBlock<'ast, TypedAst>>,
     ) -> String {
         match expr {
             Expr::Tensor(tensor) => {
                 let mut forloop = String::new();
                 let mut tensor_scopes = extra_scopes.to_vec();
-                tensor_scopes.push(tensor.scope_block());
+                tensor_scopes.last_mut().get_or_insert(&mut vec![]).push(
+                    ScopeEntry::IndexRange {
+                        iv: tensor.iv,
+                        lb: tensor.lb.clone().into(),
+                        ub: tensor.ub.clone().into(),
+                    });
+                tensor_scopes.push(tensor.build_scope());
 
                 let ty = to_ctype(fundef.typof(&tensor.ret));
                 let iv_name = tensor.iv.name.clone();
@@ -142,7 +148,7 @@ impl<'ast> Visit<'ast> for CompileC {
         let ret = fundef.ret_id();
         res.push_str(&format!("{} IMP_{}({}) {{\n", to_ctype(&fundef.ret_type), fundef.name, args.join(", ")));
 
-        let ret_code = self.expr_for(ret, &fundef, &[]);
+        let ret_code = self.expr_for(ret, &fundef, &Vec::new());
 
         for stmt in &self.stmts {
             res.push_str(&format!("    {}\n", stmt));
