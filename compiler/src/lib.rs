@@ -11,6 +11,8 @@ pub mod tc;
 pub mod opt;
 pub mod cg;
 
+pub use crate::core::*;
+
 pub use crate::traverse::{Rewrite, Traverse, Visit};
 
 use crate::ast::*;
