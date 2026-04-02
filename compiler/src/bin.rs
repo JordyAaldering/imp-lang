@@ -1,8 +1,18 @@
-use std::{env, fs};
+use std::{fs, path::PathBuf};
+
+use clap::Parser;
+
+#[derive(Parser)]
+struct Args {
+    file: PathBuf,
+}
 
 fn main() {
-    let file = env::args().nth(1).unwrap();
-    let src = fs::read_to_string(&file).unwrap();
+    let Args {
+        file,
+    } = Args::parse();
+
+    let src = fs::read_to_string(file).unwrap();
     let ast = compiler::compile(&src);
     println!("{}", compiler::show::show(&ast));
 }
