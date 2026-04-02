@@ -1,10 +1,10 @@
 use crate::{ast::*, traverse::Visit};
 
-pub struct CompileHeader {
+pub struct CompileFfi {
     output: String,
 }
 
-impl CompileHeader {
+impl CompileFfi {
     pub fn new() -> Self {
         Self {
             output: String::new(),
@@ -16,7 +16,7 @@ impl CompileHeader {
     }
 }
 
-impl<'ast> Visit<'ast> for CompileHeader {
+impl<'ast> Visit<'ast> for CompileFfi {
     type Ast = TypedAst;
 
     fn visit_program(&mut self, program: &Program<'ast, TypedAst>) {

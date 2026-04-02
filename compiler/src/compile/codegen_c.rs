@@ -2,13 +2,13 @@ use std::{collections::HashSet, mem};
 
 use crate::{ast::*, traverse::Visit};
 
-pub struct CodegenContext {
+pub struct CompileC {
     emitted: HashSet<*const Avis<TypedAst>>,
     stmts: Vec<String>,
     output: String,
 }
 
-impl CodegenContext {
+impl CompileC {
     pub fn new() -> Self {
         Self {
             emitted: HashSet::new(),
@@ -115,7 +115,7 @@ impl CodegenContext {
     }
 }
 
-impl<'ast> Visit<'ast> for CodegenContext {
+impl<'ast> Visit<'ast> for CompileC {
     type Ast = TypedAst;
 
     fn visit_program(&mut self, program: &Program<'ast, TypedAst>) {
