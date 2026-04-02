@@ -1,4 +1,4 @@
-use std::{ffi::c_void, ptr};
+use std::ffi::c_void;
 
 pub struct ImpArrayu32 {
     pub shp: Vec<usize>,
@@ -8,11 +8,10 @@ pub struct ImpArrayu32 {
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct ImpArrayu32Raw {
+    pub len: usize,
+    pub dim: usize,
     pub shp: *mut usize,
-    pub shp_len: usize,
     pub data: *mut u32,
-    pub data_len: usize,
-    pub refc: *mut usize,
 }
 
 unsafe extern "C" {
@@ -22,11 +21,10 @@ unsafe extern "C" {
 impl ImpArrayu32 {
     pub fn as_raw(&mut self) -> ImpArrayu32Raw {
         ImpArrayu32Raw {
+            len: self.data.len(),
+            dim: self.shp.len(),
             shp: self.shp.as_mut_ptr(),
-            shp_len: self.shp.len(),
             data: self.data.as_mut_ptr(),
-            data_len: self.data.len(),
-            refc: ptr::null_mut(),
         }
     }
 
@@ -35,13 +33,13 @@ impl ImpArrayu32 {
         let shp = if raw.shp.is_null() {
             Vec::new()
         } else {
-            unsafe { std::slice::from_raw_parts(raw.shp, raw.shp_len).to_vec() }
+            unsafe { std::slice::from_raw_parts(raw.shp, raw.dim).to_vec() }
         };
 
         let data = if raw.data.is_null() {
             Vec::new()
         } else {
-            unsafe { std::slice::from_raw_parts(raw.data, raw.data_len).to_vec() }
+            unsafe { std::slice::from_raw_parts(raw.data, raw.len).to_vec() }
         };
 
         if !raw.shp.is_null() {
@@ -49,9 +47,6 @@ impl ImpArrayu32 {
         }
         if !raw.data.is_null() {
             unsafe { free(raw.data as *mut c_void) };
-        }
-        if !raw.refc.is_null() {
-            unsafe { free(raw.refc as *mut c_void) };
         }
 
         Self { shp, data }

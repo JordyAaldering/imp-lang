@@ -44,11 +44,10 @@ impl<'ast> Visit<'ast> for CompileC {
         self.output.push_str("#include <stdint.h>\n");
         self.output.push('\n');
         self.output.push_str("typedef struct {\n");
+        self.output.push_str("    size_t len;\n");
+        self.output.push_str("    size_t dim;\n");
         self.output.push_str("    size_t *shp;\n");
-        self.output.push_str("    size_t shp_len;\n");
         self.output.push_str("    uint32_t *data;\n");
-        self.output.push_str("    size_t data_len;\n");
-        self.output.push_str("    size_t *refc;\n");
         self.output.push_str("} ImpArrayu32Raw;\n\n");
 
         for fundef in &program.fundefs {
@@ -124,8 +123,8 @@ impl<'ast> Visit<'ast> for CompileC {
         self.push_line(&format!("size_t *{} = (size_t *)malloc(sizeof(size_t));", shp_name));
         self.push_line(&format!("{}[0] = {};", shp_name, len_name));
         self.push_line(&format!(
-            "ImpArrayu32Raw {} = (ImpArrayu32Raw) {{ .shp = {}, .shp_len = 1, .data = {}, .data_len = {}, .refc = NULL }};",
-            target_name, shp_name, data_name, len_name
+            "ImpArrayu32Raw {} = (ImpArrayu32Raw) {{ .len = {}, .shp = {}, .dim = 1, .data = {} }};",
+            target_name, len_name, shp_name, data_name
         ));
     }
 
