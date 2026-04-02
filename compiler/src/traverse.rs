@@ -133,7 +133,9 @@ pub trait Rewrite<'ast> {
         assign.expr = Box::leak(Box::new(new_expr));
     }
 
-    fn rewrite_return(&mut self, _ret: &mut Return<'ast, Self::Ast>) { }
+    fn rewrite_return(&mut self, ret: &mut Return<'ast, Self::Ast>) {
+        ret.id = self.rewrite_id(ret.id.clone());
+    }
 
     ///
     /// Expressions

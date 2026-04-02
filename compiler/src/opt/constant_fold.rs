@@ -1,4 +1,6 @@
-use crate::{Rewrite, ast::*};
+use std::collections::HashMap;
+
+use crate::{ast::*, Rewrite};
 
 pub fn constant_fold<'ast>(mut program: Program<'ast, TypedAst>) -> Program<'ast, TypedAst> {
     let mut cf = ConstantFold::new();
@@ -6,69 +8,25 @@ pub fn constant_fold<'ast>(mut program: Program<'ast, TypedAst>) -> Program<'ast
     program
 }
 
-pub struct ConstantFold;
+pub struct ConstantFold {
+    known: HashMap<*const (), u32>,
+}
 
 impl ConstantFold {
     pub fn new() -> Self {
-        Self
-    }
-
-    fn fold_expr<'ast>(&self, expr: Expr<'ast, TypedAst>, prefix: &[Stmt<'ast, TypedAst>]) -> Expr<'ast, TypedAst> {
-        match expr {
-            Expr::Tensor(mut tensor) => {
-                // Tensor scope has its own sequential body.
-                for i in 0..tensor.body.len() {
-                    let (head, tail) = tensor.body.split_at_mut(i);
-                    let stmt = &mut tail[0];
-                    self.fold_stmt(stmt, head);
-                }
-                Expr::Tensor(tensor)
-            }
-            Expr::Binary(binary) => self.fold_binary(binary, prefix),
-            Expr::Unary(unary) => Expr::Unary(unary),
-            Expr::Id(id) => Expr::Id(id),
-            Expr::Bool(v) => Expr::Bool(v),
-            Expr::U32(v) => Expr::U32(v),
+        Self {
+            known: HashMap::new(),
         }
     }
 
-    fn fold_stmt<'ast>(&self, stmt: &mut Stmt<'ast, TypedAst>, prefix: &[Stmt<'ast, TypedAst>]) {
-        match stmt {
-            Stmt::Assign(assign) => {
-                let folded = self.fold_expr((*assign.expr).clone(), prefix);
-                assign.expr = Box::leak(Box::new(folded));
-            }
-            Stmt::Return(_) => {}
-        }
+    fn ptr<'ast>(lvis: &'ast Lvis<'ast, TypedAst>) -> *const () {
+        lvis as *const _ as *const ()
     }
 
-    fn fold_binary<'ast>(&self, binary: Binary<'ast, TypedAst>, prefix: &[Stmt<'ast, TypedAst>]) -> Expr<'ast, TypedAst> {
-        if matches!(binary.op, Bop::Add) {
-            let l = self.const_u32_of_id(&binary.l, prefix);
-            let r = self.const_u32_of_id(&binary.r, prefix);
-            if let (Some(l), Some(r)) = (l, r) {
-                return Expr::U32(l + r);
-            }
-        }
-        Expr::Binary(binary)
-    }
-
-    fn const_u32_of_id<'ast>(&self, id: &Id<'ast, TypedAst>, prefix: &[Stmt<'ast, TypedAst>]) -> Option<u32> {
+    fn const_u32<'ast>(&self, id: &Id<'ast, TypedAst>) -> Option<u32> {
         match id {
+            Id::Var(lvis) => self.known.get(&Self::ptr(lvis)).copied(),
             Id::Arg(_) => None,
-            Id::Var(target) => {
-                for stmt in prefix.iter().rev() {
-                    if let Stmt::Assign(assign) = stmt {
-                        if std::ptr::eq(assign.lvis, *target) {
-                            return match assign.expr {
-                                Expr::U32(v) => Some(*v),
-                                _ => None,
-                            };
-                        }
-                    }
-                }
-                None
-            }
         }
     }
 }
@@ -77,10 +35,37 @@ impl<'ast> Rewrite<'ast> for ConstantFold {
     type Ast = TypedAst;
 
     fn rewrite_fundef(&mut self, fundef: &mut Fundef<'ast, Self::Ast>) {
-        for i in 0..fundef.body.len() {
-            let (head, tail) = fundef.body.split_at_mut(i);
-            let stmt = &mut tail[0];
-            self.fold_stmt(stmt, head);
+        for stmt in &mut fundef.body {
+            self.rewrite_stmt(stmt);
         }
+    }
+
+    fn rewrite_assign(&mut self, assign: &mut Assign<'ast, Self::Ast>) {
+        let new_expr = self.rewrite_expr((*assign.expr).clone());
+
+        match &new_expr {
+            Expr::U32(v) => { self.known.insert(Self::ptr(assign.lvis), *v); }
+            _ => { self.known.remove(&Self::ptr(assign.lvis)); }
+        }
+
+        assign.expr = Box::leak(Box::new(new_expr));
+    }
+
+    fn rewrite_binary(&mut self, binary: Binary<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
+        if matches!(binary.op, Bop::Add) {
+            if let (Some(l), Some(r)) = (self.const_u32(&binary.l), self.const_u32(&binary.r)) {
+                return Expr::U32(l + r);
+            }
+        }
+
+        Expr::Binary(binary)
+    }
+
+    fn rewrite_tensor(&mut self, mut tensor: Tensor<'ast, Self::Ast>) -> Tensor<'ast, Self::Ast> {
+        for stmt in &mut tensor.body {
+            self.rewrite_stmt(stmt);
+        }
+
+        tensor
     }
 }
