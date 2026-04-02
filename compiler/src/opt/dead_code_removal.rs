@@ -1,18 +1,18 @@
+use std::{collections::HashSet, mem};
+
 use crate::{Rewrite, ast::*};
-use std::collections::HashSet;
-use std::mem;
 
 pub fn dead_code_removal<'ast>(mut program: Program<'ast, TypedAst>) -> Program<'ast, TypedAst> {
-    let mut dcr = DCR::new();
+    let mut dcr = DeadCodeRemoval::new();
     dcr.rewrite_program(&mut program);
     program
 }
 
-struct DCR {
+struct DeadCodeRemoval {
     used: HashSet<*const ()>,
 }
 
-impl DCR {
+impl DeadCodeRemoval {
     fn new() -> Self {
         Self {
             used: HashSet::new(),
@@ -24,15 +24,31 @@ impl DCR {
     }
 }
 
-impl<'ast> Rewrite<'ast> for DCR {
+impl<'ast> Rewrite<'ast> for DeadCodeRemoval {
     type Ast = TypedAst;
 
-    // Visiting an id means it is used — mark it.
-    fn rewrite_id(&mut self, id: Id<'ast, Self::Ast>) -> Id<'ast, Self::Ast> {
-        if let Id::Var(v) = &id {
-            self.used.insert(Self::ptr(v));
+    fn rewrite_fundef(&mut self, fundef: &mut Fundef<'ast, Self::Ast>) {
+        self.used.clear();
+
+        let mut kept_rev = Vec::with_capacity(fundef.body.len());
+        for stmt in mem::take(&mut fundef.body).into_iter().rev() {
+            match stmt {
+                Stmt::Return(mut ret) => {
+                    self.rewrite_return(&mut ret);
+                    kept_rev.push(Stmt::Return(ret));
+                }
+                Stmt::Assign(mut assign) => {
+                    if self.used.contains(&Self::ptr(assign.lvis)) {
+                        self.rewrite_assign(&mut assign);
+                        kept_rev.push(Stmt::Assign(assign));
+                    }
+                }
+            }
         }
-        id
+
+        kept_rev.reverse();
+        fundef.body = kept_rev;
+        fundef.decs.retain(|lvis| self.used.contains(&Self::ptr(lvis)));
     }
 
     // Recurse into binary operands so rewrite_id is called on each.
@@ -46,10 +62,6 @@ impl<'ast> Rewrite<'ast> for DCR {
     fn rewrite_unary(&mut self, unary: Unary<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
         self.rewrite_id(unary.r.clone());
         Expr::Unary(unary)
-    }
-
-    fn rewrite_return(&mut self, ret: &mut Return<'ast, Self::Ast>) {
-        self.rewrite_id(ret.id.clone());
     }
 
     fn rewrite_tensor(&mut self, mut tensor: Tensor<'ast, Self::Ast>) -> Tensor<'ast, Self::Ast> {
@@ -89,27 +101,11 @@ impl<'ast> Rewrite<'ast> for DCR {
         tensor
     }
 
-    fn rewrite_fundef(&mut self, fundef: &mut Fundef<'ast, Self::Ast>) {
-        self.used.clear();
-
-        let mut kept_rev = Vec::with_capacity(fundef.body.len());
-        for stmt in mem::take(&mut fundef.body).into_iter().rev() {
-            match stmt {
-                Stmt::Return(mut ret) => {
-                    self.rewrite_return(&mut ret);
-                    kept_rev.push(Stmt::Return(ret));
-                }
-                Stmt::Assign(mut assign) => {
-                    if self.used.contains(&Self::ptr(assign.lvis)) {
-                        self.rewrite_assign(&mut assign);
-                        kept_rev.push(Stmt::Assign(assign));
-                    }
-                }
-            }
+    // Visiting an id means it is used — mark it.
+    fn rewrite_id(&mut self, id: Id<'ast, Self::Ast>) -> Id<'ast, Self::Ast> {
+        if let Id::Var(v) = &id {
+            self.used.insert(Self::ptr(v));
         }
-
-        kept_rev.reverse();
-        fundef.body = kept_rev;
-        fundef.decs.retain(|lvis| self.used.contains(&Self::ptr(lvis)));
+        id
     }
 }

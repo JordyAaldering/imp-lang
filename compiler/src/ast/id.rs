@@ -1,6 +1,6 @@
 use super::AstConfig;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub enum Id<'ast, Ast: AstConfig> {
     Arg(usize),
     Var(Ast::VarLink<'ast>),
