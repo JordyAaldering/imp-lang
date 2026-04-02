@@ -2,7 +2,7 @@ use std::iter::Peekable;
 
 use crate::ast::{
     Assign, Avis, BaseType, Binary, Bop, Expr, Fundef, Id, MaybeType, Program, Return, Shape,
-    Stmt, Tensor, Type, Uop, Unary, UnflattenedAst,
+    Stmt, Tensor, Type, Uop, Unary, ParseAst,
 };
 
 use super::{
@@ -40,15 +40,42 @@ impl<'src> Parser<'src> {
         format!("_ret_{}", self.uid)
     }
 
-    fn alloc_avis(&self, name: String, ty: MaybeType) -> &'static Avis<UnflattenedAst> {
+    fn alloc_avis(&self, name: String, ty: MaybeType) -> &'static Avis<ParseAst> {
         Box::leak(Box::new(Avis { name, ty }))
     }
 
-    fn alloc_expr(&self, expr: Expr<'static, UnflattenedAst>) -> &'static Expr<'static, UnflattenedAst> {
+    fn alloc_expr(&self, expr: Expr<'static, ParseAst>) -> &'static Expr<'static, ParseAst> {
         Box::leak(Box::new(expr))
     }
 
-    pub fn parse_program(&mut self) -> ParseResult<Program<'static, UnflattenedAst>> {
+    fn matches(&mut self, expected: Token) -> Option<(Token, Span)> {
+        self.lexer.next_if(|(token, _)| *token == expected)
+    }
+
+    fn expect(&mut self, expected: Token) -> ParseResult<(Token, Span)> {
+        let (token, span) = self.next()?;
+        if token == expected {
+            Ok((token, span))
+        } else {
+            Err(ParseError::UnexpectedToken(
+                format!("{:?}", expected),
+                token,
+                span,
+            ))
+        }
+    }
+
+    fn peek(&mut self) -> ParseResult<&(Token, Span)> {
+        self.lexer.peek().ok_or(ParseError::UnexpectedEof)
+    }
+
+    fn next(&mut self) -> ParseResult<(Token, Span)> {
+        self.lexer.next().ok_or(ParseError::UnexpectedEof)
+    }
+}
+
+impl<'src> Parser<'src> {
+    pub fn parse_program(&mut self) -> ParseResult<Program<'static, ParseAst>> {
         let mut fundefs = Vec::new();
 
         while self.lexer.peek().is_some() {
@@ -58,7 +85,7 @@ impl<'src> Parser<'src> {
         Ok(Program { fundefs })
     }
 
-    fn parse_fundef(&mut self) -> ParseResult<Fundef<'static, UnflattenedAst>> {
+    fn parse_fundef(&mut self) -> ParseResult<Fundef<'static, ParseAst>> {
         let (_, _span_start) = self.expect(Token::Fn)?;
 
         let (name, _) = self.parse_id()?;
@@ -103,13 +130,13 @@ impl<'src> Parser<'src> {
         })
     }
 
-    fn parse_farg(&mut self) -> ParseResult<&'static Avis<UnflattenedAst>> {
+    fn parse_farg(&mut self) -> ParseResult<&'static Avis<ParseAst>> {
         let (ty, _) = self.parse_type()?;
         let (id, _) = self.parse_id()?;
         Ok(self.alloc_avis(id, MaybeType(Some(ty))))
     }
 
-    fn parse_stmt(&mut self) -> ParseResult<Vec<Stmt<'static, UnflattenedAst>>> {
+    fn parse_stmt(&mut self) -> ParseResult<Vec<Stmt<'static, ParseAst>>> {
         let (token, span) = self.next()?;
 
         let stmts = match token {
@@ -149,7 +176,7 @@ impl<'src> Parser<'src> {
         Ok(stmts)
     }
 
-    fn parse_expr(&mut self, prev_op: Option<impl Operator>) -> ParseResult<&'static Expr<'static, UnflattenedAst>> {
+    fn parse_expr(&mut self, prev_op: Option<impl Operator>) -> ParseResult<&'static Expr<'static, ParseAst>> {
         if let Some((Token::LBrace, _)) = self.lexer.peek() {
             self.parse_tensor()
         } else {
@@ -157,7 +184,7 @@ impl<'src> Parser<'src> {
         }
     }
 
-    fn parse_tensor(&mut self) -> ParseResult<&'static Expr<'static, UnflattenedAst>> {
+    fn parse_tensor(&mut self) -> ParseResult<&'static Expr<'static, ParseAst>> {
         self.expect(Token::LBrace)?;
 
         let ret = self.parse_expr(None::<Bop>)?;
@@ -186,7 +213,7 @@ impl<'src> Parser<'src> {
         })))
     }
 
-    fn parse_binary(&mut self, prev_op: Option<impl Operator>) -> ParseResult<&'static Expr<'static, UnflattenedAst>> {
+    fn parse_binary(&mut self, prev_op: Option<impl Operator>) -> ParseResult<&'static Expr<'static, ParseAst>> {
         let (token, span_start) = self.next()?;
 
         let mut left = match token {
@@ -231,7 +258,7 @@ impl<'src> Parser<'src> {
         Ok(left)
     }
 
-    fn parse_unary(&mut self, op: Uop) -> ParseResult<&'static Expr<'static, UnflattenedAst>> {
+    fn parse_unary(&mut self, op: Uop) -> ParseResult<&'static Expr<'static, ParseAst>> {
         let r = self.parse_expr(Some(op))?;
         Ok(self.alloc_expr(Expr::Unary(Unary { r, op })))
     }
@@ -281,31 +308,6 @@ impl<'src> Parser<'src> {
             Token::Identifier(id) => Ok((id, span)),
             _ => Err(ParseError::UnexpectedToken("identifier".to_owned(), token, span)),
         }
-    }
-
-    fn matches(&mut self, expected: Token) -> Option<(Token, Span)> {
-        self.lexer.next_if(|(token, _)| *token == expected)
-    }
-
-    fn expect(&mut self, expected: Token) -> ParseResult<(Token, Span)> {
-        let (token, span) = self.next()?;
-        if token == expected {
-            Ok((token, span))
-        } else {
-            Err(ParseError::UnexpectedToken(
-                format!("{:?}", expected),
-                token,
-                span,
-            ))
-        }
-    }
-
-    fn peek(&mut self) -> ParseResult<&(Token, Span)> {
-        self.lexer.peek().ok_or(ParseError::UnexpectedEof)
-    }
-
-    fn next(&mut self) -> ParseResult<(Token, Span)> {
-        self.lexer.next().ok_or(ParseError::UnexpectedEof)
     }
 }
 

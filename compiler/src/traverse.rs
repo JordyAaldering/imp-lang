@@ -41,7 +41,7 @@ pub trait Traverse<'ast> {
         }
     }
 
-    fn trav_ret_type(&mut self, ty: <Self::InAst as AstConfig>::ValueType) -> <Self::OutAst as AstConfig>::ValueType;
+    fn trav_ret_type(&mut self, ty: <Self::InAst as AstConfig>::VarType) -> <Self::OutAst as AstConfig>::VarType;
 
     fn trav_fargs(&mut self, args: Vec<&'ast Avis<Self::InAst>>) -> Vec<&'ast Avis<Self::OutAst>> {
         let mut new_args = Vec::new();

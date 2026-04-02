@@ -6,7 +6,7 @@ pub struct Fundef<'ast, Ast: AstConfig> {
     pub args: Vec<&'ast Avis<Ast>>,
     pub decs: Vec<&'ast Avis<Ast>>,
     pub body: Vec<Stmt<'ast, Ast>>,
-    pub ret_type: Ast::ValueType,
+    pub ret_type: Ast::VarType,
 }
 
 impl<'ast, Ast: AstConfig> Fundef<'ast, Ast> {
@@ -24,7 +24,7 @@ impl<'ast, Ast: AstConfig> Fundef<'ast, Ast> {
         }
     }
 
-    pub fn typof(&self, k: &Id<'ast, Ast>) -> &Ast::ValueType {
+    pub fn typof(&self, k: &Id<'ast, Ast>) -> &Ast::VarType {
         &self
             .avis_of(k)
             .expect("cannot get variable type for this AST configuration")
