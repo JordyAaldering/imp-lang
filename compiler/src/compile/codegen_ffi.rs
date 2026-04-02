@@ -38,12 +38,12 @@ impl<'ast> Visit<'ast> for CompileFfi {
             .join(", ");
 
         res.push_str("unsafe extern \"C\" {\n");
-        res.push_str(&format!("    fn DSL_{}({}) -> {};\n", fundef.name, args, ret_type));
+        res.push_str(&format!("    fn IMP_{}({}) -> {};\n", fundef.name, args, ret_type));
         res.push_str("}\n\n");
 
         // Here we have the opportunity to add checks, dispatch to different implementations, etc.
         res.push_str(&format!("fn {}({}) -> {} {{\n", fundef.name, args, ret_type));
-        res.push_str(&format!("    unsafe {{ DSL_{}({}) }}\n",
+        res.push_str(&format!("    unsafe {{ IMP_{}({}) }}\n",
                                 fundef.name,
                                 fundef.args.iter().map(|avis| avis.name.to_owned())
                             .collect::<Vec<_>>().join(", ")));
