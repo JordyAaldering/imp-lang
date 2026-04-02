@@ -1,6 +1,5 @@
 #![feature(associated_type_defaults)]
 
-mod core;
 mod ast;
 mod traverse;
 pub mod show;
@@ -10,8 +9,6 @@ mod pre;
 mod tc;
 mod opt;
 mod cg;
-
-pub use crate::core::*;
 
 use crate::{ast::*, traverse::*};
 

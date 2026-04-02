@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-imp_lang = { path = "../imp-lang" }
+imp_core = { path = "../imp-core" }
 
 [build-dependencies]
 cc = "1.2.58"
