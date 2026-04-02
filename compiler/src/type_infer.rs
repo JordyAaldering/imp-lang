@@ -79,7 +79,12 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
             args: new_args,
             decs: self.new_ids.clone(),
             body,
+            ret_type: fundef.ret_type.unwrap(),
         }
+    }
+
+    fn trav_ret_type(&mut self, ty: MaybeType) -> Type {
+        ty.unwrap()
     }
 
     fn trav_farg(&mut self, arg: &'ast Avis<Self::InAst>) -> &'ast Avis<Self::OutAst> {

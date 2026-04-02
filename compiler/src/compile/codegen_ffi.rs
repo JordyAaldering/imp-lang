@@ -30,7 +30,7 @@ impl<'ast> Visit<'ast> for CompileFfi {
     fn visit_fundef(&mut self, fundef: &Fundef<'ast, TypedAst>) {
         let mut res = String::new();
 
-        let ret_type = to_rusttype(fundef.typof(fundef.ret_id()));
+        let ret_type = to_rusttype(&fundef.ret_type);
 
         let args = fundef.args.iter()
             .map(|arg| format!("{}: {}", arg.name, to_rusttype(&arg.ty)))
