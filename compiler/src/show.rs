@@ -103,31 +103,31 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
         }
 
         self.indent();
-        <Ast as AstConfig>::visit_operand(self, &tensor.ret);
+        Ast::visit_operand(self, &tensor.ret);
         self.output.push('\n');
 
         self.depth -= 1;
 
         self.push("| ");
-        <Ast as AstConfig>::visit_operand(self, &tensor.lb);
+        Ast::visit_operand(self, &tensor.lb);
         self.output.push_str(" <= ");
         self.output.push_str(&tensor.iv.name);
         self.output.push_str(" < ");
-        <Ast as AstConfig>::visit_operand(self, &tensor.ub);
+        Ast::visit_operand(self, &tensor.ub);
         self.output.push_str(" }");
     }
 
     fn visit_binary(&mut self, binary: &Binary<'ast, Self::Ast>) {
-        <Ast as AstConfig>::visit_operand(self, &binary.l);
+        Ast::visit_operand(self, &binary.l);
         self.output.push(' ');
         self.output.push_str(&binary.op.to_string());
         self.output.push(' ');
-        <Ast as AstConfig>::visit_operand(self, &binary.r);
+        Ast::visit_operand(self, &binary.r);
     }
 
     fn visit_unary(&mut self, unary: &Unary<'ast, Self::Ast>) {
         self.output.push_str(&unary.op.to_string());
-        <Ast as AstConfig>::visit_operand(self, &unary.r);
+        Ast::visit_operand(self, &unary.r);
     }
 
     fn visit_id(&mut self, id: &Id<'ast, Self::Ast>) {
