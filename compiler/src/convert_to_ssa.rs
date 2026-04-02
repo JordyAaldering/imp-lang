@@ -97,16 +97,20 @@ impl<'ast> ConvertToSsa<'ast> {
 
     fn trav_expr(&mut self, expr: parse_ast::Expr) -> Id<'ast, UntypedAst> {
         use parse_ast::Expr::*;
-        let expr = match expr {
-            Tensor { expr, iv, lb, ub } => self.trav_tensor_expr(*expr, iv, *lb, *ub),
-            Binary { l, r, op } => self.trav_binary(*l, *r, op),
-            Unary { r, op } => self.trav_unary(*r, op),
-            Id(id) => Expr::Id(self.trav_id(id)),
-            Bool(v) => self.trav_bool(v),
-            U32(v) => self.trav_u32(v),
-        };
-
-        self.emit_expr(expr)
+        match expr {
+            Id(id) => self.trav_id(id),
+            expr => {
+                let expr = match expr {
+                    Tensor { expr, iv, lb, ub } => self.trav_tensor_expr(*expr, iv, *lb, *ub),
+                    Binary { l, r, op } => self.trav_binary(*l, *r, op),
+                    Unary { r, op } => self.trav_unary(*r, op),
+                    Bool(v) => Expr::Bool(v),
+                    U32(v) => Expr::U32(v),
+                    Id(_) => unreachable!(),
+                };
+                self.emit_expr(expr)
+            }
+        }
     }
 
     fn emit_expr(&mut self, expr: Expr<'ast, UntypedAst>) -> Id<'ast, UntypedAst> {
@@ -165,13 +169,5 @@ impl<'ast> ConvertToSsa<'ast> {
             }
         }
         unreachable!("could not find {id}")
-    }
-
-    fn trav_bool(&mut self, v: bool) -> Expr<'ast, UntypedAst> {
-        Expr::Bool(v)
-    }
-
-    fn trav_u32(&mut self, v: u32) -> Expr<'ast, UntypedAst> {
-        Expr::U32(v)
     }
 }
