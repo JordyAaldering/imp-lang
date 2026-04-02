@@ -101,7 +101,7 @@ impl<'ast> ConvertToSsa<'ast> {
             Id(id) => self.trav_id(id),
             expr => {
                 let expr = match expr {
-                    Tensor { expr, iv, lb, ub } => self.trav_tensor_expr(*expr, iv, *lb, *ub),
+                    Tensor { expr, iv, lb, ub } => self.trav_tensor(*expr, iv, *lb, *ub),
                     Binary { l, r, op } => self.trav_binary(*l, *r, op),
                     Unary { r, op } => self.trav_unary(*r, op),
                     Bool(v) => Expr::Bool(v),
@@ -122,7 +122,7 @@ impl<'ast> ConvertToSsa<'ast> {
         Id::Var(avis)
     }
 
-    fn trav_tensor_expr(&mut self, expr: parse_ast::Expr, iv: String, lb: parse_ast::Expr, ub: parse_ast::Expr) -> Expr<'ast, UntypedAst> {
+    fn trav_tensor(&mut self, expr: parse_ast::Expr, iv: String, lb: parse_ast::Expr, ub: parse_ast::Expr) -> Expr<'ast, UntypedAst> {
         let lb = self.trav_expr(lb);
         let ub = self.trav_expr(ub);
 
