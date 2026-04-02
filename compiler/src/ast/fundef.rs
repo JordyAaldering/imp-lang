@@ -1,12 +1,14 @@
+use crate::ast::Type;
+
 use super::{Id, AstConfig, Avis, LocalDef, ScopeBlock, Stmt};
 
 #[derive(Clone, Debug)]
 pub struct Fundef<'ast, Ast: AstConfig> {
     pub name: String,
+    pub ret_type: Type,
     pub args: Vec<&'ast Avis<Ast>>,
     pub decs: Vec<&'ast Avis<Ast>>,
     pub body: Vec<Stmt<'ast, Ast>>,
-    pub ret_type: Ast::VarType,
 }
 
 impl<'ast, Ast: AstConfig> Fundef<'ast, Ast> {

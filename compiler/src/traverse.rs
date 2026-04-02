@@ -118,7 +118,6 @@ pub trait Traverse<'ast> {
 
     fn trav_fundef(&mut self, fundef: Fundef<'ast, Self::InAst>) -> Fundef<'ast, Self::OutAst> {
         let args = self.trav_fargs(fundef.args);
-        let ret_type = self.trav_ret_type(fundef.ret_type);
 
         let mut decs = Vec::new();
         for vardec in fundef.decs {
@@ -132,14 +131,12 @@ pub trait Traverse<'ast> {
 
         Fundef {
             name: fundef.name,
+            ret_type: fundef.ret_type,
             args,
             decs,
             body,
-            ret_type,
         }
     }
-
-    fn trav_ret_type(&mut self, ty: <Self::InAst as AstConfig>::VarType) -> <Self::OutAst as AstConfig>::VarType;
 
     fn trav_fargs(&mut self, args: Vec<&'ast Avis<Self::InAst>>) -> Vec<&'ast Avis<Self::OutAst>> {
         let mut new_args = Vec::new();
