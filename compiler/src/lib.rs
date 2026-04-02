@@ -2,6 +2,7 @@
 
 pub mod ast;
 pub mod compile;
+pub mod flatten;
 pub mod convert_to_ssa;
 pub mod scanparse;
 pub mod show;
@@ -14,6 +15,7 @@ use crate::ast::*;
 
 pub fn compile(src: &str) -> Program<'static, TypedAst> {
     let ast = scanparse::scanparse(&src).unwrap();
+    let ast = flatten::flatten(ast);
     let ast = convert_to_ssa::convert_to_ssa(ast);
     let ast = type_infer::type_infer(ast).unwrap();
     ast
