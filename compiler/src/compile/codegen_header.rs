@@ -1,11 +1,5 @@
 use crate::{ast::*, traverse::Visit};
 
-/// Rust header generation pass using AstPass traversal.
-///
-/// Emits Rust extern FFI bindings and wrappers for TypedAst functions.
-/// For each DSL function, generates:
-/// - unsafe extern "C" binding to compiled C symbol
-/// - safe Rust wrapper that calls the FFI function
 pub struct CompileHeader {
     output: String,
 }
@@ -25,18 +19,15 @@ impl CompileHeader {
 impl<'ast> Visit<'ast> for CompileHeader {
     type Ast = TypedAst;
 
-    fn visit_program(&mut self, program: Program<'ast, TypedAst>) -> Program<'ast, TypedAst> {
+    fn visit_program(&mut self, program: &Program<'ast, TypedAst>) {
         self.output.clear();
-        let mut fundefs = Vec::with_capacity(program.fundefs.len());
-        for fundef in program.fundefs {
-            let fundef = self.visit_fundef(fundef);
-            fundefs.push(fundef);
-        }
 
-        Program { fundefs }
+        for fundef in &program.fundefs {
+            self.visit_fundef(fundef);
+        }
     }
 
-    fn visit_fundef(&mut self, fundef: Fundef<'ast, TypedAst>) -> Fundef<'ast, TypedAst> {
+    fn visit_fundef(&mut self, fundef: &Fundef<'ast, TypedAst>) {
         let mut res = String::new();
 
         let ret_type = to_rusttype(fundef.typof(fundef.ret_id()));
@@ -59,7 +50,6 @@ impl<'ast> Visit<'ast> for CompileHeader {
         res.push_str("}\n");
 
         self.output.push_str(&res);
-        fundef
     }
 
 }

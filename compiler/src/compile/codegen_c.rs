@@ -2,15 +2,10 @@ use std::{collections::HashSet, mem};
 
 use crate::{ast::*, traverse::Visit};
 
-/// C code generation pass using AstPass traversal.
-///
-/// Emits C99 code for a TypedAst program. Tracks which locals have been emitted
-/// to avoid re-emission. Expression rendering handles tensor loops by temporarily
-/// extending the function scope.
 pub struct CodegenContext {
     emitted: HashSet<*const Avis<TypedAst>>,
     stmts: Vec<String>,
-    pub output: String,
+    output: String,
 }
 
 impl CodegenContext {
@@ -123,27 +118,24 @@ impl CodegenContext {
 impl<'ast> Visit<'ast> for CodegenContext {
     type Ast = TypedAst;
 
-    fn visit_program(&mut self, program: Program<'ast, TypedAst>) -> Program<'ast, TypedAst> {
+    fn visit_program(&mut self, program: &Program<'ast, TypedAst>) {
         self.output.clear();
-        let mut out = String::new();
-        out.push_str("#include <stdlib.h>\n");
-        out.push_str("#include <stdbool.h>\n");
-        out.push_str("#include <stdint.h>\n");
 
-        let mut fundefs = Vec::with_capacity(program.fundefs.len());
-        for fundef in program.fundefs {
-            let fundef = self.visit_fundef(fundef);
-            out.push('\n');
-            fundefs.push(fundef);
+        self.output.push_str("#include <stdlib.h>\n");
+        self.output.push_str("#include <stdbool.h>\n");
+        self.output.push_str("#include <stdint.h>\n");
+
+        for fundef in &program.fundefs {
+            self.visit_fundef(fundef);
+            self.output.push('\n');
         }
-
-        self.output = format!("{}{}", out, self.output);
-        Program { fundefs }
     }
 
-    fn visit_fundef(&mut self, fundef: Fundef<'ast, TypedAst>) -> Fundef<'ast, TypedAst> {
+    fn visit_fundef(&mut self, fundef: &Fundef<'ast, TypedAst>) {
         let mut res = String::new();
+
         self.emitted.clear();
+
         let args: Vec<String> = fundef.args.iter().map(|avis| format!("{} {}", to_ctype(&avis.ty), avis.name)).collect();
         let ret = fundef.ret_id();
         let ret_type = fundef.typof(ret);
@@ -151,9 +143,7 @@ impl<'ast> Visit<'ast> for CodegenContext {
 
         let ret_code = self.expr_for(ret, &fundef, &[]);
 
-        let mut stmts = Vec::new();
-        mem::swap(&mut stmts, &mut self.stmts);
-        for stmt in stmts {
+        for stmt in &self.stmts {
             res.push_str(&format!("    {}\n", stmt));
         }
 
@@ -161,9 +151,7 @@ impl<'ast> Visit<'ast> for CodegenContext {
         res.push_str("}\n");
 
         self.output.push_str(&res);
-        fundef
     }
-
 }
 
 fn to_ctype(ty: &Type) -> String {

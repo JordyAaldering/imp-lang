@@ -20,6 +20,6 @@ fn main() {
 
     println!("=== codegen_c ===");
     let mut codegen = compile::codegen_c::CodegenContext::new();
-    let _ast = codegen.trav_program(ast);
-    print!("{}", codegen.output);
+    codegen.visit_program(&ast);
+    print!("{}", codegen.finish());
 }

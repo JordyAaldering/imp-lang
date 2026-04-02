@@ -8,7 +8,7 @@ pub mod show;
 pub mod traverse;
 pub mod type_infer;
 
-pub use crate::traverse::Traverse;
+pub use crate::traverse::{Traverse, Visit};
 
 use crate::ast::*;
 
@@ -21,12 +21,12 @@ pub fn compile(src: &str) -> Program<'static, TypedAst> {
 
 pub fn emit_header(ast: &mut Program<'static, TypedAst>, outfile: &str) {
     let mut cg = compile::codegen_header::CompileHeader::new();
-    let _ = cg.trav_program(ast.clone());
+    cg.visit_program(&ast);
     std::fs::write(outfile, cg.finish()).unwrap();
 }
 
 pub fn emit_c(ast: &mut Program<'static, TypedAst>, outfile: &str) {
     let mut cg = compile::codegen_c::CodegenContext::new();
-    let _ = cg.trav_program(ast.clone());
+    cg.visit_program(ast);
     std::fs::write(outfile, cg.finish()).unwrap();
 }
