@@ -51,17 +51,6 @@ impl<'ast> Rewrite<'ast> for DeadCodeRemoval {
         fundef.decs.retain(|lvis| self.used.contains(&Self::ptr(lvis)));
     }
 
-    fn rewrite_binary(&mut self, binary: Binary<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
-        self.rewrite_id(binary.l.clone());
-        self.rewrite_id(binary.r.clone());
-        Expr::Binary(binary)
-    }
-
-    fn rewrite_unary(&mut self, unary: Unary<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
-        self.rewrite_id(unary.r.clone());
-        Expr::Unary(unary)
-    }
-
     fn rewrite_tensor(&mut self, mut tensor: Tensor<'ast, Self::Ast>) -> Tensor<'ast, Self::Ast> {
         let outer_used = mem::take(&mut self.used);
 
@@ -95,6 +84,24 @@ impl<'ast> Rewrite<'ast> for DeadCodeRemoval {
         self.rewrite_id(tensor.lb.clone());
         self.rewrite_id(tensor.ub.clone());
         tensor
+    }
+
+    fn rewrite_binary(&mut self, binary: Binary<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
+        self.rewrite_id(binary.l.clone());
+        self.rewrite_id(binary.r.clone());
+        Expr::Binary(binary)
+    }
+
+    fn rewrite_unary(&mut self, unary: Unary<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
+        self.rewrite_id(unary.r.clone());
+        Expr::Unary(unary)
+    }
+
+    fn rewrite_array(&mut self, array: Array<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
+        for value in &array.values {
+            self.rewrite_id(value.clone());
+        }
+        Expr::Array(array)
     }
 
     fn rewrite_id(&mut self, id: Id<'ast, Self::Ast>) -> Id<'ast, Self::Ast> {
