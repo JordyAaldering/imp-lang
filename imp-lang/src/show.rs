@@ -89,13 +89,15 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
     }
 
     fn visit_expr(&mut self, expr: &Expr<'ast, Self::Ast>) {
+        use Expr::*;
         match expr {
-            Expr::Tensor(n) => self.visit_tensor(n),
-            Expr::Binary(n) => self.visit_binary(n),
-            Expr::Unary(n) => self.visit_unary(n),
-            Expr::Id(n) => self.visit_id(n),
-            Expr::Bool(n) => self.visit_bool(n),
-            Expr::U32(n) => self.visit_u32(n),
+            Tensor(n) => self.visit_tensor(n),
+            Binary(n) => self.visit_binary(n),
+            Unary(n) => self.visit_unary(n),
+            Array(n) => self.visit_array(n),
+            Id(n) => self.visit_id(n),
+            Bool(n) => self.visit_bool(n),
+            U32(n) => self.visit_u32(n),
         }
     }
 
@@ -134,6 +136,15 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
     fn visit_unary(&mut self, unary: &Unary<'ast, Self::Ast>) {
         self.output.push_str(&unary.op.to_string());
         Ast::visit_operand(self, &unary.r);
+    }
+
+    fn visit_array(&mut self, array: &Array<'ast, Self::Ast>) {
+        self.output.push('[');
+        for v in &array.values {
+            Ast::visit_operand(self, v);
+            self.output.push_str(", ");
+        }
+        self.output.push(']');
     }
 
     fn visit_id(&mut self, id: &Id<'ast, Self::Ast>) {

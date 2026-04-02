@@ -112,6 +112,10 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
                 let (expr, ty) = self.trav_unary(n);
                 (Unary(expr), ty)
             },
+            Array(n) => {
+                let (expr, ty) = self.trav_array(n);
+                (Array(expr), ty)
+            }
             Id(n) => {
                 let (id, ty) = self.trav_id(n);
                 (Id(id), ty)
@@ -162,6 +166,20 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
     fn trav_unary(&mut self, unary: Unary<'ast, Self::InAst>) -> Self::UnaryOut {
         let (r, r_ty) = self.trav_id(unary.r);
         (Unary { r, op: unary.op }, r_ty)
+    }
+
+    type ArrayOut = (Array<'ast, Self::OutAst>, Type);
+
+    fn trav_array(&mut self, array: Array<'ast, Self::InAst>) -> Self::ArrayOut {
+        let mut values = Vec::with_capacity(array.values.len());
+
+        for value in array.values {
+            let (value, _) = self.trav_id(value);
+            values.push(value);
+        }
+
+        let array = Array { values };
+        (array, Type::vector(BaseType::U32, "."))
     }
 
     ///

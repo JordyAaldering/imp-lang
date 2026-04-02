@@ -60,6 +60,7 @@ pub trait Visit<'ast> {
             Tensor(n) => self.visit_tensor(n),
             Binary(n) => self.visit_binary(n),
             Unary(n) => self.visit_unary(n),
+            Array(n) => self.visit_array(n),
             Id(n) => self.visit_id(n),
             Bool(n) => self.visit_bool(n),
             U32(n) => self.visit_u32(n),
@@ -84,6 +85,12 @@ pub trait Visit<'ast> {
 
     fn visit_unary(&mut self, unary: &Unary<'ast, Self::Ast>) {
         Self::Ast::visit_operand(self, &unary.r);
+    }
+
+    fn visit_array(&mut self, array: &Array<'ast, Self::Ast>) {
+        for value in &array.values {
+            Self::Ast::visit_operand(self, value);
+        }
     }
 
     ///
@@ -148,6 +155,7 @@ pub trait Rewrite<'ast> {
             Tensor(n) => Tensor(self.rewrite_tensor(n)),
             Binary(n) => self.rewrite_binary(n),
             Unary(n) => self.rewrite_unary(n),
+            Array(n) => self.rewrite_array(n),
             Id(n) => Id(self.rewrite_id(n)),
             Bool(v) => Bool(self.rewrite_bool(v)),
             U32(v) => U32(self.rewrite_u32(v)),
@@ -168,6 +176,10 @@ pub trait Rewrite<'ast> {
 
     fn rewrite_unary(&mut self, unary: Unary<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
         Expr::Unary(unary)
+    }
+
+    fn rewrite_array(&mut self, array: Array<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
+        Expr::Array(array)
     }
 
     ///
@@ -282,6 +294,10 @@ pub trait Traverse<'ast> {
     type UnaryOut = Unary<'ast, Self::OutAst>;
 
     fn trav_unary(&mut self, unary: Unary<'ast, Self::InAst>) -> Self::UnaryOut;
+
+    type ArrayOut = Array<'ast, Self::OutAst>;
+
+    fn trav_array(&mut self, array: Array<'ast, Self::InAst>) -> Self::ArrayOut;
 
     ///
     /// Terminals

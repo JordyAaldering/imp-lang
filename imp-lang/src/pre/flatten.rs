@@ -133,22 +133,6 @@ impl<'ast> Flatten<'ast> {
 
     fn trav_expr(&mut self, expr: Expr<'ast, ParsedAst>) -> Id<'ast, FlattenedAst> {
         match expr {
-            Expr::Id(id) => self.trav_id(id),
-            Expr::Bool(v) => self.emit_expr(Expr::Bool(v)),
-            Expr::U32(v) => self.emit_expr(Expr::U32(v)),
-            Expr::Unary(unary) => {
-                let r = self.trav_expr((*unary.r).clone());
-                self.emit_expr(Expr::Unary(Unary { r, op: unary.op }))
-            }
-            Expr::Binary(binary) => {
-                let l = self.trav_expr((*binary.l).clone());
-                let r = self.trav_expr((*binary.r).clone());
-                self.emit_expr(Expr::Binary(Binary {
-                    l,
-                    r,
-                    op: binary.op,
-                }))
-            }
             Expr::Tensor(tensor) => {
                 let lb = self.trav_expr((*tensor.lb).clone());
                 let ub = self.trav_expr((*tensor.ub).clone());
@@ -174,6 +158,29 @@ impl<'ast> Flatten<'ast> {
                     ub,
                 }))
             }
+            Expr::Binary(binary) => {
+                let l = self.trav_expr((*binary.l).clone());
+                let r = self.trav_expr((*binary.r).clone());
+                self.emit_expr(Expr::Binary(Binary {
+                    l,
+                    r,
+                    op: binary.op,
+                }))
+            }
+            Expr::Unary(unary) => {
+                let r = self.trav_expr((*unary.r).clone());
+                self.emit_expr(Expr::Unary(Unary { r, op: unary.op }))
+            }
+            Expr::Array(array) => {
+                let mut values = Vec::with_capacity(array.values.len());
+                for value in array.values {
+                    values.push(self.trav_expr(value.clone()));
+                }
+                self.emit_expr(Expr::Array(Array { values }))
+            }
+            Expr::Id(id) => self.trav_id(id),
+            Expr::Bool(v) => self.emit_expr(Expr::Bool(v)),
+            Expr::U32(v) => self.emit_expr(Expr::U32(v)),
         }
     }
 

@@ -10,6 +10,7 @@ mod expr;
 mod tensor;
 mod binary;
 mod unary;
+mod array;
 // Terminals
 mod id;
 mod typ;
@@ -26,6 +27,7 @@ pub use expr::*;
 pub use tensor::*;
 pub use binary::*;
 pub use unary::*;
+pub use array::*;
 // Terminals
 pub use id::*;
 pub use typ::*;

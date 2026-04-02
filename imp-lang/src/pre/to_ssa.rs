@@ -117,7 +117,6 @@ impl<'ast> ToSsa<'ast> {
 
     fn trav_expr(&mut self, expr: Expr<'ast, FlattenedAst>) -> Id<'ast, UntypedAst> {
         match expr {
-            Expr::Id(id) => self.trav_id(id),
             Expr::Tensor(n) => {
                 let n = self.trav_tensor(n);
                 self.emit_expr(Expr::Tensor(n))
@@ -130,6 +129,11 @@ impl<'ast> ToSsa<'ast> {
                 let n = self.trav_unary(n);
                 self.emit_expr(Expr::Unary(n))
             }
+            Expr::Array(n) => {
+                let n = self.trav_array(n);
+                self.emit_expr(Expr::Array(n))
+            }
+            Expr::Id(id) => self.trav_id(id),
             Expr::Bool(v) => self.emit_expr(Expr::Bool(v)),
             Expr::U32(v) => self.emit_expr(Expr::U32(v)),
         }
@@ -184,6 +188,14 @@ impl<'ast> ToSsa<'ast> {
     fn trav_unary(&mut self, unary: Unary<'ast, FlattenedAst>) -> Unary<'ast, UntypedAst> {
         let r = self.trav_id(unary.r);
         Unary { r, op: unary.op }
+    }
+
+    fn trav_array(&mut self, array: Array<'ast, FlattenedAst>) -> Array<'ast, UntypedAst> {
+        let mut values = Vec::with_capacity(array.values.len());
+        for value in array.values {
+            values.push(self.trav_id(value));
+        }
+        Array { values }
     }
 
     fn trav_id(&mut self, id: Id<'ast, FlattenedAst>) -> Id<'ast, UntypedAst> {
