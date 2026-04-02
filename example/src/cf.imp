@@ -1,0 +1,10 @@
+fn cf() -> u32 {
+    a = 1;
+    b = 2;
+    c = a + b;
+    d = 8;
+    e = 9;
+    f = c + d;
+    g = f + e;
+    return g;
+}
