@@ -1,6 +1,6 @@
 use std::{collections::HashSet, mem};
 
-use crate::{ast::*, traverse::Visit};
+use crate::{ast::*, Visit};
 
 pub struct CompileC {
     emitted: HashSet<*const Avis<TypedAst>>,
@@ -119,11 +119,11 @@ impl<'ast> Visit<'ast> for CompileC {
     type Ast = TypedAst;
 
     fn visit_program(&mut self, program: &Program<'ast, TypedAst>) {
-        self.output.clear();
 
         self.output.push_str("#include <stdlib.h>\n");
         self.output.push_str("#include <stdbool.h>\n");
         self.output.push_str("#include <stdint.h>\n");
+        self.output.push('\n');
 
         for fundef in &program.fundefs {
             self.visit_fundef(fundef);

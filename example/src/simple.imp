@@ -7,3 +7,9 @@ fn makevector(u32 ub) -> u32[ub] {
     res = { 1 + iv + ub | lb <= iv < ub };
     return res;
 }
+
+fn makematrix(u32 cols, u32 rows) -> u32[colsrows] {
+    res = { { iv + jv | 0 <= jv < cols }
+          | 0 <= iv < rows };
+    return res;
+}
