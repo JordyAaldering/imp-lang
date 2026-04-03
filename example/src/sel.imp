@@ -1,5 +1,5 @@
 fn sel() -> u32 {
     arr = [1,2,3,4,5];
-    x = arr[2];
+    x = -arr[--2];
     return x;
 }
