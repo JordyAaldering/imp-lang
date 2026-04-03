@@ -68,9 +68,6 @@ impl<'ast> Rewrite<'ast> for DeadCodeRemoval {
                 }
                 Stmt::Assign(mut assign) => {
                     if self.used.contains(&Self::ptr(assign.lvis)) {
-                        // rewrite_assign (default) calls rewrite_expr, which dispatches
-                        // to our overridden rewrite_binary/rewrite_unary/rewrite_id,
-                        // marking all transitive deps as used.
                         self.rewrite_assign(&mut assign);
                         kept_rev.push(Stmt::Assign(assign));
                     }
@@ -81,27 +78,35 @@ impl<'ast> Rewrite<'ast> for DeadCodeRemoval {
         tensor.body = kept_rev;
 
         self.used = outer_used;
-        self.rewrite_id(tensor.lb.clone());
-        self.rewrite_id(tensor.ub.clone());
+        tensor.lb = self.rewrite_id(tensor.lb);
+        tensor.ub = self.rewrite_id(tensor.ub);
         tensor
     }
 
-    fn rewrite_binary(&mut self, binary: Binary<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
-        self.rewrite_id(binary.l.clone());
-        self.rewrite_id(binary.r.clone());
+    fn rewrite_binary(&mut self, mut binary: Binary<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
+        binary.l = self.rewrite_id(binary.l);
+        binary.r = self.rewrite_id(binary.r);
         Expr::Binary(binary)
     }
 
-    fn rewrite_unary(&mut self, unary: Unary<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
-        self.rewrite_id(unary.r.clone());
+    fn rewrite_unary(&mut self, mut unary: Unary<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
+        unary.r = self.rewrite_id(unary.r);
         Expr::Unary(unary)
     }
 
-    fn rewrite_array(&mut self, array: Array<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
-        for value in &array.values {
-            self.rewrite_id(value.clone());
+    fn rewrite_array(&mut self, mut array: Array<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
+        for value in &mut array.values {
+            *value = self.rewrite_id(value.clone());
         }
         Expr::Array(array)
+    }
+
+    fn rewrite_sel(&mut self, mut sel: Sel<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
+        sel.arr = self.rewrite_id(sel.arr);
+        for i in &mut sel.idx {
+            *i = self.rewrite_id(i.clone());
+        }
+        Expr::Sel(sel)
     }
 
     fn rewrite_id(&mut self, id: Id<'ast, Self::Ast>) -> Id<'ast, Self::Ast> {
