@@ -352,11 +352,14 @@ impl<'ast> Visit<'ast> for CompileC {
                 self.shp_uid += 1;
                 let uid = self.shp_uid;
                 let meta = format!("_shp{uid}_meta");
+                let data = format!("_shp{uid}_data");
                 let wrap = format!("_shp{uid}");
                 self.push_line(&format!("size_t *{meta} = (size_t *)malloc(sizeof(size_t));"));
                 self.push_line(&format!("*{meta} = {arg}.dim;"));
+                self.push_line(&format!("size_t *{data} = (size_t *)malloc({arg}.dim * sizeof(size_t));"));
+                self.push_line(&format!("for (size_t _i = 0; _i < {arg}.dim; _i += 1) {{ {data}[_i] = {arg}.shp[_i]; }}"));
                 self.push_line(&format!(
-                    "ImpArrayRaw {wrap} = (ImpArrayRaw) {{ .len = {arg}.dim, .dim = 1, .shp = {meta}, .data = (void *){arg}.shp }};",
+                    "ImpArrayRaw {wrap} = (ImpArrayRaw) {{ .len = {arg}.dim, .dim = 1, .shp = {meta}, .data = (void *){data} }};",
                 ));
                 self.expr_stack.push(wrap);
             }

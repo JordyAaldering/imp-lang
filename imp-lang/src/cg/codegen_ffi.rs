@@ -90,44 +90,8 @@ impl<'ast> Visit<'ast> for CompileFfi {
     type Ast = TypedAst;
 
     fn visit_program(&mut self, program: &Program<'ast, TypedAst>) {
-        self.push("#[repr(C)]\n");
-        self.push("#[derive(Clone, Copy)]\n");
-        self.push("pub union ImpDynDataU32 {\n");
-        self.push("    pub scalar: u32,\n");
-        self.push("    pub array: imp_core::ImpArrayRaw,\n");
-        self.push("}\n");
-        self.push("#[repr(C)]\n");
-        self.push("#[derive(Clone, Copy)]\n");
-        self.push("pub struct ImpDynU32 {\n");
-        self.push("    pub is_array: bool,\n");
-        self.push("    pub data: ImpDynDataU32,\n");
-        self.push("}\n");
-
-        self.push("#[repr(C)]\n");
-        self.push("#[derive(Clone, Copy)]\n");
-        self.push("pub union ImpDynDataUsize {\n");
-        self.push("    pub scalar: usize,\n");
-        self.push("    pub array: imp_core::ImpArrayRaw,\n");
-        self.push("}\n");
-        self.push("#[repr(C)]\n");
-        self.push("#[derive(Clone, Copy)]\n");
-        self.push("pub struct ImpDynUsize {\n");
-        self.push("    pub is_array: bool,\n");
-        self.push("    pub data: ImpDynDataUsize,\n");
-        self.push("}\n");
-
-        self.push("#[repr(C)]\n");
-        self.push("#[derive(Clone, Copy)]\n");
-        self.push("pub union ImpDynDataBool {\n");
-        self.push("    pub scalar: bool,\n");
-        self.push("    pub array: imp_core::ImpArrayRaw,\n");
-        self.push("}\n");
-        self.push("#[repr(C)]\n");
-        self.push("#[derive(Clone, Copy)]\n");
-        self.push("pub struct ImpDynBool {\n");
-        self.push("    pub is_array: bool,\n");
-        self.push("    pub data: ImpDynDataBool,\n");
-        self.push("}\n");
+        self.push("#[allow(unused_imports)]\n");
+        self.push("use imp_core::*;\n");
 
         for wrapper in program.fundefs.values() {
             for fundef in &wrapper.overloads {
@@ -144,33 +108,47 @@ impl<'ast> Visit<'ast> for CompileFfi {
             if let Some(primary) = wrapper.overloads.first() {
                 self.push("#[allow(dead_code)]\n");
                 self.push(&format!("fn {}(", wrapper.name));
-                self.push(&join_args(&primary.args, rust_api_type));
-                self.push(&format!(") -> {} {{\n", rust_api_type(&primary.ret_type)));
+                self.push(&join_args(&primary.args, rust_api_arg_type));
+                self.push(&format!(") -> {} {{\n", rust_api_ret_type(&primary.ret_type)));
 
                 let mut call_args = Vec::with_capacity(primary.args.len());
                 for arg in &primary.args {
-                    if is_vector(&arg.ty) {
+                    if is_static_array(&arg.ty) {
                         self.push(&format!("    let mut __{}_ffi = {};\n", arg.name, arg.name));
                         self.push(&format!("    let __{}_raw = __{}_ffi.as_raw();\n", arg.name, arg.name));
                         call_args.push(format!("__{}_raw", arg.name));
+                    } else if matches!(arg.ty.shape, ShapePattern::Any) {
+                        self.push(&format!("    let mut __{}_dyn = {};\n", arg.name, arg.name));
+                        self.push(&format!("    let __{}_ffi = match &mut __{}_dyn {{\n", arg.name, arg.name));
+                        self.push("        imp_core::ImpArrayOrScalar::Scalar(v) => imp_core::ImpDyn::from_scalar(*v),\n");
+                        self.push("        imp_core::ImpArrayOrScalar::Array(a) => imp_core::ImpDyn::from_array_raw(a.as_raw()),\n");
+                        self.push("    };\n");
+                        call_args.push(format!("__{}_ffi", arg.name));
                     } else {
                         call_args.push(arg.name.clone());
                     }
                 }
 
-                if is_vector(&primary.ret_type) {
+                if matches!(primary.ret_type.shape, ShapePattern::Any) {
+                    self.push(&format!(
+                        "    let __dyn = unsafe {{ IMP_{}({}) }};\n",
+                        primary.name,
+                        call_args.join(", ")
+                    ));
+                    self.push("    unsafe { __dyn.into_array_or_scalar() }\n");
+                } else if is_static_array(&primary.ret_type) {
                     self.push(&format!(
                         "    let __raw = unsafe {{ IMP_{}({}) }};\n",
                         primary.name,
                         call_args.join(", ")
                     ));
                     self.push(&format!(
-                        "    unsafe {{ imp_core::ImpArray::<{}>::from_raw(__raw) }}\n",
+                        "    imp_core::ImpArrayOrScalar::Array(unsafe {{ imp_core::ImpArray::<{}>::from_raw(__raw) }})\n",
                         rust_base_type(&primary.ret_type)
                     ));
                 } else {
                     self.push(&format!(
-                        "    unsafe {{ IMP_{}({}) }}\n",
+                        "    imp_core::ImpArrayOrScalar::Scalar(unsafe {{ IMP_{}({}) }})\n",
                         primary.name,
                         call_args.join(", ")
                     ));
@@ -182,8 +160,8 @@ impl<'ast> Visit<'ast> for CompileFfi {
     }
 }
 
-fn is_vector(ty: &Type) -> bool {
-    ty.is_vector()
+fn is_static_array(ty: &Type) -> bool {
+    ty.is_array() && !matches!(ty.shape, ShapePattern::Any)
 }
 
 fn join_args(args: &Vec<&Farg>, map_ty: fn(&Type) -> String) -> String {
@@ -195,32 +173,36 @@ fn join_args(args: &Vec<&Farg>, map_ty: fn(&Type) -> String) -> String {
 
 fn rust_api_type(ty: &Type) -> String {
     if matches!(ty.shape, ShapePattern::Any) {
-        return match ty.ty {
-            BaseType::U32 => "ImpDynU32".to_owned(),
-            BaseType::Usize => "ImpDynUsize".to_owned(),
-            BaseType::Bool => "ImpDynBool".to_owned(),
-        };
+        return format!("imp_core::ImpDyn<{}>", rust_base_type(ty));
     }
 
     let base = rust_base_type(ty);
 
-    if ty.is_vector() {
+    if ty.is_array() {
         format!("imp_core::ImpArray<{}>", base)
     } else {
         base.to_owned()
     }
 }
 
+fn rust_api_arg_type(ty: &Type) -> String {
+    if matches!(ty.shape, ShapePattern::Any) {
+        format!("imp_core::ImpArrayOrScalar<{}>", rust_base_type(ty))
+    } else {
+        rust_api_type(ty)
+    }
+}
+
+fn rust_api_ret_type(ty: &Type) -> String {
+    format!("imp_core::ImpArrayOrScalar<{}>", rust_base_type(ty))
+}
+
 fn rust_ffi_type(ty: &Type) -> String {
     if matches!(ty.shape, ShapePattern::Any) {
-        return match ty.ty {
-            BaseType::U32 => "ImpDynU32".to_owned(),
-            BaseType::Usize => "ImpDynUsize".to_owned(),
-            BaseType::Bool => "ImpDynBool".to_owned(),
-        };
+        return format!("imp_core::ImpDyn<{}>", rust_base_type(ty));
     }
 
-    if ty.is_vector() {
+    if ty.is_array() {
         "imp_core::ImpArrayRaw".to_owned()
     } else {
         rust_base_type(ty).to_owned()

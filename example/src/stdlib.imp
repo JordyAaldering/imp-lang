@@ -10,13 +10,39 @@ impl Add for T[d:shp]
     }
 }
 
-fn genarray(usize[n] shp, T[i:ishp] arr) -> T[n:shp,i:ishp] {
-    return { arr | iv < shp };
+// `Add` is a trait defined by the compiler, but one could define their own trait also.
+
+trait Genarray<T>
+{
+    fn genarray(usize[n] shp, T[i:ishp] arr) -> T[n:shp,i:ishp];
 }
 
-fn take(usize[n] shp, T[n:oshp,i:ishp] arr) -> T[n:shp]
-    where T: Default
-{
-    return { arr[iv]                    | iv < min(shp,oshp);
-             genarray(default(T), ishp) | iv < oshp };
+impl Genarray<T = u32[i:ishp]> {
+    fn genarray(usize[n] shp, u32[i:ishp] arr) -> T[n:shp,i:ishp] {
+        return { arr | (0*shp) <= iv < shp };
+    }
 }
+
+// Of course this split is not needed here, but highlights the idea
+
+impl Genarray<T = usize> {
+    fn genarray(usize[n] shp, usize v) -> T[n:shp] {
+        return { v | (0*shp) <= iv < shp };
+    }
+}
+
+// m is needed here because otherwise if i == 0 it overlaps with the above definition
+impl Genarray<T = usize[m,i:ishp]> {
+    fn genarray(usize[n] shp, usize[m,i:ishp] arr) -> T[n:shp,m,i:ishp] {
+        return { arr | (0*shp) <= iv < shp };
+    }
+}
+
+// Partitions are a problem for far in the future
+//
+//fn take(usize[n] shp, T[n:oshp,i:ishp] arr) -> T[n:shp]
+//    where T: Default
+//{
+//    return { arr[iv]                    | iv < min(shp,oshp);
+//             genarray(default(T), ishp) | iv < oshp };
+//}

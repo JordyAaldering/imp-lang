@@ -1,5 +1,13 @@
 use std::{ffi::c_void, slice};
 
+pub enum ImpArrayOrScalar<T>
+where
+    T: Copy,
+{
+    Array(ImpArray<T>),
+    Scalar(T),
+}
+
 pub struct ImpArray<T>
 where
     T: Copy,
@@ -16,6 +24,30 @@ pub struct ImpArrayRaw {
     pub shp: *mut usize,
     pub data: *mut c_void,
 }
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub union ImpDynData<T>
+where
+    T: Copy,
+{
+    pub scalar: T,
+    pub array: ImpArrayRaw,
+}
+
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct ImpDyn<T>
+where
+    T: Copy,
+{
+    pub is_array: bool,
+    pub data: ImpDynData<T>,
+}
+
+pub type ImpDynU32 = ImpDyn<u32>;
+pub type ImpDynUsize = ImpDyn<usize>;
+pub type ImpDynBool = ImpDyn<bool>;
 
 unsafe extern "C" {
     fn free(ptr: *mut c_void);
@@ -61,5 +93,36 @@ where
         };
 
         Self { shp, data }
+    }
+}
+
+impl<T> ImpDyn<T>
+where
+    T: Copy,
+{
+    pub fn from_scalar(value: T) -> Self {
+        Self {
+            is_array: false,
+            data: ImpDynData { scalar: value },
+        }
+    }
+
+    pub fn from_array_raw(raw: ImpArrayRaw) -> Self {
+        Self {
+            is_array: true,
+            data: ImpDynData { array: raw },
+        }
+    }
+
+    /// # Safety
+    ///
+    /// If `is_array` is true, `data.array` must satisfy `ImpArray::<T>::from_raw` safety.
+    pub unsafe fn into_array_or_scalar(self) -> ImpArrayOrScalar<T> {
+        if self.is_array {
+            let raw = unsafe { self.data.array };
+            ImpArrayOrScalar::Array(unsafe { ImpArray::<T>::from_raw(raw) })
+        } else {
+            ImpArrayOrScalar::Scalar(unsafe { self.data.scalar })
+        }
     }
 }

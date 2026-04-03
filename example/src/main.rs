@@ -2,20 +2,39 @@ include!(concat!(env!("OUT_DIR"), "/simple.rs"));
 
 use imp_core::*;
 
-fn main() {
-    println!("shouldbefolded = {}", shouldbefolded());
-    println!("addthem = {}", addthem(4, 2, 3));
-    assert_eq!(shouldbefolded(), addthem(4, 2, 3));
+fn expect_scalar<T: Copy>(value: ImpArrayOrScalar<T>) -> T {
+    match value {
+        ImpArrayOrScalar::Scalar(v) => v,
+        ImpArrayOrScalar::Array(_) => panic!("expected scalar result"),
+    }
+}
 
-    let ub = 10;
-    let arr: ImpArray<usize> = iota(ub);
+fn expect_array<T: Copy>(value: ImpArrayOrScalar<T>) -> ImpArray<T> {
+    match value {
+        ImpArrayOrScalar::Array(v) => v,
+        ImpArrayOrScalar::Scalar(_) => panic!("expected array result"),
+    }
+}
+
+fn main() {
+    let folded = expect_scalar(shouldbefolded());
+    let added = expect_scalar(addthem(4, 2, 3));
+    println!("shouldbefolded = {}", folded);
+    println!("addthem = {}", added);
+    assert_eq!(folded, added);
+
+    let ub: usize = 10;
+    let arr: ImpArray<usize> = expect_array(iota(ub));
     assert_eq!(arr.shp, vec![ub]);
     assert_eq!(arr.data, (0..ub).collect::<Vec<usize>>());
     println!("arr.data = {:?}", arr.data);
 
-    let arr2: ImpArray<u32> = arrays();
+    let shp: ImpArray<usize> = expect_array(shape(arr));
+    println!("shape(arr) = {:?}", shp.data);
+
+    let arr2: ImpArray<u32> = expect_array(arrays());
     assert_eq!(arr2.shp, vec![5]);
     println!("arr2.data = {:?}", arr2.data);
 
-    println!("sel = {}", sel());
+    println!("sel = {}", expect_scalar(sel()));
 }
