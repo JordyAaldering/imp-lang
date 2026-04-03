@@ -56,6 +56,11 @@ impl<'src> Lexer<'src> {
         self.src.chars().nth(self.current)
     }
 
+    /// Get the next character without consuming it.
+    fn peek_next_char(&self) -> Option<char> {
+        self.src.chars().nth(self.current + 1)
+    }
+
     /// Get the next character and consume it.
     fn next_char(&mut self) -> Option<char> {
         if let Some(c) = self.src.chars().nth(self.current) {
@@ -98,6 +103,15 @@ impl<'src> Lexer<'src> {
                 ' ' | '\t' | '\r' => {
                     self.current += 1;
                     self.col += 1;
+                },
+                // Single-line comment
+                '/' if self.peek_next_char() == Some('/') => {
+                    self.current += 2;
+                    self.col += 2;
+                    while self.peek_char() != Some('\n') && self.peek_char().is_some() {
+                        self.current += 1;
+                        self.col += 1;
+                    }
                 },
                 // Newline
                 '\n' => {

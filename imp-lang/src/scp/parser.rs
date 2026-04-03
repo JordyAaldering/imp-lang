@@ -301,21 +301,12 @@ impl<'src> Parser<'src> {
     fn parse_sel(&mut self, arr: &'static Expr<'static, ParsedAst>) -> ParseResult<&'static Expr<'static, ParsedAst>> {
         self.expect(Token::LSquare)?;
 
-        let mut indices = Vec::new();
-
-        if self.matches(Token::RSquare).is_none() {
-            indices.push(self.parse_expr(None::<Bop>)?);
-
-            while self.matches(Token::Comma).is_some() {
-                indices.push(self.parse_expr(None::<Bop>)?);
-            }
-
-            self.expect(Token::RSquare)?;
-        }
+        let idx = self.parse_expr(None::<Bop>)?;
+        self.expect(Token::RSquare)?;
 
         Ok(self.alloc_expr(Expr::Sel(Sel {
             arr,
-            idx: indices,
+            idx,
         })))
     }
 

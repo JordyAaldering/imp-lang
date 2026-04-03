@@ -96,9 +96,7 @@ pub trait Visit<'ast> {
 
     fn visit_sel(&mut self, sel: &Sel<'ast, Self::Ast>) {
         Self::Ast::visit_operand(self, &sel.arr);
-        for idx in &sel.idx {
-            Self::Ast::visit_operand(self, idx);
-        }
+        Self::Ast::visit_operand(self, &sel.idx);
     }
 
     ///
