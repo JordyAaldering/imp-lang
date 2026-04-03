@@ -38,7 +38,7 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
     fn visit_program(&mut self, program: &Program<'ast, Self::Ast>) {
         for fundef in &program.fundefs {
             self.visit_fundef(fundef);
-            self.output.push('\n');
+            self.write("\n");
         }
     }
 
@@ -47,7 +47,9 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
 
         self.write(&format!("fn {}(", fundef.name));
         self.visit_fargs(&fundef.args);
-        self.output.push_str(&format!(") -> {} {{\n", fundef.ret_type));
+        self.write(") -> ");
+        self.visit_type(&fundef.ret_type);
+        self.write(" {\n");
 
         self.depth += 1;
         for id in &fundef.decs {
@@ -64,7 +66,8 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
     }
 
     fn visit_farg(&mut self, arg: &'ast Farg) {
-        self.output.push_str(&format!("{} {}, ", arg.ty, arg.name));
+        self.visit_type(&arg.ty);
+        self.write(&format!(" {}, ", arg.name));
     }
 
     fn visit_stmt(&mut self, stmt: &Stmt<'ast, Self::Ast>) {
@@ -72,13 +75,13 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
             Stmt::Assign(n) => self.visit_assign(n),
             Stmt::Return(n) => self.visit_return(n),
         }
-        self.output.push_str(";\n");
+        self.write(";\n");
     }
 
     fn visit_assign(&mut self, assign: &Assign<'ast, Self::Ast>) {
         self.indent();
         self.write(&assign.lvis.name);
-        self.output.push_str(" = ");
+        self.write(" = ");
         self.visit_expr(assign.expr);
     }
 
@@ -103,7 +106,7 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
     }
 
     fn visit_tensor(&mut self, tensor: &Tensor<'ast, Self::Ast>) {
-        self.output.push_str("{\n");
+        self.write("{\n");
 
         self.depth += 1;
         for stmt in &tensor.body {
@@ -112,68 +115,78 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
 
         self.indent();
         Ast::visit_operand(self, &tensor.ret);
-        self.output.push('\n');
+        self.write("\n");
 
         self.depth -= 1;
 
         self.indent();
         self.write("| ");
         Ast::visit_operand(self, &tensor.lb);
-        self.output.push_str(" <= ");
-        self.output.push_str(&tensor.iv.name);
-        self.output.push_str(" < ");
+        self.write(" <= ");
+        self.write(&tensor.iv.name);
+        self.write(" < ");
         Ast::visit_operand(self, &tensor.ub);
-        self.output.push_str(" }");
+        self.write(" }");
     }
 
     fn visit_binary(&mut self, binary: &Binary<'ast, Self::Ast>) {
         Ast::visit_operand(self, &binary.l);
-        self.output.push(' ');
-        self.output.push_str(&binary.op.to_string());
-        self.output.push(' ');
+        self.write(" ");
+        self.write(&binary.op.to_string());
+        self.write(" ");
         Ast::visit_operand(self, &binary.r);
     }
 
     fn visit_unary(&mut self, unary: &Unary<'ast, Self::Ast>) {
-        self.output.push_str(&unary.op.to_string());
+        self.write(&unary.op.to_string());
         Ast::visit_operand(self, &unary.r);
     }
 
     fn visit_array(&mut self, array: &Array<'ast, Self::Ast>) {
-        self.output.push('[');
+        self.write("[");
         for v in &array.values {
             Ast::visit_operand(self, v);
-            self.output.push_str(", ");
+            self.write(", ");
         }
-        self.output.push(']');
+        self.write("]");
     }
 
     fn visit_sel(&mut self, sel: &Sel<'ast, Self::Ast>) {
         Ast::visit_operand(self, &sel.arr);
-        self.output.push('[');
+        self.write("[");
         for idx in &sel.idx {
             Ast::visit_operand(self, idx);
-            self.output.push(',');
+            self.write(",");
         }
-        self.output.push(']');
+        self.write("]");
     }
 
     fn visit_id(&mut self, id: &Id<'ast, Self::Ast>) {
         match id {
-            Id::Arg(i) => self.output.push_str(&self.args[*i].name),
-            Id::Var(v) => self.output.push_str(&<Ast as AstConfig>::var_name(v)),
+            Id::Arg(i) => self.write(&self.args[*i].name),
+            Id::Var(v) => self.write(&<Ast as AstConfig>::var_name(v)),
         }
     }
 
     fn visit_bool(&mut self, value: &bool) {
-        self.output.push_str(&value.to_string());
+        self.write(&value.to_string());
     }
 
     fn visit_u32(&mut self, value: &u32) {
-        self.output.push_str(&value.to_string());
+        self.write(&value.to_string());
     }
 
     fn visit_type(&mut self, ty: &Type) {
-        self.output.push_str(&ty.to_string());
+        let ty_str = match ty.ty {
+            BaseType::U32 => "u32",
+            BaseType::Bool => "bool",
+        };
+        self.write(ty_str);
+
+        let shp_str = match &ty.shp {
+            Shape::Scalar => "",
+            Shape::Vector(n) => &format!("[{}]", n),
+        };
+        self.write(shp_str);
     }
 }

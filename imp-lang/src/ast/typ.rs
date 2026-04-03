@@ -1,5 +1,3 @@
-use std::fmt;
-
 #[derive(Clone, Debug)]
 pub struct Type {
     pub ty: BaseType,
@@ -25,31 +23,5 @@ impl Type {
 
     pub fn vector(ty: BaseType, extent: &str) -> Self {
         Self { ty, shp: Shape::Vector(extent.to_owned()) }
-    }
-}
-
-impl fmt::Display for Type {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}{}", self.ty, self.shp)
-    }
-}
-
-impl fmt::Display for BaseType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        use BaseType::*;
-        match self {
-            U32 => write!(f, "u32"),
-            Bool => write!(f, "bool"),
-        }
-    }
-}
-
-impl fmt::Display for Shape {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        use Shape::*;
-        match self {
-            Scalar => Ok(()),
-            Vector(n) => write!(f, "[{}]", n),
-        }
     }
 }
