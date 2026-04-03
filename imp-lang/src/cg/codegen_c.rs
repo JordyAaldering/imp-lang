@@ -335,6 +335,43 @@ impl<'ast> Visit<'ast> for CompileC {
         self.expr_stack.push(format!("IMP_{}({})", name, args.join(", ")));
     }
 
+    fn visit_prf_call(&mut self, prf_call: &PrfCall<'ast, TypedAst>) {
+        use Prf::*;
+
+        let args: Vec<String> = prf_call.args.iter()
+            .map(|arg| self.render_expr(&Expr::Id(*arg)))
+            .collect();
+
+        let rendered = match prf_call.id {
+            AddSxS => format!("{} + {}", args[0], args[1]),
+            SubSxS => format!("{} - {}", args[0], args[1]),
+            MulSxS => format!("{} * {}", args[0], args[1]),
+            DivSxS => format!("{} / {}", args[0], args[1]),
+            LtSxS => format!("{} < {}", args[0], args[1]),
+            LeSxS => format!("{} <= {}", args[0], args[1]),
+            GtSxS => format!("{} > {}", args[0], args[1]),
+            GeSxS => format!("{} >= {}", args[0], args[1]),
+            EqSxS => format!("{} == {}", args[0], args[1]),
+            NeSxS => format!("{} != {}", args[0], args[1]),
+            NegS => format!("-{}", args[0]),
+            NotS => format!("!{}", args[0]),
+            SelAxV => {
+                let arr_id = prf_call.args[0];
+                let idx_id = prf_call.args[1];
+                if self.id_is_any(&arr_id) || self.id_is_any(&idx_id) {
+                    panic!("dynamic union values are not yet supported in primitive selection during C codegen");
+                }
+                let arr = self.nameof(&arr_id);
+                let idx = self.nameof(&idx_id);
+                let elem_base = elem_ctype_of_id(&arr_id);
+                let flat_fn = flat_index_fn_of_id(&idx_id);
+                format!("(({elem_base} *){arr}.data)[{flat_fn}({arr}, {idx})]")
+            }
+        };
+
+        self.expr_stack.push(rendered);
+    }
+
     fn visit_id(&mut self, id: &Id<'ast, Self::Ast>) {
         match id {
             Id::Arg(i) => self.expr_stack.push(self.arg_names[*i].clone()),

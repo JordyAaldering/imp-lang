@@ -54,6 +54,7 @@ pub trait Visit<'ast> {
         use Expr::*;
         match expr {
             Call(n) => self.visit_call(n),
+            PrfCall(n) => self.visit_prf_call(n),
             Tensor(n) => self.visit_tensor(n),
             Binary(n) => self.visit_binary(n),
             Unary(n) => self.visit_unary(n),
@@ -68,6 +69,12 @@ pub trait Visit<'ast> {
 
     fn visit_call(&mut self, call: &Call<'ast, Self::Ast>) {
         for arg in &call.args {
+            Self::Ast::visit_operand(self, arg);
+        }
+    }
+
+    fn visit_prf_call(&mut self, prf_call: &PrfCall<'ast, Self::Ast>) {
+        for arg in &prf_call.args {
             Self::Ast::visit_operand(self, arg);
         }
     }
@@ -164,6 +171,7 @@ pub trait Rewrite<'ast> {
         use Expr::*;
         match expr {
             Call(n) => self.rewrite_call(n),
+            PrfCall(n) => self.rewrite_prf_call(n),
             Tensor(n) => self.rewrite_tensor(n),
             Binary(n) => self.rewrite_binary(n),
             Unary(n) => self.rewrite_unary(n),
@@ -176,9 +184,12 @@ pub trait Rewrite<'ast> {
         }
     }
 
-
     fn rewrite_call(&mut self, call: Call<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
         Expr::Call(call)
+    }
+
+    fn rewrite_prf_call(&mut self, prf_call: PrfCall<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
+        Expr::PrfCall(prf_call)
     }
 
     fn rewrite_tensor(&mut self, tensor: Tensor<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
@@ -308,6 +319,10 @@ pub trait Traverse<'ast> {
     type CallOut = Call<'ast, Self::OutAst>;
 
     fn trav_call(&mut self, call: Call<'ast, Self::InAst>) -> Self::CallOut;
+
+    type PrfCallOut = PrfCall<'ast, Self::OutAst>;
+
+    fn trav_prf_call(&mut self, prf_call: PrfCall<'ast, Self::InAst>) -> Self::PrfCallOut;
 
     type TensorOut = Tensor<'ast, Self::OutAst>;
 

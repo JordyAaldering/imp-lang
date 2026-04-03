@@ -30,6 +30,8 @@ pub enum Token {
     // Literals
     U32Value(u32),
     BoolValue(bool),
+    /// `@` is used as a prefix for primitive functions.
+    Prf(String),
     Identifier(String),
     // Error
     Unexpected(char),
@@ -182,6 +184,16 @@ impl<'source> Iterator for Lexer<'source> {
                 // Assignment
                 '=' => Assign,
                 '.' if self.match_char('.') => DotDot,
+                // Primitive function calls
+                '@' => {
+                    while self.peek_char().is_some_and(|c| c.is_ascii_alphanumeric() || c == '_') {
+                        self.current += 1;
+                        self.col += 1;
+                    }
+
+                    let end_idx = self.current;
+                    Prf(self.src[start_idx + 1..end_idx].to_string())
+                },
                 // Literals
                 c if c.is_ascii_digit() => {
                     while self.peek_char().is_some_and(|c| c.is_ascii_digit()) {

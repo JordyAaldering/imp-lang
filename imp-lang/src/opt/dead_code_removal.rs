@@ -58,6 +58,13 @@ impl<'ast> Rewrite<'ast> for DeadCodeRemoval {
         Expr::Call(call)
     }
 
+    fn rewrite_prf_call(&mut self, mut prf_call: PrfCall<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
+        for arg in &mut prf_call.args {
+            *arg = self.rewrite_id(*arg);
+        }
+        Expr::PrfCall(prf_call)
+    }
+
     fn rewrite_tensor(&mut self, mut tensor: Tensor<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
         let outer_used = mem::take(&mut self.used);
 

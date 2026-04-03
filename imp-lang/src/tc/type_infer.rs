@@ -101,6 +101,17 @@ pub enum InferenceError {
         expected: Type,
         provided: Type,
     },
+    PrimitiveArgumentCountMismatch {
+        primitive: Prf,
+        expected: usize,
+        provided: usize,
+    },
+    PrimitiveArgumentKindMismatch {
+        primitive: Prf,
+        arg_index: usize,
+        expected: &'static str,
+        provided: Type,
+    },
 }
 
 impl<'ast> TypeInfer<'ast> {
@@ -406,6 +417,72 @@ impl<'ast> TypeInfer<'ast> {
         }
         Some(axes)
     }
+
+    fn expect_scalar_prf_arg(&mut self, primitive: Prf, arg_index: usize, ty: &Type) {
+        if !ty.is_scalar() {
+            self.errors.push(InferenceError::PrimitiveArgumentKindMismatch {
+                primitive,
+                arg_index,
+                expected: "scalar",
+                provided: ty.clone(),
+            });
+        }
+    }
+
+    fn expect_bool_scalar_prf_arg(&mut self, primitive: Prf, arg_index: usize, ty: &Type) {
+        if !(ty.is_scalar() && ty.ty == BaseType::Bool) {
+            self.errors.push(InferenceError::PrimitiveArgumentKindMismatch {
+                primitive,
+                arg_index,
+                expected: "bool scalar",
+                provided: ty.clone(),
+            });
+        }
+    }
+
+    fn expect_integer_vector_prf_arg(&mut self, primitive: Prf, arg_index: usize, ty: &Type) {
+        let is_vector = matches!(
+            ty.shape,
+            ShapePattern::Axes(ref axes)
+                if axes.len() == 1 && matches!(axes[0], AxisPattern::Dim(_))
+        );
+
+        if !(is_vector && matches!(ty.ty, BaseType::U32 | BaseType::Usize)) {
+            self.errors.push(InferenceError::PrimitiveArgumentKindMismatch {
+                primitive,
+                arg_index,
+                expected: "integer vector",
+                provided: ty.clone(),
+            });
+        }
+    }
+
+    fn expect_array_prf_arg(&mut self, primitive: Prf, arg_index: usize, ty: &Type) {
+        if !ty.is_array() {
+            self.errors.push(InferenceError::PrimitiveArgumentKindMismatch {
+                primitive,
+                arg_index,
+                expected: "array",
+                provided: ty.clone(),
+            });
+        }
+    }
+
+    fn prf_fallback_type(prf: Prf, arg_types: &[Type]) -> Type {
+        match prf {
+            Prf::LtSxS | Prf::LeSxS | Prf::GtSxS | Prf::GeSxS | Prf::EqSxS | Prf::NeSxS | Prf::NotS => {
+                Type::scalar(BaseType::Bool)
+            }
+            Prf::SelAxV => {
+                let base = arg_types.first().map(|ty| ty.ty).unwrap_or(BaseType::U32);
+                Type::scalar(base)
+            }
+            _ => {
+                let base = arg_types.first().map(|ty| ty.ty).unwrap_or(BaseType::U32);
+                Type::scalar(base)
+            }
+        }
+    }
 }
 
 impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
@@ -468,6 +545,10 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
             Call(n) => {
                 let (call, ty) = self.trav_call(n);
                 (Call(call), ty)
+            }
+            PrfCall(n) => {
+                let (prf_call, ty) = self.trav_prf_call(n);
+                (PrfCall(prf_call), ty)
             }
             Tensor(n) => {
                 let (expr, ty) = self.trav_tensor(n);
@@ -562,6 +643,90 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
     }
 
     type TensorOut = (Tensor<'ast, Self::OutAst>, Type);
+
+    type PrfCallOut = (PrfCall<'ast, Self::OutAst>, Type);
+
+    fn trav_prf_call(&mut self, prf_call: PrfCall<'ast, Self::InAst>) -> Self::PrfCallOut {
+        let primitive = prf_call.id;
+        let expected_arity = match primitive {
+            Prf::NegS | Prf::NotS => 1,
+            _ => 2,
+        };
+
+        if prf_call.args.len() != expected_arity {
+            self.errors.push(InferenceError::PrimitiveArgumentCountMismatch {
+                primitive,
+                expected: expected_arity,
+                provided: prf_call.args.len(),
+            });
+        }
+
+        let mut args = Vec::with_capacity(prf_call.args.len());
+        let mut arg_types = Vec::with_capacity(prf_call.args.len());
+        for arg in prf_call.args {
+            let (typed_arg, ty) = self.trav_id(arg);
+            args.push(typed_arg);
+            arg_types.push(ty);
+        }
+
+        match primitive {
+            Prf::AddSxS | Prf::SubSxS | Prf::MulSxS | Prf::DivSxS => {
+                if let Some(lhs) = arg_types.first() {
+                    self.expect_scalar_prf_arg(primitive, 0, lhs);
+                }
+                if let Some(rhs) = arg_types.get(1) {
+                    self.expect_scalar_prf_arg(primitive, 1, rhs);
+                }
+                if let [lhs, rhs, ..] = arg_types.as_slice()
+                    && lhs.ty != rhs.ty {
+                    self.errors.push(InferenceError::PrimitiveArgumentKindMismatch {
+                        primitive,
+                        arg_index: 1,
+                        expected: "same scalar type as lhs",
+                        provided: rhs.clone(),
+                    });
+                }
+            }
+            Prf::LtSxS | Prf::LeSxS | Prf::GtSxS | Prf::GeSxS | Prf::EqSxS | Prf::NeSxS => {
+                if let Some(lhs) = arg_types.first() {
+                    self.expect_scalar_prf_arg(primitive, 0, lhs);
+                }
+                if let Some(rhs) = arg_types.get(1) {
+                    self.expect_scalar_prf_arg(primitive, 1, rhs);
+                }
+                if let [lhs, rhs, ..] = arg_types.as_slice()
+                    && lhs.ty != rhs.ty {
+                    self.errors.push(InferenceError::PrimitiveArgumentKindMismatch {
+                        primitive,
+                        arg_index: 1,
+                        expected: "same scalar type as lhs",
+                        provided: rhs.clone(),
+                    });
+                }
+            }
+            Prf::NegS => {
+                if let Some(arg) = arg_types.first() {
+                    self.expect_scalar_prf_arg(primitive, 0, arg);
+                }
+            }
+            Prf::NotS => {
+                if let Some(arg) = arg_types.first() {
+                    self.expect_bool_scalar_prf_arg(primitive, 0, arg);
+                }
+            }
+            Prf::SelAxV => {
+                if let Some(arr_ty) = arg_types.first() {
+                    self.expect_array_prf_arg(primitive, 0, arr_ty);
+                }
+                if let Some(idx_ty) = arg_types.get(1) {
+                    self.expect_integer_vector_prf_arg(primitive, 1, idx_ty);
+                }
+            }
+        }
+
+        let ty = Self::prf_fallback_type(primitive, &arg_types);
+        (PrfCall { id: primitive, args }, ty)
+    }
 
     fn trav_tensor(&mut self, tensor: Tensor<'ast, Self::InAst>) -> Self::TensorOut {
         // Inspect ub's SSA expression *before* traversal so we can extract named extents.

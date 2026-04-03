@@ -1,10 +1,10 @@
 fn cf() -> u32 {
     a = 1;
     b = 2;
-    c = a + b;
+    c = @addSxS(a, b);
     d = 8;
     e = 9;
-    f = c + d;
-    g = f + e;
+    f = @addSxS(c, d);
+    g = @addSxS(f, e);
     return g;
 }

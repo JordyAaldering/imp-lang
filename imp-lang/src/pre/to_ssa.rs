@@ -128,6 +128,10 @@ impl<'ast> ToSsa<'ast> {
                 let call = self.trav_call(n);
                 self.emit_expr(Expr::Call(call))
             }
+            Expr::PrfCall(n) => {
+                let prf_call = self.trav_prf_call(n);
+                self.emit_expr(Expr::PrfCall(prf_call))
+            }
             Expr::Tensor(n) => {
                 let n = self.trav_tensor(n);
                 self.emit_expr(Expr::Tensor(n))
@@ -171,6 +175,14 @@ impl<'ast> ToSsa<'ast> {
         Call {
             id: call.id,
             args: new_args,
+        }
+    }
+
+    fn trav_prf_call(&mut self, prf_call: PrfCall<'ast, FlattenedAst>) -> PrfCall<'ast, UntypedAst> {
+        let args = prf_call.args.into_iter().map(|arg| self.trav_id(arg)).collect();
+        PrfCall {
+            id: prf_call.id,
+            args,
         }
     }
 

@@ -161,6 +161,10 @@ impl<'ast> Flatten<'ast> {
                 let call = self.trav_call(call);
                 self.emit_expr(Expr::Call(call))
             }
+            Expr::PrfCall(prf_call) => {
+                let prf_call = self.trav_prf_call(prf_call);
+                self.emit_expr(Expr::PrfCall(prf_call))
+            }
             Expr::Tensor(tensor) => {
                 let lb = self.trav_expr((*tensor.lb).clone());
                 let ub = self.trav_expr((*tensor.ub).clone());
@@ -225,6 +229,18 @@ impl<'ast> Flatten<'ast> {
 
         Call {
             id: call.id,
+            args,
+        }
+    }
+
+    fn trav_prf_call(&mut self, prf_call: PrfCall<'ast, ParsedAst>) -> PrfCall<'ast, FlattenedAst> {
+        let mut args = Vec::with_capacity(prf_call.args.len());
+        for arg in prf_call.args {
+            args.push(self.trav_expr(arg.clone()));
+        }
+
+        PrfCall {
+            id: prf_call.id,
             args,
         }
     }

@@ -100,6 +100,7 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
         use Expr::*;
         match expr {
             Call(n) => self.visit_call(n),
+            PrfCall(n) => self.visit_prf_call(n),
             Tensor(n) => self.visit_tensor(n),
             Binary(n) => self.visit_binary(n),
             Unary(n) => self.visit_unary(n),
@@ -120,6 +121,16 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
             self.write(", ");
         }
 
+        self.write(")");
+    }
+
+    fn visit_prf_call(&mut self, prf_call: &PrfCall<'ast, Self::Ast>) {
+        self.write(&prf_call.id.to_string());
+        self.write("(");
+        for arg in &prf_call.args {
+            Self::Ast::visit_operand(self, arg);
+            self.write(", ");
+        }
         self.write(")");
     }
 

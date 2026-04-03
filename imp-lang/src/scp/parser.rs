@@ -18,6 +18,7 @@ pub struct Parser<'src> {
 pub enum ParseError {
     NonAssociative,
     MissingReturn,
+    UnknownPrimitive(String, Span),
     UnexpectedToken(String, Token, Span),
     UnexpectedEof,
 }
@@ -228,6 +229,7 @@ impl<'src> Parser<'src> {
         let (token, span_start) = self.next()?;
 
         let mut left = match token {
+            Token::Prf(id) => self.parse_prf_call(id, span_start)?,
             Token::Identifier(id) => {
                 if let Some((Token::LParen, _)) = self.lexer.peek() {
                     self.parse_call(id)?
@@ -309,6 +311,27 @@ impl<'src> Parser<'src> {
         }
 
         Ok(self.alloc_expr(Expr::Call(Call { id, args })))
+    }
+
+    fn parse_prf_call(&mut self, id: String, at_span: Span) -> ParseResult<&'static Expr<'static, ParsedAst>> {
+        let prf = Prf::try_from(id.as_str())
+            .map_err(|_| ParseError::UnknownPrimitive(id.clone(), at_span))?;
+
+        self.expect(Token::LParen)?;
+
+        let mut args = Vec::new();
+
+        if self.matches(Token::RParen).is_none() {
+            args.push(self.parse_expr(None::<Bop>)?);
+
+            while self.matches(Token::Comma).is_some() {
+                args.push(self.parse_expr(None::<Bop>)?);
+            }
+
+            self.expect(Token::RParen)?;
+        }
+
+        Ok(self.alloc_expr(Expr::PrfCall(PrfCall { id: prf, args })))
     }
 
     fn parse_array(&mut self) -> ParseResult<&'static Expr<'static, ParsedAst>> {

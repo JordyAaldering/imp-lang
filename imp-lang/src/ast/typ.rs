@@ -79,7 +79,6 @@ pub enum SymbolRole {
 }
 
 /// SaC-inspired compile-time knowledge classes for arrays, derived by `tp::analyse_tp`.
-#[allow(clippy::upper_case_acronyms)]
 #[derive(Clone, Debug)]
 pub enum TypeKnowledge {
     /// Rank-0 scalar; not an array.

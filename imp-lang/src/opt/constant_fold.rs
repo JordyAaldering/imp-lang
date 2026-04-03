@@ -60,6 +60,42 @@ impl<'ast> Rewrite<'ast> for ConstantFold {
         Expr::Binary(binary)
     }
 
+    fn rewrite_prf_call(&mut self, prf_call: PrfCall<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
+        let args = prf_call.args;
+        match (prf_call.id, args.as_slice()) {
+            (Prf::AddSxS, [l, r]) => {
+                if let (Some(l), Some(r)) = (self.const_u32(l), self.const_u32(r)) {
+                    Expr::U32(l + r)
+                } else {
+                    Expr::PrfCall(PrfCall { id: Prf::AddSxS, args })
+                }
+            }
+            (Prf::SubSxS, [l, r]) => {
+                if let (Some(l), Some(r)) = (self.const_u32(l), self.const_u32(r)) {
+                    Expr::U32(l - r)
+                } else {
+                    Expr::PrfCall(PrfCall { id: Prf::SubSxS, args })
+                }
+            }
+            (Prf::MulSxS, [l, r]) => {
+                if let (Some(l), Some(r)) = (self.const_u32(l), self.const_u32(r)) {
+                    Expr::U32(l * r)
+                } else {
+                    Expr::PrfCall(PrfCall { id: Prf::MulSxS, args })
+                }
+            }
+            (Prf::DivSxS, [l, r]) => {
+                if let (Some(l), Some(r)) = (self.const_u32(l), self.const_u32(r))
+                    && r != 0 {
+                    Expr::U32(l / r)
+                } else {
+                    Expr::PrfCall(PrfCall { id: Prf::DivSxS, args })
+                }
+            }
+            _ => Expr::PrfCall(PrfCall { id: prf_call.id, args }),
+        }
+    }
+
     fn rewrite_tensor(&mut self, mut tensor: Tensor<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
         for stmt in &mut tensor.body {
             self.rewrite_stmt(stmt);
