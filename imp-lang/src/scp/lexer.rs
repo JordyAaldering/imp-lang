@@ -4,6 +4,7 @@ use super::span::Span;
 pub enum Token {
     // Type names
     U32Type,
+    UsizeType,
     BoolType,
     // Symbols
     Arrow,
@@ -125,6 +126,8 @@ impl<'source> Iterator for Lexer<'source> {
         // Keywords
         let token = if self.match_str("u32") {
             U32Type
+        } else if self.match_str("usize") {
+            UsizeType
         } else if self.match_str("bool") {
             BoolType
         } else if self.match_str("true") {
