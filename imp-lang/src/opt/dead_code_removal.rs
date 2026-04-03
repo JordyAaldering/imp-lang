@@ -51,7 +51,14 @@ impl<'ast> Rewrite<'ast> for DeadCodeRemoval {
         fundef.decs.retain(|lvis| self.used.contains(&Self::ptr(lvis)));
     }
 
-    fn rewrite_tensor(&mut self, mut tensor: Tensor<'ast, Self::Ast>) -> Tensor<'ast, Self::Ast> {
+    fn rewrite_call(&mut self, mut call: Call<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
+        for arg in &mut call.args {
+            *arg = self.rewrite_id(arg.clone());
+        }
+        Expr::Call(call)
+    }
+
+    fn rewrite_tensor(&mut self, mut tensor: Tensor<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
         let outer_used = mem::take(&mut self.used);
 
         self.rewrite_id(Id::Var(tensor.iv));
@@ -80,7 +87,7 @@ impl<'ast> Rewrite<'ast> for DeadCodeRemoval {
         self.used = outer_used;
         tensor.lb = self.rewrite_id(tensor.lb);
         tensor.ub = self.rewrite_id(tensor.ub);
-        tensor
+        Expr::Tensor(tensor)
     }
 
     fn rewrite_binary(&mut self, mut binary: Binary<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {

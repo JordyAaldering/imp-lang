@@ -220,7 +220,13 @@ impl<'src> Parser<'src> {
         let (token, span_start) = self.next()?;
 
         let mut left = match token {
-            Token::Identifier(id) => self.alloc_expr(Expr::Id(Id::Var(id))),
+            Token::Identifier(id) => {
+                if let Some((Token::LParen, _)) = self.lexer.peek() {
+                    self.parse_call(id)?
+                } else {
+                    self.alloc_expr(Expr::Id(Id::Var(id)))
+                }
+            },
             Token::BoolValue(v) => self.alloc_expr(Expr::Bool(v)),
             Token::U32Value(v) => self.alloc_expr(Expr::U32(v)),
             Token::LParen => {
@@ -277,6 +283,24 @@ impl<'src> Parser<'src> {
     fn parse_unary(&mut self, op: Uop) -> ParseResult<&'static Expr<'static, ParsedAst>> {
         let r = self.parse_expr(Some(op))?;
         Ok(self.alloc_expr(Expr::Unary(Unary { r, op })))
+    }
+
+    fn parse_call(&mut self, id: String) -> ParseResult<&'static Expr<'static, ParsedAst>> {
+        self.expect(Token::LParen)?;
+
+        let mut args = Vec::new();
+
+        if self.matches(Token::RParen).is_none() {
+            args.push(self.parse_expr(None::<Bop>)?);
+
+            while self.matches(Token::Comma).is_some() {
+                args.push(self.parse_expr(None::<Bop>)?);
+            }
+
+            self.expect(Token::RParen)?;
+        }
+
+        Ok(self.alloc_expr(Expr::Call(Call { id, args })))
     }
 
     fn parse_array(&mut self) -> ParseResult<&'static Expr<'static, ParsedAst>> {

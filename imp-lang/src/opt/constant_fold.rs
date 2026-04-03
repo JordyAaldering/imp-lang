@@ -57,15 +57,13 @@ impl<'ast> Rewrite<'ast> for ConstantFold {
                 return Expr::U32(l + r);
             }
         }
-
         Expr::Binary(binary)
     }
 
-    fn rewrite_tensor(&mut self, mut tensor: Tensor<'ast, Self::Ast>) -> Tensor<'ast, Self::Ast> {
+    fn rewrite_tensor(&mut self, mut tensor: Tensor<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
         for stmt in &mut tensor.body {
             self.rewrite_stmt(stmt);
         }
-
-        tensor
+        Expr::Tensor(tensor)
     }
 }

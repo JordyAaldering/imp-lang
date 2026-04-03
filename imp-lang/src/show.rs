@@ -97,6 +97,7 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
     fn visit_expr(&mut self, expr: &Expr<'ast, Self::Ast>) {
         use Expr::*;
         match expr {
+            Call(n) => self.visit_call(n),
             Tensor(n) => self.visit_tensor(n),
             Binary(n) => self.visit_binary(n),
             Unary(n) => self.visit_unary(n),
@@ -106,6 +107,19 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
             Bool(n) => self.visit_bool(n),
             U32(n) => self.visit_u32(n),
         }
+    }
+
+    fn visit_call(&mut self, call: &Call<'ast, Self::Ast>) {
+        // TODO: visit dispatch (either string name, or get name from function pointer)
+        self.write("NAMETODO");
+
+        self.write("(");
+        for arg in &call.args {
+            Self::Ast::visit_operand(self, arg);
+            self.write(", ");
+        }
+
+        self.write(")");
     }
 
     fn visit_tensor(&mut self, tensor: &Tensor<'ast, Self::Ast>) {

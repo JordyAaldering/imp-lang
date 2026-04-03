@@ -133,6 +133,10 @@ impl<'ast> Flatten<'ast> {
 
     fn trav_expr(&mut self, expr: Expr<'ast, ParsedAst>) -> Id<'ast, FlattenedAst> {
         match expr {
+            Expr::Call(call) => {
+                let call = self.trav_call(call);
+                self.emit_expr(Expr::Call(call))
+            }
             Expr::Tensor(tensor) => {
                 let lb = self.trav_expr((*tensor.lb).clone());
                 let ub = self.trav_expr((*tensor.ub).clone());
@@ -186,6 +190,18 @@ impl<'ast> Flatten<'ast> {
             Expr::Id(id) => self.trav_id(id),
             Expr::Bool(v) => self.emit_expr(Expr::Bool(v)),
             Expr::U32(v) => self.emit_expr(Expr::U32(v)),
+        }
+    }
+
+    fn trav_call(&mut self, call: Call<'ast, ParsedAst>) -> Call<'ast, FlattenedAst> {
+        let mut args = Vec::with_capacity(call.args.len());
+        for arg in call.args {
+            args.push(self.trav_expr(arg.clone()));
+        }
+
+        Call {
+            id: call.id,
+            args,
         }
     }
 

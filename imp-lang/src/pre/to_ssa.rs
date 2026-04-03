@@ -117,6 +117,10 @@ impl<'ast> ToSsa<'ast> {
 
     fn trav_expr(&mut self, expr: Expr<'ast, FlattenedAst>) -> Id<'ast, UntypedAst> {
         match expr {
+            Expr::Call(n) => {
+                let call = self.trav_call(n);
+                self.emit_expr(Expr::Call(call))
+            }
             Expr::Tensor(n) => {
                 let n = self.trav_tensor(n);
                 self.emit_expr(Expr::Tensor(n))
@@ -153,6 +157,14 @@ impl<'ast> ToSsa<'ast> {
             .expect("missing body")
             .push(Stmt::Assign(Assign { lvis, expr: expr_ref }));
         Id::Var(lvis)
+    }
+
+    fn trav_call(&mut self, call: Call<'ast, FlattenedAst>) -> Call<'ast, UntypedAst> {
+        let new_args = call.args.into_iter().map(|arg| self.trav_id(arg)).collect();
+        Call {
+            id: call.id,
+            args: new_args,
+        }
     }
 
     fn trav_tensor(&mut self, tensor: Tensor<'ast, FlattenedAst>) -> Tensor<'ast, UntypedAst> {

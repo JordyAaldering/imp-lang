@@ -7,6 +7,7 @@ mod assign;
 mod ret;
 // Expressions
 mod expr;
+mod call;
 mod tensor;
 mod binary;
 mod unary;
@@ -25,6 +26,7 @@ pub use assign::*;
 pub use ret::*;
 // Expressions
 pub use expr::*;
+pub use call::*;
 pub use tensor::*;
 pub use binary::*;
 pub use unary::*;
@@ -44,6 +46,8 @@ pub trait AstConfig: Clone + fmt::Debug {
     type VarLink<'ast>: Clone + fmt::Debug;
 
     type SsaLink<'ast>: Clone + fmt::Debug;
+
+    type Dispatch<'ast>: Clone + fmt::Debug;
 
     type Operand<'ast>: Clone + fmt::Debug;
 
@@ -74,6 +78,8 @@ impl AstConfig for ParsedAst {
     type VarLink<'ast> = String;
 
     type SsaLink<'ast> = ();
+
+    type Dispatch<'ast> = String;
 
     type Operand<'ast> = &'ast Expr<'ast, ParsedAst>;
 
@@ -120,6 +126,8 @@ impl AstConfig for FlattenedAst {
 
     type SsaLink<'ast> = ();
 
+    type Dispatch<'ast> = String;
+
     type Operand<'ast> = Id<'ast, FlattenedAst>;
 
     fn var_name<'ast>(link: &Self::VarLink<'ast>) -> String {
@@ -165,6 +173,8 @@ impl AstConfig for UntypedAst {
 
     type SsaLink<'ast> = Option<&'ast Expr<'ast, UntypedAst>>;
 
+    type Dispatch<'ast> = String;
+
     type Operand<'ast> = Id<'ast, UntypedAst>;
 
     fn var_name<'ast>(link: &Self::VarLink<'ast>) -> String {
@@ -209,6 +219,8 @@ impl AstConfig for TypedAst {
     type VarLink<'ast> = &'ast VarInfo<'ast, TypedAst>;
 
     type SsaLink<'ast> = Option<&'ast Expr<'ast, TypedAst>>;
+
+    type Dispatch<'ast> = &'ast Fundef<'ast, TypedAst>;
 
     type Operand<'ast> = Id<'ast, TypedAst>;
 

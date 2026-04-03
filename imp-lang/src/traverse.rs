@@ -57,6 +57,7 @@ pub trait Visit<'ast> {
     fn visit_expr(&mut self, expr: &Expr<'ast, Self::Ast>) {
         use Expr::*;
         match expr {
+            Call(n) => self.visit_call(n),
             Tensor(n) => self.visit_tensor(n),
             Binary(n) => self.visit_binary(n),
             Unary(n) => self.visit_unary(n),
@@ -65,6 +66,12 @@ pub trait Visit<'ast> {
             Id(n) => self.visit_id(n),
             Bool(n) => self.visit_bool(n),
             U32(n) => self.visit_u32(n),
+        }
+    }
+
+    fn visit_call(&mut self, call: &Call<'ast, Self::Ast>) {
+        for arg in &call.args {
+            Self::Ast::visit_operand(self, arg);
         }
     }
 
@@ -165,7 +172,8 @@ pub trait Rewrite<'ast> {
     fn rewrite_expr(&mut self, expr: Expr<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
         use Expr::*;
         match expr {
-            Tensor(n) => Tensor(self.rewrite_tensor(n)),
+            Call(n) => self.rewrite_call(n),
+            Tensor(n) => self.rewrite_tensor(n),
             Binary(n) => self.rewrite_binary(n),
             Unary(n) => self.rewrite_unary(n),
             Array(n) => self.rewrite_array(n),
@@ -177,12 +185,16 @@ pub trait Rewrite<'ast> {
         }
     }
 
-    fn rewrite_tensor(&mut self, tensor: Tensor<'ast, Self::Ast>) -> Tensor<'ast, Self::Ast> {
+    fn rewrite_call(&mut self, call: Call<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
+        Expr::Call(call)
+    }
+
+    fn rewrite_tensor(&mut self, tensor: Tensor<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
         let mut tensor = tensor;
         for stmt in &mut tensor.body {
             self.rewrite_stmt(stmt);
         }
-        tensor
+        Expr::Tensor(tensor)
     }
 
     fn rewrite_binary(&mut self, binary: Binary<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
@@ -301,6 +313,10 @@ pub trait Traverse<'ast> {
     type ExprOut = Expr<'ast, Self::OutAst>;
 
     fn trav_expr(&mut self, expr: Expr<'ast, Self::InAst>) -> Self::ExprOut;
+
+    type CallOut = Call<'ast, Self::OutAst>;
+
+    fn trav_call(&mut self, call: Call<'ast, Self::InAst>) -> Self::CallOut;
 
     type TensorOut = Tensor<'ast, Self::OutAst>;
 

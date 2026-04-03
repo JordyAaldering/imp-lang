@@ -405,6 +405,10 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
     fn trav_expr(&mut self, expr: Expr<'ast, Self::InAst>) -> Self::ExprOut {
         use Expr::*;
         match expr {
+            Call(n) => {
+                let (call, ty) = self.trav_call(n);
+                (Call(call), ty)
+            }
             Tensor(n) => {
                 let (expr, ty) = self.trav_tensor(n);
                 (Tensor(expr), ty)
@@ -438,6 +442,14 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
                 (U32(expr), ty)
             }
         }
+    }
+
+    // Perhaps this additionally needs to return the dispatch.
+    // Or do we look for dispatches in another phase? Perhaps that would be better
+    type CallOut = (Call<'ast, Self::OutAst>, Type);
+
+    fn trav_call(&mut self, call: Call<'ast, Self::InAst>) -> Self::CallOut {
+        todo!()
     }
 
     type TensorOut = (Tensor<'ast, Self::OutAst>, Type);
