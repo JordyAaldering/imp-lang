@@ -182,9 +182,12 @@ impl<'ast> Visit<'ast> for CompileC {
         }
 
         // Build iv as a stack-allocated ImpArrayRaw so that iv[i] selections work.
-        let iv_components: Vec<String> = (0..rank).map(|d| format!("{iv_name}_{d}")).collect();
+        let iv_elem = base_ctype(&tensor.iv.ty);
+        let iv_components: Vec<String> = (0..rank)
+            .map(|d| format!("({iv_elem}){iv_name}_{d}"))
+            .collect();
         self.push_line(&format!(
-            "size_t {iv_name}_data[{rank}] = {{ {} }};",
+            "{iv_elem} {iv_name}_data[{rank}] = {{ {} }};",
             iv_components.join(", ")
         ));
         self.push_line(&format!("size_t {iv_name}_shp_arr[1] = {{ {rank} }};"));
