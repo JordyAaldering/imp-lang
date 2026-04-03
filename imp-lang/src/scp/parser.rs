@@ -403,16 +403,21 @@ impl<'src> Parser<'src> {
     fn parse_axis(&mut self) -> ParseResult<AxisPattern> {
         let (token, span) = self.next()?;
         match token {
-            Token::DotDot => {
-                let (name, _) = self.parse_id()?;
-                // Role will be resolved by tp::analyse_tp.
-                Ok(AxisPattern::Rest(RestPattern { name, role: SymbolRole::Define }))
-            }
             Token::U32Value(n) => Ok(AxisPattern::Dim(DimPattern::Known(n as u64))),
             Token::Identifier(name) => {
                 if name == "_" {
                     Ok(AxisPattern::Dim(DimPattern::Any))
+                } else if self.matches(Token::Colon).is_some() {
+                    // `d:shp` rank-and-shape capture.
+                    // Roles will be resolved by tp::analyse_tp.
+                    let (shp_name, _) = self.parse_id()?;
+                    Ok(AxisPattern::Rank(RankCapture {
+                        dim_name: name,
+                        shp_name,
+                        dim_role: SymbolRole::Define,
+                    }))
                 } else {
+                    // Plain dimension variable.
                     // Role will be resolved by tp::analyse_tp.
                     Ok(AxisPattern::Dim(DimPattern::Var(ExtentVar { name, role: SymbolRole::Define })))
                 }

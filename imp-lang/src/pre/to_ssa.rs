@@ -233,6 +233,9 @@ impl<'ast> ToSsa<'ast> {
             Id::Var(v) => self
                 .lookup_env(&v)
                 .unwrap_or_else(|| panic!("could not resolve id {v}")),
+            Id::Dim(i) => Id::Dim(i),
+            Id::Shp(i) => Id::Shp(i),
+            Id::DimAt(i, k) => Id::DimAt(i, k),
         }
     }
 }

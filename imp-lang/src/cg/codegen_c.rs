@@ -8,6 +8,8 @@ pub struct CompileC {
     expr_stack: Vec<String>,
     lhs_target: Option<(String, Type)>,
     indent: usize,
+    shp_uid: usize,
+    tensor_uid: usize,
 }
 
 impl CompileC {
@@ -20,6 +22,8 @@ impl CompileC {
             expr_stack: Vec::new(),
             lhs_target: None,
             indent: 0,
+            shp_uid: 0,
+            tensor_uid: 0,
         }
     }
 
@@ -42,13 +46,17 @@ impl CompileC {
         match id {
             Id::Arg(i) => self.arg_names[*i].clone(),
             Id::Var(v) => v.name.clone(),
+            Id::Dim(i) => format!("{}.dim", self.arg_names[*i]),
+            Id::DimAt(i, k) => format!("{}.shp[{k}]", self.arg_names[*i]),
+            Id::Shp(_) => panic!("nameof called on Id::Shp — use render_expr instead"),
         }
     }
 
-    fn id_type<'a>(&'a self, id: &'a Id<'_, TypedAst>) -> &'a Type {
+    fn id_is_any(&self, id: &Id<'_, TypedAst>) -> bool {
         match id {
-            Id::Arg(i) => &self.arg_types[*i],
-            Id::Var(v) => &v.ty,
+            Id::Arg(i) => matches!(self.arg_types[*i].shape, ShapePattern::Any),
+            Id::Var(v) => matches!(v.ty.shape, ShapePattern::Any),
+            Id::Dim(_) | Id::Shp(_) | Id::DimAt(_, _) => false,
         }
     }
 }
@@ -161,6 +169,9 @@ impl<'ast> Visit<'ast> for CompileC {
         let rank = tensor.iv.ty.rank()
             .expect("tensor iv must have a statically-known rank for C codegen") as usize;
 
+        self.tensor_uid += 1;
+        let t_uid = self.tensor_uid;
+
         let lb_name = self.nameof(&tensor.lb);
         let ub_name = self.nameof(&tensor.ub);
         // Determine the element type stored inside lb/ub (for correct pointer cast).
@@ -170,10 +181,10 @@ impl<'ast> Visit<'ast> for CompileC {
         // Extract scalar lower/upper bound per dimension.
         for d in 0..rank {
             self.push_line(&format!(
-                "size_t {iv_name}_lb{d} = (size_t)(({lb_elem}*){lb_name}.data)[{d}];"
+                "size_t {iv_name}_lb{d}_{t_uid} = (size_t)(({lb_elem}*){lb_name}.data)[{d}];"
             ));
             self.push_line(&format!(
-                "size_t {iv_name}_ub{d} = (size_t)(({ub_elem}*){ub_name}.data)[{d}];"
+                "size_t {iv_name}_ub{d}_{t_uid} = (size_t)(({ub_elem}*){ub_name}.data)[{d}];"
             ));
         }
 
@@ -182,7 +193,7 @@ impl<'ast> Visit<'ast> for CompileC {
         let data_name = format!("{target_name}_data");
         let shp_name  = format!("{target_name}_shp");
         let extents: Vec<String> = (0..rank)
-            .map(|d| format!("({iv_name}_ub{d} - {iv_name}_lb{d})"))
+            .map(|d| format!("({iv_name}_ub{d}_{t_uid} - {iv_name}_lb{d}_{t_uid})"))
             .collect();
         let total_len = if extents.is_empty() { "1".to_owned() } else { extents.join(" * ") };
         self.push_line(&format!("size_t {len_name} = {total_len};"));
@@ -191,13 +202,13 @@ impl<'ast> Visit<'ast> for CompileC {
         // Heap-allocate the result shape array.
         self.push_line(&format!("size_t *{shp_name} = (size_t *)malloc({rank} * sizeof(size_t));"));
         for d in 0..rank {
-            self.push_line(&format!("{shp_name}[{d}] = {iv_name}_ub{d} - {iv_name}_lb{d};"));
+            self.push_line(&format!("{shp_name}[{d}] = {iv_name}_ub{d}_{t_uid} - {iv_name}_lb{d}_{t_uid};"));
         }
 
         // Generate k nested for-loops.
         for d in 0..rank {
             self.push_line(&format!(
-                "for (size_t {iv_name}_{d} = {iv_name}_lb{d}; {iv_name}_{d} < {iv_name}_ub{d}; {iv_name}_{d} += 1) {{"
+                "for (size_t {iv_name}_{d}_{t_uid} = {iv_name}_lb{d}_{t_uid}; {iv_name}_{d}_{t_uid} < {iv_name}_ub{d}_{t_uid}; {iv_name}_{d}_{t_uid} += 1) {{"
             ));
             self.indent += 1;
         }
@@ -205,24 +216,24 @@ impl<'ast> Visit<'ast> for CompileC {
         // Build iv as a stack-allocated ImpArrayRaw so that iv[i] selections work.
         let iv_elem = base_ctype(&tensor.iv.ty);
         let iv_components: Vec<String> = (0..rank)
-            .map(|d| format!("({iv_elem}){iv_name}_{d}"))
+            .map(|d| format!("({iv_elem}){iv_name}_{d}_{t_uid}"))
             .collect();
         self.push_line(&format!(
-            "{iv_elem} {iv_name}_data[{rank}] = {{ {} }};",
+            "{iv_elem} {iv_name}_data_{t_uid}[{rank}] = {{ {} }};",
             iv_components.join(", ")
         ));
-        self.push_line(&format!("size_t {iv_name}_shp_arr[1] = {{ {rank} }};"));
+        self.push_line(&format!("size_t {iv_name}_shp_arr_{t_uid}[1] = {{ {rank} }};"));
         self.push_line(&format!(
-            "ImpArrayRaw {iv_name} = (ImpArrayRaw) {{ .len = {rank}, .shp = {iv_name}_shp_arr, .dim = 1, .data = (void *){iv_name}_data }};"
+            "ImpArrayRaw {iv_name} = (ImpArrayRaw) {{ .len = {rank}, .shp = {iv_name}_shp_arr_{t_uid}, .dim = 1, .data = (void *){iv_name}_data_{t_uid} }};"
         ));
 
         // Row-major flat index: Σ (iv_d - lb_d) * stride_d
         let flat_terms: Vec<String> = (0..rank).map(|d| {
             let stride: Vec<String> = (d + 1..rank)
-                .map(|j| format!("({iv_name}_ub{j} - {iv_name}_lb{j})"))
+                .map(|j| format!("({iv_name}_ub{j}_{t_uid} - {iv_name}_lb{j}_{t_uid})"))
                 .collect();
             let stride_expr = if stride.is_empty() { "1".to_owned() } else { stride.join(" * ") };
-            format!("({iv_name}_{d} - {iv_name}_lb{d}) * {stride_expr}")
+            format!("({iv_name}_{d}_{t_uid} - {iv_name}_lb{d}_{t_uid}) * {stride_expr}")
         }).collect();
         let flat_expr = if flat_terms.is_empty() { "0".to_owned() } else { flat_terms.join(" + ") };
         self.push_line(&format!("size_t {iv_name}_flat = {flat_expr};"));
@@ -233,7 +244,10 @@ impl<'ast> Visit<'ast> for CompileC {
         }
 
         // Store element into the flat result buffer.
-        let ret = self.render_expr(&Expr::Id(tensor.ret.clone()));
+        let mut ret = self.render_expr(&Expr::Id(tensor.ret.clone()));
+        if rank == 1 && ret == iv_name {
+            ret = format!("(({iv_elem}*){iv_name}.data)[0]");
+        }
         self.push_line(&format!("{data_name}[{iv_name}_flat] = {ret};"));
 
         // Close nested loops.
@@ -248,8 +262,7 @@ impl<'ast> Visit<'ast> for CompileC {
     }
 
     fn visit_binary(&mut self, binary: &Binary<'ast, Self::Ast>) {
-        if matches!(self.id_type(&binary.l).shape, ShapePattern::Any)
-            || matches!(self.id_type(&binary.r).shape, ShapePattern::Any)
+        if self.id_is_any(&binary.l) || self.id_is_any(&binary.r)
         {
             panic!("dynamic union values are not yet supported in binary ops during C codegen");
         }
@@ -259,7 +272,7 @@ impl<'ast> Visit<'ast> for CompileC {
     }
 
     fn visit_unary(&mut self, unary: &Unary<'ast, Self::Ast>) {
-        if matches!(self.id_type(&unary.r).shape, ShapePattern::Any) {
+        if self.id_is_any(&unary.r) {
             panic!("dynamic union values are not yet supported in unary ops during C codegen");
         }
         let r = self.render_expr(&Expr::Id(unary.r.clone()));
@@ -290,8 +303,7 @@ impl<'ast> Visit<'ast> for CompileC {
     }
 
     fn visit_sel(&mut self, sel: &Sel<'ast, Self::Ast>) {
-        if matches!(self.id_type(&sel.arr).shape, ShapePattern::Any)
-            || matches!(self.id_type(&sel.idx).shape, ShapePattern::Any)
+        if self.id_is_any(&sel.arr) || self.id_is_any(&sel.idx)
         {
             panic!("dynamic union values are not yet supported in selection during C codegen");
         }
@@ -308,20 +320,47 @@ impl<'ast> Visit<'ast> for CompileC {
         let arg_types: Vec<Type> = call.args.iter().map(|id| match id {
             Id::Arg(i) => self.arg_types[*i].clone(),
             Id::Var(v) => v.ty.clone(),
+            Id::Dim(_) => Type::scalar(BaseType::Usize),
+            Id::DimAt(_, _) => Type::scalar(BaseType::Usize),
+            Id::Shp(_) => Type {
+                ty: BaseType::Usize,
+                shape: ShapePattern::Axes(vec![AxisPattern::Dim(DimPattern::Any)]),
+                knowledge: TypeKnowledge::AKD,
+            },
         }).collect();
         let name = rename_fundefs::mangle_call_name(&base_name, &arg_types);
         let args: Vec<String> = call.args.iter()
-            .map(|arg| self.nameof(arg))
+            .map(|arg| self.render_expr(&Expr::Id(arg.clone())))
             .collect();
         self.expr_stack.push(format!("IMP_{}({})", name, args.join(", ")));
     }
 
     fn visit_id(&mut self, id: &Id<'ast, Self::Ast>) {
-        let name = match id {
-            Id::Arg(i) => self.arg_names[*i].clone(),
-            Id::Var(lvis) => lvis.name.clone(),
-        };
-        self.expr_stack.push(name);
+        match id {
+            Id::Arg(i) => self.expr_stack.push(self.arg_names[*i].clone()),
+            Id::Var(lvis) => self.expr_stack.push(lvis.name.clone()),
+            Id::Dim(i) => {
+                let name = format!("{}.dim", self.arg_names[*i]);
+                self.expr_stack.push(name);
+            }
+            Id::DimAt(i, k) => {
+                let name = format!("{}.shp[{k}]", self.arg_names[*i]);
+                self.expr_stack.push(name);
+            }
+            Id::Shp(i) => {
+                let arg = self.arg_names[*i].clone();
+                self.shp_uid += 1;
+                let uid = self.shp_uid;
+                let meta = format!("_shp{uid}_meta");
+                let wrap = format!("_shp{uid}");
+                self.push_line(&format!("size_t *{meta} = (size_t *)malloc(sizeof(size_t));"));
+                self.push_line(&format!("*{meta} = {arg}.dim;"));
+                self.push_line(&format!(
+                    "ImpArrayRaw {wrap} = (ImpArrayRaw) {{ .len = {arg}.dim, .dim = 1, .shp = {meta}, .data = (void *){arg}.shp }};",
+                ));
+                self.expr_stack.push(wrap);
+            }
+        }
     }
 
     fn visit_bool(&mut self, v: &bool) {
@@ -362,6 +401,7 @@ fn elem_ctype_of_id(id: &Id<'_, TypedAst>) -> &'static str {
     match id {
         Id::Var(v) => base_ctype(&v.ty),
         Id::Arg(_) => "uint32_t",  // args used directly as array bounds are uncommon
+        Id::Dim(_) | Id::Shp(_) | Id::DimAt(_, _) => "size_t",
     }
 }
 
@@ -377,5 +417,6 @@ fn id_base_type(id: &Id<'_, TypedAst>) -> BaseType {
     match id {
         Id::Var(v) => v.ty.ty,
         Id::Arg(_) => BaseType::U32,
+        Id::Dim(_) | Id::Shp(_) | Id::DimAt(_, _) => BaseType::Usize,
     }
 }

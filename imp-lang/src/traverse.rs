@@ -71,6 +71,7 @@ pub trait Visit<'ast> {
         }
     }
 
+
     fn visit_call(&mut self, call: &Call<'ast, Self::Ast>) {
         for arg in &call.args {
             Self::Ast::visit_operand(self, arg);
@@ -188,6 +189,7 @@ pub trait Rewrite<'ast> {
             U32(v) => U32(self.rewrite_u32(v)),
         }
     }
+
 
     fn rewrite_call(&mut self, call: Call<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
         Expr::Call(call)

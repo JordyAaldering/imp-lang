@@ -96,6 +96,24 @@ impl<'ast> Flatten<'ast> {
         }
         self.body_stack.push(Vec::new());
 
+        // Bind `d` and `shp` from `d:shp` rank captures directly in the env.
+        // Also bind dimension variables from regular Dim type patterns (e.g. `usize[d]`).
+        // No assignment stmts are injected — these are pure projections of the farg resolved at codegen.
+        for (i, arg) in args.iter().enumerate() {
+            if let ShapePattern::Axes(axes) = &arg.ty.shape {
+                for (k, axis) in axes.iter().enumerate() {
+                    if let AxisPattern::Rank(capture) = axis {
+                        self.bind_env(capture.dim_name.clone(), Id::Dim(i));
+                        self.bind_env(capture.shp_name.clone(), Id::Shp(i));
+                    } else if let AxisPattern::Dim(DimPattern::Var(var)) = axis {
+                        if var.role == SymbolRole::Define {
+                            self.bind_env(var.name.clone(), Id::DimAt(i, k));
+                        }
+                    }
+                }
+            }
+        }
+
         for stmt in fundef.body {
             self.trav_stmt(stmt);
         }
@@ -216,6 +234,9 @@ impl<'ast> Flatten<'ast> {
         match id {
             Id::Arg(i) => Id::Arg(i),
             Id::Var(name) => self.lookup_env(&name).unwrap_or(Id::Var(name)),
+            Id::Dim(i) => Id::Dim(i),
+            Id::Shp(i) => Id::Shp(i),
+            Id::DimAt(i, k) => Id::DimAt(i, k),
         }
     }
 }

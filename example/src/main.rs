@@ -8,9 +8,9 @@ fn main() {
     assert_eq!(shouldbefolded(), addthem(4, 2, 3));
 
     let ub = 10;
-    let arr: ImpArray<u32> = iota(ub);
-    assert_eq!(arr.shp, vec![ub as usize]);
-    assert_eq!(arr.data, (0..ub).collect::<Vec<u32>>());
+    let arr: ImpArray<usize> = iota(ub);
+    assert_eq!(arr.shp, vec![ub]);
+    assert_eq!(arr.data, (0..ub).collect::<Vec<usize>>());
     println!("arr.data = {:?}", arr.data);
 
     let arr2: ImpArray<u32> = arrays();

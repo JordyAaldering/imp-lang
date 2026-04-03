@@ -35,8 +35,8 @@ pub enum ShapePattern {
 pub enum AxisPattern {
     /// A single dimension (`_`, `42`, or a named symbol).
     Dim(DimPattern),
-    /// Variable-length capture of remaining dimensions (`..rest`).
-    Rest(RestPattern),
+    /// Rank-and-shape capture (`d:shp`): binds the full rank and shape of the array.
+    Rank(RankCapture),
 }
 
 /// A single dimension pattern entry.
@@ -57,11 +57,16 @@ pub struct ExtentVar {
     pub role: SymbolRole,
 }
 
-/// A `..rest` capture with its binding role.
+/// A `d:shp` rank capture — binds the rank scalar (`d`) and the shape vector (`shp`) from
+/// the runtime array descriptor, without constraining the rank at compile time.
 #[derive(Clone, Debug)]
-pub struct RestPattern {
-    pub name: String,
-    pub role: SymbolRole,
+pub struct RankCapture {
+    /// Name bound to the array's rank (`arr.dim`) as a `usize` scalar.
+    pub dim_name: String,
+    /// Name bound to the array's shape vector (`arr.shp`) as a `usize[d]` array.
+    pub shp_name: String,
+    /// Whether `dim_name` is being introduced (Define) or must equal a prior symbol (Use).
+    pub dim_role: SymbolRole,
 }
 
 /// Whether a symbol is first introduced here or constrained to equal a prior definition.
@@ -124,12 +129,12 @@ impl Type {
         !self.is_scalar()
     }
 
-    /// Returns the exact rank if statically known, `None` when a `..rest` or `Any` is present.
+    /// Returns the exact rank if statically known, `None` when a `d:shp` capture or `Any` is present.
     pub fn rank(&self) -> Option<u8> {
         match &self.shape {
             ShapePattern::Scalar => Some(0),
             ShapePattern::Axes(axes) => {
-                if axes.iter().any(|a| matches!(a, AxisPattern::Rest(_))) {
+                if axes.iter().any(|a| matches!(a, AxisPattern::Rank(_))) {
                     None
                 } else {
                     Some(axes.len() as u8)

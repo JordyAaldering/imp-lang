@@ -58,8 +58,10 @@ fn resolve_shape_roles(shape: &mut ShapePattern, defined: &mut HashSet<String>) 
             AxisPattern::Dim(DimPattern::Var(var)) => {
                 var.role = resolve_role(&var.name, defined);
             }
-            AxisPattern::Rest(rest) => {
-                rest.role = resolve_role(&rest.name, defined);
+            AxisPattern::Rank(capture) => {
+                capture.dim_role = resolve_role(&capture.dim_name, defined);
+                // shp_name is always a fresh binding introduced by this pattern.
+                defined.insert(capture.shp_name.clone());
             }
             _ => {}
         }
@@ -81,7 +83,7 @@ fn knowledge_from_shape(shape: &ShapePattern) -> TypeKnowledge {
         ShapePattern::Scalar => TypeKnowledge::Scalar,
         ShapePattern::Any => TypeKnowledge::AUD,
         ShapePattern::Axes(axes) => {
-            let has_rest = axes.iter().any(|a| matches!(a, AxisPattern::Rest(_)));
+            let has_rest = axes.iter().any(|a| matches!(a, AxisPattern::Rank(_)));
             if has_rest {
                 let min_rank = axes.iter()
                     .filter(|a| matches!(a, AxisPattern::Dim(_)))

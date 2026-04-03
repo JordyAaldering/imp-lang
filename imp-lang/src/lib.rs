@@ -1,9 +1,9 @@
 #![feature(associated_type_defaults)]
 
 mod ast;
+mod phase;
 mod traverse;
-pub mod show;
-use std::path::Path;
+mod show;
 // Compiler phases
 mod scp;
 mod tp;
@@ -11,6 +11,8 @@ mod pre;
 mod tc;
 mod opt;
 mod cg;
+
+use std::path::Path;
 
 use crate::{ast::*, traverse::*};
 

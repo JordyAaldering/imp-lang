@@ -1,4 +1,4 @@
-use std::ffi::c_void;
+use std::{ffi::c_void, slice};
 
 pub struct ImpArray<T>
 where
@@ -38,22 +38,18 @@ where
         let shp = if raw.shp.is_null() {
             Vec::new()
         } else {
-            unsafe { std::slice::from_raw_parts(raw.shp, raw.dim).to_vec() }
+            let shp = unsafe { slice::from_raw_parts(raw.shp, raw.dim) }.to_vec();
+            unsafe { free(raw.shp as *mut c_void) };
+            shp
         };
 
         let data = if raw.data.is_null() {
             Vec::new()
         } else {
-            unsafe { std::slice::from_raw_parts(raw.data as *const T, raw.len).to_vec() }
-        };
-
-        if !raw.shp.is_null() {
-            unsafe { free(raw.shp as *mut c_void) };
-        }
-
-        if !raw.data.is_null() {
+            let data = unsafe { slice::from_raw_parts(raw.data as *const T, raw.len) }.to_vec();
             unsafe { free(raw.data) };
-        }
+            data
+        };
 
         Self { shp, data }
     }

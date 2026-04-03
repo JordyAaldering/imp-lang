@@ -131,7 +131,7 @@ impl<'ast> TypeInfer<'ast> {
             ShapePattern::Scalar => TypeKnowledge::Scalar,
             ShapePattern::Any => TypeKnowledge::AUD,
             ShapePattern::Axes(axes) => {
-                let has_rest = axes.iter().any(|a| matches!(a, AxisPattern::Rest(_)));
+                let has_rest = axes.iter().any(|a| matches!(a, AxisPattern::Rank(_)));
                 if has_rest {
                     let min_rank = axes.iter().filter(|a| matches!(a, AxisPattern::Dim(_))).count() as u8;
                     TypeKnowledge::AUDGN { min_rank }
@@ -178,7 +178,7 @@ impl<'ast> TypeInfer<'ast> {
                     });
                 }
 
-                let has_rest = axes.iter().any(|a| matches!(a, AxisPattern::Rest(_)));
+                let has_rest = axes.iter().any(|a| matches!(a, AxisPattern::Rank(_)));
                 if !has_rest {
                     let rem: Vec<AxisPattern> = axes.iter().skip(idx_count).cloned().collect();
                     if rem.is_empty() {
@@ -187,13 +187,13 @@ impl<'ast> TypeInfer<'ast> {
                         Ok(ShapePattern::Axes(rem))
                     }
                 } else {
-                    let rest_pos = axes.iter().position(|a| matches!(a, AxisPattern::Rest(_))).unwrap();
+                    let rest_pos = axes.iter().position(|a| matches!(a, AxisPattern::Rank(_))).unwrap();
                     if idx_count < rest_pos {
                         Ok(ShapePattern::Axes(axes.iter().skip(idx_count).cloned().collect()))
                     } else if idx_count == rest_pos {
                         Ok(ShapePattern::Axes(axes.iter().skip(rest_pos).cloned().collect()))
                     } else {
-                        // Crossing into `..rest` loses exact residual shape information.
+                        // Crossing into `d:shp` loses exact residual shape information.
                         Ok(ShapePattern::Any)
                     }
                 }
@@ -234,11 +234,8 @@ impl<'ast> TypeInfer<'ast> {
                 new_axes.extend_from_slice(axes);
                 ShapePattern::Axes(new_axes)
             }
-            // Element shape is fully unknown; can only say rank >= 1.
-            ShapePattern::Any => ShapePattern::Axes(vec![leading, AxisPattern::Rest(RestPattern {
-                name: "_rest".to_owned(),
-                role: SymbolRole::Define,
-            })]),
+            // Element shape is fully unknown; result shape is also fully unknown.
+            ShapePattern::Any => ShapePattern::Any,
         };
 
         let knowledge = Self::shape_knowledge(&result_shape);
@@ -351,13 +348,8 @@ impl<'ast> TypeInfer<'ast> {
                 ShapePattern::Axes(new_axes)
             }
             ShapePattern::Any => {
-                // Element shape fully unknown; record leading dims and capture the rest.
-                let mut axes = leading_axes;
-                axes.push(AxisPattern::Rest(RestPattern {
-                    name: "_rest".to_owned(),
-                    role: SymbolRole::Define,
-                }));
-                ShapePattern::Axes(axes)
+                // Element shape fully unknown; result shape is also fully unknown.
+                ShapePattern::Any
             }
         };
         let knowledge = Self::shape_knowledge(&result_shape);
@@ -374,6 +366,8 @@ impl<'ast> TypeInfer<'ast> {
         let lvis = match ub {
             Id::Var(v) => v,
             Id::Arg(_) => return None,
+            Id::Dim(_) | Id::Shp(_) => return None,
+            Id::DimAt(_, _) => return None,
         };
 
         let arr = match lvis.ssa? {
@@ -386,6 +380,15 @@ impl<'ast> TypeInfer<'ast> {
             let dp = match elem {
                 Id::Arg(i) => DimPattern::Var(ExtentVar {
                     name: self.args[*i].name.clone(),
+                    role: SymbolRole::Use,
+                }),
+                Id::Dim(i) => DimPattern::Var(ExtentVar {
+                    name: format!("{}.dim", self.args[*i].name),
+                    role: SymbolRole::Use,
+                }),
+                Id::Shp(_) => DimPattern::Any,
+                Id::DimAt(i, k) => DimPattern::Var(ExtentVar {
+                    name: format!("{}.shp[{k}]", self.args[*i].name),
                     role: SymbolRole::Use,
                 }),
                 Id::Var(v) => {
@@ -689,6 +692,21 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
                 let ty = new_id.ty.clone();
                 (Id::Var(*new_id), ty)
             },
+            Id::Dim(i) => {
+                (Id::Dim(i), Type::scalar(BaseType::Usize))
+            }
+            Id::Shp(i) => {
+                let dim_name = match &self.args[i].ty.shape {
+                    ShapePattern::Axes(axes) => axes.iter().find_map(|a| {
+                        if let AxisPattern::Rank(cap) = a { Some(cap.dim_name.clone()) } else { None }
+                    }),
+                    _ => None,
+                }.expect("Shp(i) must come from an arg with a RankCapture");
+                (Id::Shp(i), Type::vector(BaseType::Usize, &dim_name))
+            }
+            Id::DimAt(i, k) => {
+                (Id::DimAt(i, k), Type::scalar(BaseType::Usize))
+            }
         }
     }
 
@@ -719,6 +737,14 @@ fn types_compatible(expected: &Type, provided: &Type) -> bool {
 /// Check if two shape patterns are compatible.
 /// For now, we use structural equality; later this could support variance.
 fn shapes_compatible(expected: &ShapePattern, provided: &ShapePattern) -> bool {
+    // A `d:shp` rank capture is AUD-compatible with any shape on either side.
+    let has_rank = |axes: &[AxisPattern]| axes.iter().any(|a| matches!(a, AxisPattern::Rank(_)));
+    if let ShapePattern::Axes(exp_axes) = expected {
+        if has_rank(exp_axes) { return true; }
+    }
+    if let ShapePattern::Axes(prov_axes) = provided {
+        if has_rank(prov_axes) { return true; }
+    }
     match (expected, provided) {
         (ShapePattern::Scalar, ShapePattern::Scalar) => true,
         (ShapePattern::Any, _) | (_, ShapePattern::Any) => true,
@@ -740,7 +766,7 @@ fn shapes_compatible(expected: &ShapePattern, provided: &ShapePattern) -> bool {
 fn axes_compatible(expected: &AxisPattern, provided: &AxisPattern) -> bool {
     match (expected, provided) {
         (AxisPattern::Dim(exp_d), AxisPattern::Dim(prov_d)) => dims_compatible(exp_d, prov_d),
-        (AxisPattern::Rest(exp_r), AxisPattern::Rest(prov_r)) => exp_r.name == prov_r.name,
+        (AxisPattern::Rank(_), AxisPattern::Rank(_)) => true,
         _ => false,
     }
 }

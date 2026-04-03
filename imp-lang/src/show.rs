@@ -180,6 +180,9 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
         match id {
             Id::Arg(i) => self.write(&self.args[*i].name),
             Id::Var(v) => self.write(&<Ast as AstConfig>::var_name(v)),
+            Id::Dim(i) => self.write(&format!("{}.dim", self.args[*i].name)),
+            Id::Shp(i) => self.write(&format!("{}.shp", self.args[*i].name)),
+            Id::DimAt(i, k) => self.write(&format!("{}.shp[{k}]", self.args[*i].name)),
         }
     }
 
@@ -209,9 +212,10 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
                         AxisPattern::Dim(DimPattern::Any) => self.write("_"),
                         AxisPattern::Dim(DimPattern::Known(n)) => self.write(&n.to_string()),
                         AxisPattern::Dim(DimPattern::Var(var)) => self.write(&var.name),
-                        AxisPattern::Rest(rest) => {
-                            self.write("..");
-                            self.write(&rest.name);
+                        AxisPattern::Rank(capture) => {
+                            self.write(&capture.dim_name);
+                            self.write(":");
+                            self.write(&capture.shp_name);
                         }
                     }
                     self.write(",")

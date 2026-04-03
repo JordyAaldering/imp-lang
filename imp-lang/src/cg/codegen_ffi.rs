@@ -1,5 +1,24 @@
 use crate::{ast::*, traverse::Visit};
 
+/// With function overloading, we have a few cases.
+///
+/// 1) The types are the same, but the type patterns differ.
+///
+/// ```
+/// fn iota(usize n) -> usize[n] {
+///     return { iv[[0]] | [0] <= iv < [n] };
+/// }
+///
+/// fn iota(usize[d] shp) -> usize[d:shp,d] {
+///     return { iv | (0*shp) <= iv < shp };
+/// }
+/// ```
+///
+/// For this, the C looks somewhat like:
+///
+/// ```
+///
+/// ```
 pub struct CompileFfi {
     output: String,
 }
