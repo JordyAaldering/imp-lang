@@ -2,6 +2,7 @@
 #[derive(Clone, Copy, Debug)]
 pub enum BaseType {
     U32,
+    Usize,
     Bool,
 }
 

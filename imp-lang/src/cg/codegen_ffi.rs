@@ -106,6 +106,7 @@ fn rust_ffi_type(ty: &Type) -> String {
 fn rust_base_type(ty: &Type) -> &'static str {
     match ty.ty {
         BaseType::U32 => "u32",
+        BaseType::Usize => "usize",
         BaseType::Bool => "bool",
     }
 }

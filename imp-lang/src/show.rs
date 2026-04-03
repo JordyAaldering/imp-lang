@@ -179,6 +179,7 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
     fn visit_type(&mut self, ty: &Type) {
         let ty_str = match ty.ty {
             BaseType::U32 => "u32",
+            BaseType::Usize => "usize",
             BaseType::Bool => "bool",
         };
         self.write(ty_str);

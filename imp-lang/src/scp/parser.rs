@@ -337,6 +337,7 @@ impl<'src> Parser<'src> {
         let (token, span) = self.next()?;
         let base = match token {
             Token::U32Type => BaseType::U32,
+            Token::UsizeType => BaseType::Usize,
             Token::BoolType => BaseType::Bool,
             _ => return Err(ParseError::UnexpectedToken("type".to_owned(), token, span)),
         };
