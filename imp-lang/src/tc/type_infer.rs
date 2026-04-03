@@ -3,17 +3,39 @@ use std::collections::HashMap;
 use crate::{ast::*, traverse::Traverse};
 
 pub fn type_infer<'ast>(program: Program<'ast, UntypedAst>) -> Result<Program<'ast, TypedAst>, InferenceError> {
-    Ok(TypeInfer::new().trav_program(program))
+    let mut infer = TypeInfer::new();
+    let typed = infer.trav_program(program);
+    if let Some(err) = infer.errors.into_iter().next() {
+        Err(err)
+    } else {
+        Ok(typed)
+    }
 }
 
 pub struct TypeInfer<'ast> {
     args: Vec<&'ast Farg>,
     idmap: HashMap<*const VarInfo<'ast, UntypedAst>, &'ast VarInfo<'ast, TypedAst>>,
     new_ids: Vec<&'ast VarInfo<'ast, TypedAst>>,
+    errors: Vec<InferenceError>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
-pub enum InferenceError {}
+pub enum InferenceError {
+    SelectionIndexNotScalar {
+        idx: usize,
+        ty: Type,
+    },
+    SelectionIndexNotInteger {
+        idx: usize,
+        ty: Type,
+    },
+    SelectionRankTooSmall {
+        needed: usize,
+        known_min_rank: Option<usize>,
+        shape: ShapePattern,
+    },
+}
 
 impl<'ast> TypeInfer<'ast> {
     pub fn new() -> Self {
@@ -21,6 +43,7 @@ impl<'ast> TypeInfer<'ast> {
             args: Vec::new(),
             idmap: HashMap::new(),
             new_ids: Vec::new(),
+            errors: Vec::new(),
         }
     }
 
@@ -34,6 +57,91 @@ impl<'ast> TypeInfer<'ast> {
 
     fn alloc_expr(&self, expr: Expr<'ast, TypedAst>) -> &'ast Expr<'ast, TypedAst> {
         Box::leak(Box::new(expr))
+    }
+
+    fn shape_knowledge(shape: &ShapePattern) -> TypeKnowledge {
+        match shape {
+            ShapePattern::Scalar => TypeKnowledge::Scalar,
+            ShapePattern::Any => TypeKnowledge::AUD,
+            ShapePattern::Axes(axes) => {
+                let has_rest = axes.iter().any(|a| matches!(a, AxisPattern::Rest(_)));
+                if has_rest {
+                    let min_rank = axes.iter().filter(|a| matches!(a, AxisPattern::Dim(_))).count() as u8;
+                    TypeKnowledge::AUDGN { min_rank }
+                } else if axes.iter().any(|a| matches!(a, AxisPattern::Dim(DimPattern::Any))) {
+                    TypeKnowledge::AKD
+                } else {
+                    TypeKnowledge::AKS
+                }
+            }
+        }
+    }
+
+    fn selection_result_shape(&self, arr_shape: &ShapePattern, scalar_idx_count: usize) -> Result<ShapePattern, InferenceError> {
+        match arr_shape {
+            ShapePattern::Scalar => {
+                if scalar_idx_count == 0 {
+                    Ok(ShapePattern::Scalar)
+                } else {
+                    Err(InferenceError::SelectionRankTooSmall {
+                        needed: scalar_idx_count,
+                        known_min_rank: Some(0),
+                        shape: arr_shape.clone(),
+                    })
+                }
+            }
+            ShapePattern::Any => {
+                if scalar_idx_count == 0 {
+                    Ok(ShapePattern::Any)
+                } else {
+                    Err(InferenceError::SelectionRankTooSmall {
+                        needed: scalar_idx_count,
+                        known_min_rank: None,
+                        shape: arr_shape.clone(),
+                    })
+                }
+            }
+            ShapePattern::Axes(axes) => {
+                let min_rank = axes.iter().filter(|a| matches!(a, AxisPattern::Dim(_))).count();
+                if scalar_idx_count > min_rank {
+                    return Err(InferenceError::SelectionRankTooSmall {
+                        needed: scalar_idx_count,
+                        known_min_rank: Some(min_rank),
+                        shape: arr_shape.clone(),
+                    });
+                }
+
+                let has_rest = axes.iter().any(|a| matches!(a, AxisPattern::Rest(_)));
+                if !has_rest {
+                    let rem: Vec<AxisPattern> = axes.iter().skip(scalar_idx_count).cloned().collect();
+                    if rem.is_empty() {
+                        Ok(ShapePattern::Scalar)
+                    } else {
+                        Ok(ShapePattern::Axes(rem))
+                    }
+                } else {
+                    let rest_pos = axes.iter().position(|a| matches!(a, AxisPattern::Rest(_))).unwrap();
+                    if scalar_idx_count < rest_pos {
+                        Ok(ShapePattern::Axes(axes.iter().skip(scalar_idx_count).cloned().collect()))
+                    } else if scalar_idx_count == rest_pos {
+                        Ok(ShapePattern::Axes(axes.iter().skip(rest_pos).cloned().collect()))
+                    } else {
+                        // Crossing into `..rest` loses exact residual shape information.
+                        Ok(ShapePattern::Any)
+                    }
+                }
+            }
+        }
+    }
+
+    fn selection_result_type(&self, arr_ty: &Type, scalar_idx_count: usize) -> Result<Type, InferenceError> {
+        let shape = self.selection_result_shape(&arr_ty.shape, scalar_idx_count)?;
+        let knowledge = Self::shape_knowledge(&shape);
+        Ok(Type {
+            ty: arr_ty.ty,
+            shape,
+            knowledge,
+        })
     }
 }
 
@@ -192,12 +300,28 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
         let (arr, arr_ty) = self.trav_id(sel.arr);
 
         let mut idxs = Vec::with_capacity(sel.idx.len());
-        for idx in sel.idx {
-            let (idx, _idx_ty) = self.trav_id(idx);
+        for (idx_pos, idx) in sel.idx.into_iter().enumerate() {
+            let (idx, idx_ty) = self.trav_id(idx);
+            if !idx_ty.is_scalar() {
+                self.errors.push(InferenceError::SelectionIndexNotScalar { idx: idx_pos, ty: idx_ty.clone() });
+            } else if !matches!(idx_ty.ty, BaseType::U32 | BaseType::Usize) {
+                self.errors.push(InferenceError::SelectionIndexNotInteger { idx: idx_pos, ty: idx_ty.clone() });
+            }
             idxs.push(idx);
         }
 
-        let ty = Type::scalar(arr_ty.ty);
+        let ty = match self.selection_result_type(&arr_ty, idxs.len()) {
+            Ok(ty) => ty,
+            Err(err) => {
+                self.errors.push(err);
+                // Continue inference with a conservative fallback type to preserve traversal.
+                Type {
+                    ty: arr_ty.ty,
+                    shape: ShapePattern::Any,
+                    knowledge: TypeKnowledge::AUD,
+                }
+            }
+        };
 
         (Sel { arr, idx: idxs }, ty)
     }
