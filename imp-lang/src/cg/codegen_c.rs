@@ -56,6 +56,22 @@ impl<'ast> Visit<'ast> for CompileC {
         self.output.push_str("    size_t *shp;\n");
         self.output.push_str("    void *data;\n");
         self.output.push_str("} ImpArrayRaw;\n\n");
+        self.output.push_str("static size_t imp_flat_index_u32(ImpArrayRaw arr, ImpArrayRaw idx) {\n");
+        self.output.push_str("    size_t flat = 0;\n");
+        self.output.push_str("    uint32_t *idx_data = (uint32_t *)idx.data;\n");
+        self.output.push_str("    for (size_t d = 0; d < idx.len; d += 1) {\n");
+        self.output.push_str("        flat = flat * arr.shp[d] + (size_t)idx_data[d];\n");
+        self.output.push_str("    }\n");
+        self.output.push_str("    return flat;\n");
+        self.output.push_str("}\n\n");
+        self.output.push_str("static size_t imp_flat_index_usize(ImpArrayRaw arr, ImpArrayRaw idx) {\n");
+        self.output.push_str("    size_t flat = 0;\n");
+        self.output.push_str("    size_t *idx_data = (size_t *)idx.data;\n");
+        self.output.push_str("    for (size_t d = 0; d < idx.len; d += 1) {\n");
+        self.output.push_str("        flat = flat * arr.shp[d] + idx_data[d];\n");
+        self.output.push_str("    }\n");
+        self.output.push_str("    return flat;\n");
+        self.output.push_str("}\n\n");
 
         for fundef in &program.fundefs {
             self.visit_fundef(fundef);
@@ -262,12 +278,11 @@ impl<'ast> Visit<'ast> for CompileC {
 
     fn visit_sel(&mut self, sel: &Sel<'ast, Self::Ast>) {
         let arr = self.nameof(&sel.arr);
+        let idx = self.nameof(&sel.idx);
         let elem_base = elem_ctype_of_id(&sel.arr);
+        let flat_fn = flat_index_fn_of_id(&sel.idx);
 
-        // TODO: compute flat index from multiple indices and shape
-        let idx0 = self.nameof(&sel.idx[0]);
-
-        self.expr_stack.push(format!("(({elem_base} *){arr}.data)[{idx0}]"));
+        self.expr_stack.push(format!("(({elem_base} *){arr}.data)[{flat_fn}({arr}, {idx})]"));
     }
 
     fn visit_id(&mut self, id: &Id<'ast, Self::Ast>) {
@@ -308,5 +323,20 @@ fn elem_ctype_of_id(id: &Id<'_, TypedAst>) -> &'static str {
     match id {
         Id::Var(v) => base_ctype(&v.ty),
         Id::Arg(_) => "uint32_t",  // args used directly as array bounds are uncommon
+    }
+}
+
+fn flat_index_fn_of_id(id: &Id<'_, TypedAst>) -> &'static str {
+    match id_base_type(id) {
+        BaseType::U32 => "imp_flat_index_u32",
+        BaseType::Usize => "imp_flat_index_usize",
+        BaseType::Bool => panic!("bool cannot be used as an array index vector"),
+    }
+}
+
+fn id_base_type(id: &Id<'_, TypedAst>) -> BaseType {
+    match id {
+        Id::Var(v) => v.ty.ty,
+        Id::Arg(_) => BaseType::U32,
     }
 }

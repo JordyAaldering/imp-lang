@@ -22,12 +22,10 @@ pub struct TypeInfer<'ast> {
 #[allow(dead_code)]
 #[derive(Debug)]
 pub enum InferenceError {
-    SelectionIndexNotScalar {
-        idx: usize,
+    SelectionIndexNotVector {
         ty: Type,
     },
     SelectionIndexNotInteger {
-        idx: usize,
         ty: Type,
     },
     SelectionRankTooSmall {
@@ -83,25 +81,25 @@ impl<'ast> TypeInfer<'ast> {
         }
     }
 
-    fn selection_result_shape(&self, arr_shape: &ShapePattern, scalar_idx_count: usize) -> Result<ShapePattern, InferenceError> {
+    fn selection_result_shape(&self, arr_shape: &ShapePattern, idx_count: usize) -> Result<ShapePattern, InferenceError> {
         match arr_shape {
             ShapePattern::Scalar => {
-                if scalar_idx_count == 0 {
+                if idx_count == 0 {
                     Ok(ShapePattern::Scalar)
                 } else {
                     Err(InferenceError::SelectionRankTooSmall {
-                        needed: scalar_idx_count,
+                        needed: idx_count,
                         known_min_rank: Some(0),
                         shape: arr_shape.clone(),
                     })
                 }
             }
             ShapePattern::Any => {
-                if scalar_idx_count == 0 {
+                if idx_count == 0 {
                     Ok(ShapePattern::Any)
                 } else {
                     Err(InferenceError::SelectionRankTooSmall {
-                        needed: scalar_idx_count,
+                        needed: idx_count,
                         known_min_rank: None,
                         shape: arr_shape.clone(),
                     })
@@ -109,9 +107,9 @@ impl<'ast> TypeInfer<'ast> {
             }
             ShapePattern::Axes(axes) => {
                 let min_rank = axes.iter().filter(|a| matches!(a, AxisPattern::Dim(_))).count();
-                if scalar_idx_count > min_rank {
+                if idx_count > min_rank {
                     return Err(InferenceError::SelectionRankTooSmall {
-                        needed: scalar_idx_count,
+                        needed: idx_count,
                         known_min_rank: Some(min_rank),
                         shape: arr_shape.clone(),
                     });
@@ -119,7 +117,7 @@ impl<'ast> TypeInfer<'ast> {
 
                 let has_rest = axes.iter().any(|a| matches!(a, AxisPattern::Rest(_)));
                 if !has_rest {
-                    let rem: Vec<AxisPattern> = axes.iter().skip(scalar_idx_count).cloned().collect();
+                    let rem: Vec<AxisPattern> = axes.iter().skip(idx_count).cloned().collect();
                     if rem.is_empty() {
                         Ok(ShapePattern::Scalar)
                     } else {
@@ -127,9 +125,9 @@ impl<'ast> TypeInfer<'ast> {
                     }
                 } else {
                     let rest_pos = axes.iter().position(|a| matches!(a, AxisPattern::Rest(_))).unwrap();
-                    if scalar_idx_count < rest_pos {
-                        Ok(ShapePattern::Axes(axes.iter().skip(scalar_idx_count).cloned().collect()))
-                    } else if scalar_idx_count == rest_pos {
+                    if idx_count < rest_pos {
+                        Ok(ShapePattern::Axes(axes.iter().skip(idx_count).cloned().collect()))
+                    } else if idx_count == rest_pos {
                         Ok(ShapePattern::Axes(axes.iter().skip(rest_pos).cloned().collect()))
                     } else {
                         // Crossing into `..rest` loses exact residual shape information.
@@ -184,14 +182,33 @@ impl<'ast> TypeInfer<'ast> {
         Type { ty: base_ty, shape: result_shape, knowledge }
     }
 
-    fn selection_result_type(&self, arr_ty: &Type, scalar_idx_count: usize) -> Result<Type, InferenceError> {
-        let shape = self.selection_result_shape(&arr_ty.shape, scalar_idx_count)?;
+    fn selection_result_type(&self, arr_ty: &Type, idx_ty: &Type) -> Result<Type, InferenceError> {
+        let Some(idx_count) = Self::selection_index_count(idx_ty) else {
+            return Ok(Type {
+                ty: arr_ty.ty,
+                shape: ShapePattern::Any,
+                knowledge: TypeKnowledge::AUD,
+            });
+        };
+
+        let shape = self.selection_result_shape(&arr_ty.shape, idx_count)?;
         let knowledge = Self::shape_knowledge(&shape);
-        Ok(Type {
-            ty: arr_ty.ty,
-            shape,
-            knowledge,
-        })
+        Ok(Type { ty: arr_ty.ty, shape, knowledge })
+    }
+
+    fn selection_index_count(idx_ty: &Type) -> Option<usize> {
+        match &idx_ty.shape {
+            ShapePattern::Axes(axes)
+                if axes.len() == 1 && matches!(axes[0], AxisPattern::Dim(_)) =>
+            {
+                match &axes[0] {
+                    AxisPattern::Dim(DimPattern::Known(k)) => Some(*k as usize),
+                    AxisPattern::Dim(DimPattern::Any) | AxisPattern::Dim(DimPattern::Var(_)) => None,
+                    _ => unreachable!("guard ensured AxisPattern::Dim"),
+                }
+            }
+            _ => None,
+        }
     }
 
     /// Given the type of `ub` (the upper-bound operand of a tensor expression),
@@ -501,18 +518,20 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
     fn trav_sel(&mut self, sel: Sel<'ast, Self::InAst>) -> Self::SelOut {
         let (arr, arr_ty) = self.trav_id(sel.arr);
 
-        let mut idxs = Vec::with_capacity(sel.idx.len());
-        for (idx_pos, idx) in sel.idx.into_iter().enumerate() {
-            let (idx, idx_ty) = self.trav_id(idx);
-            if !idx_ty.is_scalar() {
-                self.errors.push(InferenceError::SelectionIndexNotScalar { idx: idx_pos, ty: idx_ty.clone() });
-            } else if !matches!(idx_ty.ty, BaseType::U32 | BaseType::Usize) {
-                self.errors.push(InferenceError::SelectionIndexNotInteger { idx: idx_pos, ty: idx_ty.clone() });
-            }
-            idxs.push(idx);
+        let (idx, idx_ty) = self.trav_id(sel.idx);
+        let idx_is_vector = matches!(
+            idx_ty.shape,
+            ShapePattern::Axes(ref axes)
+                if axes.len() == 1 && matches!(axes[0], AxisPattern::Dim(_))
+        );
+
+        if !idx_is_vector {
+            self.errors.push(InferenceError::SelectionIndexNotVector { ty: idx_ty.clone() });
+        } else if !matches!(idx_ty.ty, BaseType::U32 | BaseType::Usize) {
+            self.errors.push(InferenceError::SelectionIndexNotInteger { ty: idx_ty.clone() });
         }
 
-        let ty = match self.selection_result_type(&arr_ty, idxs.len()) {
+        let ty = match self.selection_result_type(&arr_ty, &idx_ty) {
             Ok(ty) => ty,
             Err(err) => {
                 self.errors.push(err);
@@ -525,7 +544,7 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
             }
         };
 
-        (Sel { arr, idx: idxs }, ty)
+        (Sel { arr, idx }, ty)
     }
 
     ///

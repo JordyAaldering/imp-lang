@@ -204,12 +204,7 @@ impl<'ast> ToSsa<'ast> {
 
     fn trav_sel(&mut self, sel: Sel<'ast, FlattenedAst>) -> Sel<'ast, UntypedAst> {
         let arr = self.trav_id(sel.arr);
-
-        let mut idx = Vec::with_capacity(sel.idx.len());
-        for i in sel.idx {
-            idx.push(self.trav_id(i));
-        }
-
+        let idx = self.trav_id(sel.idx);
         Sel { arr, idx }
     }
 

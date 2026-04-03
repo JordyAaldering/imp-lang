@@ -2,17 +2,12 @@ use super::*;
 
 /// Selection (indexing)
 ///
-/// Example: `arr[i]` or `arr[i,j]` where `i` and `j` are scalars.
+/// Example: `arr[iv]` where `iv` is a rank-1 integer vector.
 ///
-/// Not yet supported: arr[iv] where `iv` is an index vector.
-/// For this, we actually need the scalar cases to be written as `arr[[i]]` and `arr[[i,j]]`.
-/// We ignore this for now.
-///
-/// The built-in selection only allows for scalar selection.
-/// I.e. the number of indices must match the number of dimensions of the array,
-/// thus returning a scalar value.
+/// Scalar selections are written by constructing an explicit index vector,
+/// e.g. `arr[[i]]` or `arr[[i,j]]`.
 #[derive(Clone, Debug)]
 pub struct Sel<'ast, Ast: AstConfig> {
     pub arr: Ast::Operand<'ast>,
-    pub idx: Vec<Ast::Operand<'ast>>,
+    pub idx: Ast::Operand<'ast>,
 }

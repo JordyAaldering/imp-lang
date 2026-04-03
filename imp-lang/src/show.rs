@@ -157,10 +157,7 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
     fn visit_sel(&mut self, sel: &Sel<'ast, Self::Ast>) {
         Ast::visit_operand(self, &sel.arr);
         self.write("[");
-        for idx in &sel.idx {
-            Ast::visit_operand(self, idx);
-            self.write(",");
-        }
+        Ast::visit_operand(self, &sel.idx);
         self.write("]");
     }
 

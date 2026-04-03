@@ -103,9 +103,7 @@ impl<'ast> Rewrite<'ast> for DeadCodeRemoval {
 
     fn rewrite_sel(&mut self, mut sel: Sel<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
         sel.arr = self.rewrite_id(sel.arr);
-        for i in &mut sel.idx {
-            *i = self.rewrite_id(i.clone());
-        }
+        sel.idx = self.rewrite_id(sel.idx);
         Expr::Sel(sel)
     }
 
