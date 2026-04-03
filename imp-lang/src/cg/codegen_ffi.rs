@@ -93,69 +93,63 @@ impl<'ast> Visit<'ast> for CompileFfi {
         self.push("#[allow(unused_imports)]\n");
         self.push("use imp_core::*;\n");
 
-        for wrapper in program.fundefs.values() {
-            for fundef in &wrapper.overloads {
-                self.push("#[allow(dead_code)]\n");
-                self.push("unsafe extern \"C\" {\n");
-                self.push(&format!("    fn IMP_{}(", fundef.name));
-                self.push(&join_args(&fundef.args, rust_ffi_type));
-                self.push(&format!(") -> {};\n", rust_ffi_type(&fundef.ret_type)));
-                self.push("}\n");
-            }
+        for (base_name, fundef) in &program.functions {
+            self.push("#[allow(dead_code)]\n");
+            self.push("unsafe extern \"C\" {\n");
+            self.push(&format!("    fn IMP_{}(", fundef.name));
+            self.push(&join_args(&fundef.args, rust_ffi_type));
+            self.push(&format!(") -> {};\n", rust_ffi_type(&fundef.ret_type)));
+            self.push("}\n");
 
-            // For now we expose one wrapper API symbol in Rust.
-            // Overload-aware Rust dispatch can be added later.
-            if let Some(primary) = wrapper.overloads.first() {
-                self.push("#[allow(dead_code)]\n");
-                self.push(&format!("fn {}(", wrapper.name));
-                self.push(&join_args(&primary.args, rust_api_arg_type));
-                self.push(&format!(") -> {} {{\n", rust_api_ret_type(&primary.ret_type)));
+            self.push("#[allow(dead_code)]\n");
+            self.push(&format!("fn {}(", base_name));
+            self.push(&join_args(&fundef.args, rust_api_arg_type));
+            self.push(&format!(") -> {} {{\n", rust_api_ret_type(&fundef.ret_type)));
 
-                let mut call_args = Vec::with_capacity(primary.args.len());
-                for arg in &primary.args {
-                    if is_static_array(&arg.ty) {
-                        self.push(&format!("    let mut __{}_ffi = {};\n", arg.name, arg.name));
-                        self.push(&format!("    let __{}_raw = __{}_ffi.as_raw();\n", arg.name, arg.name));
-                        call_args.push(format!("__{}_raw", arg.name));
-                    } else if matches!(arg.ty.shape, ShapePattern::Any) {
-                        self.push(&format!("    let mut __{}_dyn = {};\n", arg.name, arg.name));
-                        self.push(&format!("    let __{}_ffi = match &mut __{}_dyn {{\n", arg.name, arg.name));
-                        self.push("        imp_core::ImpArrayOrScalar::Scalar(v) => imp_core::ImpDyn::from_scalar(*v),\n");
-                        self.push("        imp_core::ImpArrayOrScalar::Array(a) => imp_core::ImpDyn::from_array_raw(a.as_raw()),\n");
-                        self.push("    };\n");
-                        call_args.push(format!("__{}_ffi", arg.name));
-                    } else {
-                        call_args.push(arg.name.clone());
-                    }
-                }
-
-                if matches!(primary.ret_type.shape, ShapePattern::Any) {
-                    self.push(&format!(
-                        "    let __dyn = unsafe {{ IMP_{}({}) }};\n",
-                        primary.name,
-                        call_args.join(", ")
-                    ));
-                    self.push("    unsafe { __dyn.into_array_or_scalar() }\n");
-                } else if is_static_array(&primary.ret_type) {
-                    self.push(&format!(
-                        "    let __raw = unsafe {{ IMP_{}({}) }};\n",
-                        primary.name,
-                        call_args.join(", ")
-                    ));
-                    self.push(&format!(
-                        "    imp_core::ImpArrayOrScalar::Array(unsafe {{ imp_core::ImpArray::<{}>::from_raw(__raw) }})\n",
-                        rust_base_type(&primary.ret_type)
-                    ));
+            let mut call_args = Vec::with_capacity(fundef.args.len());
+            for arg in &fundef.args {
+                if is_static_array(&arg.ty) {
+                    self.push(&format!("    let mut __{}_ffi = {};\n", arg.name, arg.name));
+                    self.push(&format!("    let __{}_raw = __{}_ffi.as_raw();\n", arg.name, arg.name));
+                    call_args.push(format!("__{}_raw", arg.name));
+                } else if matches!(arg.ty.shape, ShapePattern::Any) {
+                    self.push(&format!("    let mut __{}_dyn = {};\n", arg.name, arg.name));
+                    self.push(&format!("    let __{}_ffi = match &mut __{}_dyn {{\n", arg.name, arg.name));
+                    self.push("        imp_core::ImpArrayOrScalar::Scalar(v) => imp_core::ImpDyn::from_scalar(*v),\n");
+                    self.push("        imp_core::ImpArrayOrScalar::Array(a) => imp_core::ImpDyn::from_array_raw(a.as_raw()),\n");
+                    self.push("    };\n");
+                    call_args.push(format!("__{}_ffi", arg.name));
                 } else {
-                    self.push(&format!(
-                        "    imp_core::ImpArrayOrScalar::Scalar(unsafe {{ IMP_{}({}) }})\n",
-                        primary.name,
-                        call_args.join(", ")
-                    ));
+                    call_args.push(arg.name.clone());
                 }
-
-                self.push("}\n");
             }
+
+            if matches!(fundef.ret_type.shape, ShapePattern::Any) {
+                self.push(&format!(
+                    "    let __dyn = unsafe {{ IMP_{}({}) }};\n",
+                    fundef.name,
+                    call_args.join(", ")
+                ));
+                self.push("    unsafe { __dyn.into_array_or_scalar() }\n");
+            } else if is_static_array(&fundef.ret_type) {
+                self.push(&format!(
+                    "    let __raw = unsafe {{ IMP_{}({}) }};\n",
+                    fundef.name,
+                    call_args.join(", ")
+                ));
+                self.push(&format!(
+                    "    imp_core::ImpArrayOrScalar::Array(unsafe {{ imp_core::ImpArray::<{}>::from_raw(__raw) }})\n",
+                    rust_base_type(&fundef.ret_type)
+                ));
+            } else {
+                self.push(&format!(
+                    "    imp_core::ImpArrayOrScalar::Scalar(unsafe {{ IMP_{}({}) }})\n",
+                    fundef.name,
+                    call_args.join(", ")
+                ));
+            }
+
+            self.push("}\n");
         }
     }
 }

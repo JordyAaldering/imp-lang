@@ -83,11 +83,9 @@ impl<'ast> Visit<'ast> for CompileC {
         self.output.push_str("    return flat;\n");
         self.output.push_str("}\n\n");
 
-        for wrapper in program.fundefs.values() {
-            for fundef in &wrapper.overloads {
-                self.visit_fundef(fundef);
-                self.output.push('\n');
-            }
+        for fundef in program.functions.values() {
+            self.visit_fundef(fundef);
+            self.output.push('\n');
         }
     }
 

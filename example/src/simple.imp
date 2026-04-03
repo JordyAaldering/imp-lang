@@ -1,3 +1,28 @@
+trait Add<T> {
+    fn +(T a, T b) -> T;
+}
+
+impl Add<u32> {
+    fn +(u32 a, u32 b) -> u32 {
+        return @addSxS(a, b);
+    }
+}
+
+impl Add<usize> {
+    fn +(usize a, usize b) -> usize {
+        return @addSxS(a, b);
+    }
+}
+
+impl Add<U[d:shp]>
+    where U: Add
+{
+    fn +(U[d:shp] a, U[d:shp] b) -> U[d:shp] {
+        return { a[iv] + b[iv] | iv < shp };
+    }
+}
+
+
 fn dim(usize[d:shp] arr) -> usize {
     return d;
 }
@@ -10,8 +35,11 @@ fn shouldbefolded() -> u32 {
     return @addSxS(4, @addSxS(2, 3));
 }
 
-fn addthem(u32 a, u32 b, u32 c) -> u32 {
-    return @addSxS(@addSxS(a, b), c);
+fn addthem<T>(T a, T b, T c) -> T
+where
+    T: Add
+{
+    return a + b + c;
 }
 
 fn iota(usize n) -> usize[n] {

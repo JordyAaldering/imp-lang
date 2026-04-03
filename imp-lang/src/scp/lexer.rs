@@ -25,6 +25,7 @@ pub enum Token {
     Return,
     Trait,
     Impl,
+    Where,
     // Arithmetic operators
     Add, Sub, Mul, Div,
     // Comparison operators
@@ -160,6 +161,8 @@ impl<'source> Iterator for Lexer<'source> {
             Trait
         } else if self.match_str("impl") {
             Impl
+        } else if self.match_str("where") {
+            Where
         } else {
             match self.next_char()? {
                 // Symbols

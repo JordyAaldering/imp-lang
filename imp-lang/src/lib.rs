@@ -8,6 +8,7 @@ mod show;
 mod scp;
 mod tp;
 mod pre;
+mod mono;
 mod tc;
 mod opt;
 mod cg;
@@ -18,6 +19,8 @@ use crate::{ast::*, traverse::*};
 
 pub fn compile(src: &str) -> Program<'static, TypedAst> {
     let ast = scp::scanparse(src).unwrap();
+    println!("{}", show::show(&ast));
+    let ast = mono::monomorphise_generics(ast);
     println!("{}", show::show(&ast));
     let ast = tp::analyse_tp(ast);
     println!("{}", show::show(&ast));
@@ -58,4 +61,15 @@ pub fn emit_h(ast: &mut Program<'static, TypedAst>, outfile: &str) {
     let mut cg = cg::codegen_h::CompileH::new();
     cg.visit_program(ast);
     std::fs::write(outfile, cg.finish()).unwrap();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn compile_stdlib_small_surface() {
+        let src = include_str!("../../example/src/stdlib_small.imp");
+        let _ = compile(src);
+    }
 }

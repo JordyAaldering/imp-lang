@@ -3,56 +3,47 @@ use std::collections::HashMap;
 use crate::{ast::*, traverse::Traverse};
 
 pub fn type_infer<'ast>(program: Program<'ast, UntypedAst>) -> Result<Program<'ast, TypedAst>, InferenceError> {
-    let mut typed_wrappers: HashMap<String, FundefWrapper<'ast, TypedAst>> = HashMap::new();
+    let mut typed_functions: HashMap<String, Fundef<'ast, TypedAst>> = HashMap::new();
 
     // Collect and sort function names to ensure deterministic ordering
-    let mut func_names: Vec<_> = program.fundefs.keys().cloned().collect();
+    let mut func_names: Vec<_> = program.functions.keys().cloned().collect();
     func_names.sort();
 
-    // First pass: create stub wrappers for all functions to enable forward references
-    let mut wrappers_by_name: HashMap<String, &'ast FundefWrapper<'ast, TypedAst>> = HashMap::new();
+    // First pass: create stub signatures for all functions to enable forward references
+    let mut functions_by_name: HashMap<String, &'ast Fundef<'ast, TypedAst>> = HashMap::new();
     for name in &func_names {
-        if let Some(wrapper) = program.fundefs.get(name) {
-            // Build stub overloads using annotation types from the untyped fundefs
-            let stub_overloads: Vec<Fundef<'ast, TypedAst>> = wrapper.overloads.iter().map(|untyped_fundef| {
-                Fundef {
-                    name: untyped_fundef.name.clone(),
-                    ret_type: untyped_fundef.ret_type.clone(),
-                    args: untyped_fundef.args.clone(),
-                    decs: Vec::new(),
-                    body: Vec::new(),
-                }
-            }).collect();
-            let stub_wrapper = Box::leak(Box::new(FundefWrapper {
-                name: name.clone(),
-                overloads: stub_overloads,
+        if let Some(fundef) = program.functions.get(name) {
+            let stub = Box::leak(Box::new(Fundef {
+                name: fundef.name.clone(),
+                ret_type: fundef.ret_type.clone(),
+                args: fundef.args.clone(),
+                decs: Vec::new(),
+                body: Vec::new(),
             }));
-            wrappers_by_name.insert(name.clone(), stub_wrapper);
+            functions_by_name.insert(name.clone(), stub);
         }
     }
 
     // Second pass: type-check each function with all function signatures available
     for name in func_names {
-        let wrapper = program.fundefs.get(&name).unwrap();
-        let mut typed_overloads = Vec::with_capacity(wrapper.overloads.len());
-
-        for fundef in &wrapper.overloads {
-            let mut infer = TypeInfer::new(&wrappers_by_name);
-            let typed = infer.trav_fundef(fundef.clone());
-            if let Some(err) = infer.errors.into_iter().next() {
-                return Err(err);
-            }
-            typed_overloads.push(typed);
+        let fundef = program.functions.get(&name).unwrap();
+        let mut infer = TypeInfer::new(&functions_by_name);
+        let typed = infer.trav_fundef(fundef.clone());
+        if let Some(err) = infer.errors.into_iter().next() {
+            return Err(err);
         }
 
-        // Replace the stub wrapper with the fully typed one
-        let typed_wrapper = FundefWrapper { name: name.clone(), overloads: typed_overloads };
-        let typed_wrapper_ref = Box::leak(Box::new(typed_wrapper.clone()));
-        wrappers_by_name.insert(name.clone(), typed_wrapper_ref);
-        typed_wrappers.insert(name.clone(), typed_wrapper);
+        let typed_ref = Box::leak(Box::new(typed.clone()));
+        functions_by_name.insert(name.clone(), typed_ref);
+        typed_functions.insert(name.clone(), typed);
     }
 
-    Ok(Program { fundefs: typed_wrappers })
+    Ok(Program {
+        functions: typed_functions,
+        generic_functions: HashMap::new(),
+        traits: program.traits,
+        impls: program.impls,
+    })
 }
 
 pub struct TypeInfer<'ast> {
@@ -60,8 +51,8 @@ pub struct TypeInfer<'ast> {
     idmap: HashMap<*const VarInfo<'ast, UntypedAst>, &'ast VarInfo<'ast, TypedAst>>,
     new_ids: Vec<&'ast VarInfo<'ast, TypedAst>>,
     errors: Vec<InferenceError>,
-    /// Mapping of function names to their typed wrapper stubs (for call resolution).
-    wrappers: HashMap<String, &'ast FundefWrapper<'ast, TypedAst>>,
+    /// Mapping of function names to typed signatures for direct-call resolution.
+    functions: HashMap<String, &'ast Fundef<'ast, TypedAst>>,
 }
 
 #[allow(dead_code)]
@@ -115,13 +106,13 @@ pub enum InferenceError {
 }
 
 impl<'ast> TypeInfer<'ast> {
-    pub fn new(wrappers: &HashMap<String, &'ast FundefWrapper<'ast, TypedAst>>) -> Self {
+    pub fn new(functions: &HashMap<String, &'ast Fundef<'ast, TypedAst>>) -> Self {
         Self {
             args: Vec::new(),
             idmap: HashMap::new(),
             new_ids: Vec::new(),
             errors: Vec::new(),
-            wrappers: wrappers.clone(),
+            functions: functions.clone(),
         }
     }
 
@@ -590,26 +581,21 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
     fn trav_call(&mut self, call: Call<'ast, Self::InAst>) -> Self::CallOut {
         let func_name = &call.id;
 
-        // Look up the wrapper by name.
-        let Some(&wrapper) = self.wrappers.get(func_name) else {
+        let Some(&target) = self.functions.get(func_name) else {
             self.errors.push(InferenceError::UndefinedFunction { name: func_name.clone() });
             // Traverse arguments anyway to catch errors in them.
             for arg in call.args {
                 let (_id, _ty) = self.trav_id(arg);
             }
-            // Return a stub with a dummy error-type result. Use the first available wrapper as a placeholder.
-            let stub_wrapper = self.wrappers.values().next().copied().expect("at least one function must be defined");
-            let stub_call = Call { id: CallTarget::Wrapper(stub_wrapper), args: vec![] };
+            // Return a stub with a dummy error-type result. Use the first available function as a placeholder.
+            let stub_target = self.functions.values().next().copied().expect("at least one function must be defined");
+            let stub_call = Call { id: CallTarget::Function(stub_target), args: vec![] };
             return (stub_call, Type {
                 ty: BaseType::U32,
                 shape: ShapePattern::Any,
                 knowledge: TypeKnowledge::AUD,
             });
         };
-
-        // For now, dispatch to the first overload for arity/type checking.
-        // Future: select the correct overload based on argument types.
-        let target = wrapper.overloads.first().expect("wrapper must have at least one overload");
 
         // Check argument count.
         if call.args.len() != target.args.len() {
@@ -638,7 +624,7 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
             typed_args.push(typed_arg);
         }
 
-        let typed_call = Call { id: CallTarget::Wrapper(wrapper), args: typed_args };
+        let typed_call = Call { id: CallTarget::Function(target), args: typed_args };
         (typed_call, target.ret_type.clone())
     }
 

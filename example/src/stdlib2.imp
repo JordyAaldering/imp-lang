@@ -66,76 +66,76 @@ trait Num<T>
 // The following primitive names are placeholders for compiler-provided intrinsics.
 // They are not user-visible operators; stdlib owns operator meaning.
 
-impl Eq<T = u32> {
+impl Eq<u32> {
     fn ==(u32 a, u32 b) -> bool { return @eqSxS(a, b); }
     fn !=(u32 a, u32 b) -> bool { return !@eqSxS(a, b); }
 }
 
-impl Add<T = u32> { fn +(u32 a, u32 b) -> u32 { return @addSxS(a, b); } }
-impl Sub<T = u32> { fn -(u32 a, u32 b) -> u32 { return @subSxS(a, b); } }
-impl Mul<T = u32> { fn *(u32 a, u32 b) -> u32 { return @mulSxS(a, b); } }
-impl Div<T = u32> { fn /(u32 a, u32 b) -> u32 { return @divSxS(a, b); } }
-impl Zero<T = u32> { fn zero() -> u32 { return 0; } }
-impl One<T = u32> { fn one() -> u32 { return 1; } }
-impl Num<T = u32> {}
+impl Add<u32> { fn +(u32 a, u32 b) -> u32 { return @addSxS(a, b); } }
+impl Sub<u32> { fn -(u32 a, u32 b) -> u32 { return @subSxS(a, b); } }
+impl Mul<u32> { fn *(u32 a, u32 b) -> u32 { return @mulSxS(a, b); } }
+impl Div<u32> { fn /(u32 a, u32 b) -> u32 { return @divSxS(a, b); } }
+impl Zero<u32> { fn zero() -> u32 { return 0; } }
+impl One<u32> { fn one() -> u32 { return 1; } }
+impl Num<u32> {}
 
-impl Eq<T = usize> {
+impl Eq<usize> {
     fn ==(usize a, usize b) -> bool { return @eqSxS(a, b); }
     fn !=(usize a, usize b) -> bool { return !@eqSxS(a, b); }
 }
 
-impl Add<T = usize> { fn +(usize a, usize b) -> usize { return @addSxS(a, b); } }
-impl Sub<T = usize> { fn -(usize a, usize b) -> usize { return @subSxS(a, b); } }
-impl Mul<T = usize> { fn *(usize a, usize b) -> usize { return @mulSxS(a, b); } }
-impl Div<T = usize> { fn /(usize a, usize b) -> usize { return @divSxS(a, b); } }
-impl Zero<T = usize> { fn zero() -> usize { return 0; } }
-impl One<T = usize> { fn one() -> usize { return 1; } }
-impl Num<T = usize> {}
+impl Add<usize> { fn +(usize a, usize b) -> usize { return @addSxS(a, b); } }
+impl Sub<usize> { fn -(usize a, usize b) -> usize { return @subSxS(a, b); } }
+impl Mul<usize> { fn *(usize a, usize b) -> usize { return @mulSxS(a, b); } }
+impl Div<usize> { fn /(usize a, usize b) -> usize { return @divSxS(a, b); } }
+impl Zero<usize> { fn zero() -> usize { return 0; } }
+impl One<usize> { fn one() -> usize { return 1; } }
+impl Num<usize> {}
 
 // -----------------------------------------------------------------------------
 // Array lifting impls (generic over shape)
 // -----------------------------------------------------------------------------
 
-impl Add<T = U[d:shp]>
+impl Add<U[d:shp]>
     where U: Add
 {
-    fn +(T a, T b) -> T {
+    fn +(U[d:shp] a, U[d:shp] b) -> U[d:shp] {
         return { a[iv] + b[iv] | iv < shp };
     }
 }
 
-impl Sub<T = U[d:shp]>
+impl Sub<U[d:shp]>
     where U: Sub
 {
-    fn -(T a, T b) -> T {
+    fn -(U[d:shp] a, U[d:shp] b) -> U[d:shp] {
         return { a[iv] - b[iv] | iv < shp };
     }
 }
 
-impl Mul<T = U[d:shp]>
+impl Mul<U[d:shp]>
     where U: Mul
 {
-    fn *(T a, T b) -> T {
+    fn *(U[d:shp] a, U[d:shp] b) -> U[d:shp] {
         return { a[iv] * b[iv] | iv < shp };
     }
 }
 
-impl Div<T = U[d:shp]>
+impl Div<U[d:shp]>
     where U: Div
 {
-    fn /(T a, T b) -> T {
+    fn /(U[d:shp] a, U[d:shp] b) -> U[d:shp] {
         return { a[iv] / b[iv] | iv < shp };
     }
 }
 
-impl Eq<T = U[d:shp]>
+impl Eq<U[d:shp]>
     where U: Eq
 {
-    fn ==(T a, T b) -> bool {
+    fn ==(U[d:shp] a, U[d:shp] b) -> bool {
         return all({ a[iv] == b[iv] | iv < shp });
     }
 
-    fn !=(T a, T b) -> bool {
+    fn !=(U[d:shp] a, U[d:shp] b) -> bool {
         return !(a == b);
     }
 }
@@ -157,7 +157,7 @@ trait Genarray<T> {
     fn genarray(usize[d:shp] out_shp, T[i:ishp] seed) -> T[d:shp,i:ishp];
 }
 
-impl Genarray<T = Any> {
+impl Genarray<Any> {
     fn genarray(usize n, T[i:ishp] seed) -> T[n,i:ishp] {
         return { seed | [0] <= iv < [n] };
     }

@@ -18,9 +18,16 @@ pub struct Parser<'src> {
 pub enum ParseError {
     NonAssociative,
     MissingReturn,
+    DuplicateFunction(String),
+    DuplicateGenericFunction(String),
     UnknownPrimitive(String, Span),
     UnexpectedToken(String, Token, Span),
     UnexpectedEof,
+}
+
+enum ParsedFnItem {
+    Concrete(Fundef<'static, ParsedAst>),
+    Generic(GenericFundef<'static, ParsedAst>),
 }
 
 type ParseResult<T> = Result<T, ParseError>;
@@ -78,27 +85,92 @@ impl<'src> Parser<'src> {
 
 impl<'src> Parser<'src> {
     pub fn parse_program(&mut self) -> ParseResult<Program<'static, ParsedAst>> {
-        let mut fundefs: std::collections::HashMap<String, Vec<Fundef<'static, ParsedAst>>> = std::collections::HashMap::new();
+        let mut functions = std::collections::HashMap::new();
+        let mut generic_functions = std::collections::HashMap::new();
+        let mut traits = std::collections::HashMap::new();
+        let mut impls = Vec::new();
 
         while self.lexer.peek().is_some() {
-            let fundef = self.parse_fundef()?;
-            let name = fundef.name.clone();
-            fundefs.entry(name).or_default().push(fundef);
+            match self.peek()?.0.clone() {
+                Token::Fn => {
+                    match self.parse_fn_item()? {
+                        ParsedFnItem::Concrete(fundef) => {
+                            let name = fundef.name.clone();
+                            if functions.insert(name.clone(), fundef).is_some() {
+                                return Err(ParseError::DuplicateFunction(name));
+                            }
+                        }
+                        ParsedFnItem::Generic(fundef) => {
+                            let name = fundef.name.clone();
+                            if generic_functions.insert(name.clone(), fundef).is_some() {
+                                return Err(ParseError::DuplicateGenericFunction(name));
+                            }
+                        }
+                    }
+                }
+                Token::Trait => {
+                    let trait_def = self.parse_trait_def()?;
+                    traits.insert(trait_def.name.clone(), trait_def);
+                }
+                Token::Impl => {
+                    impls.push(self.parse_impl_def()?);
+                }
+                _ => {
+                    let (token, span) = self.next()?;
+                    return Err(ParseError::UnexpectedToken("top-level item".to_owned(), token, span));
+                }
+            }
         }
 
-        // Convert to program with wrappers
-        let wrappers = fundefs
-            .into_iter()
-            .map(|(name, overloads)| (name.clone(), FundefWrapper { name, overloads }))
-            .collect();
-
-        Ok(Program { fundefs: wrappers })
+        Ok(Program { functions, generic_functions, traits, impls })
     }
 
-    fn parse_fundef(&mut self) -> ParseResult<Fundef<'static, ParsedAst>> {
+    fn parse_fn_item(&mut self) -> ParseResult<ParsedFnItem> {
         let (_, _span_start) = self.expect(Token::Fn)?;
-
         let (name, _) = self.parse_id()?;
+
+        if self.matches(Token::Lt).is_some() {
+            let (type_param, _) = self.parse_id()?;
+            self.expect(Token::Gt)?;
+
+            let args = self.parse_poly_args()?;
+            self.expect(Token::Arrow)?;
+            let ret_type = self.parse_poly_type()?;
+
+            let mut where_bounds = Vec::new();
+            if self.matches(Token::Where).is_some() {
+                where_bounds.push(self.parse_trait_bound()?);
+                while self.matches(Token::Comma).is_some() {
+                    where_bounds.push(self.parse_trait_bound()?);
+                }
+            }
+
+            self.expect(Token::LBrace)?;
+            let mut body = Vec::new();
+            while self.peek()?.0 != Token::RBrace {
+                body.extend(self.parse_stmt()?);
+            }
+            self.expect(Token::RBrace)?;
+
+            if !matches!(body.last(), Some(Stmt::Return(_))) {
+                return Err(ParseError::MissingReturn);
+            }
+
+            Ok(ParsedFnItem::Generic(GenericFundef {
+                name,
+                type_param,
+                where_bounds,
+                ret_type,
+                args,
+                decs: Vec::new(),
+                body,
+            }))
+        } else {
+            Ok(ParsedFnItem::Concrete(self.parse_fundef_after_name(name)?))
+        }
+    }
+
+    fn parse_fundef_after_name(&mut self, name: String) -> ParseResult<Fundef<'static, ParsedAst>> {
 
         let mut args = Vec::new();
 
@@ -311,6 +383,158 @@ impl<'src> Parser<'src> {
         }
 
         Ok(self.alloc_expr(Expr::Call(Call { id, args })))
+    }
+
+    fn parse_trait_def(&mut self) -> ParseResult<TraitDef> {
+        self.expect(Token::Trait)?;
+        let (name, _) = self.parse_id()?;
+        self.expect(Token::Lt)?;
+        let (param, _) = self.parse_id()?;
+        self.expect(Token::Gt)?;
+        self.expect(Token::LBrace)?;
+
+        let mut methods = Vec::new();
+        while self.peek()?.0 != Token::RBrace {
+            methods.push(self.parse_trait_method_sig()?);
+        }
+
+        self.expect(Token::RBrace)?;
+        Ok(TraitDef { name, param, methods })
+    }
+
+    fn parse_impl_def(&mut self) -> ParseResult<ImplDef> {
+        self.expect(Token::Impl)?;
+        let (trait_name, _) = self.parse_id()?;
+        self.expect(Token::Lt)?;
+        let for_type = self.parse_poly_type()?;
+        self.expect(Token::Gt)?;
+
+        let mut where_bounds = Vec::new();
+        if self.matches(Token::Where).is_some() {
+            where_bounds.push(self.parse_trait_bound()?);
+            while self.matches(Token::Comma).is_some() {
+                where_bounds.push(self.parse_trait_bound()?);
+            }
+        }
+
+        self.expect(Token::LBrace)?;
+        let mut methods = Vec::new();
+        while self.peek()?.0 != Token::RBrace {
+            methods.push(self.parse_impl_method_sig()?);
+        }
+        self.expect(Token::RBrace)?;
+
+        Ok(ImplDef {
+            trait_name,
+            for_type,
+            where_bounds,
+            methods,
+        })
+    }
+
+    fn parse_trait_method_sig(&mut self) -> ParseResult<TraitMethodSig> {
+        self.expect(Token::Fn)?;
+        let name = self.parse_method_name()?;
+        let args = self.parse_poly_args()?;
+        self.expect(Token::Arrow)?;
+        let ret_type = self.parse_poly_type()?;
+        self.expect(Token::Semicolon)?;
+        Ok(TraitMethodSig { name, args, ret_type })
+    }
+
+    fn parse_impl_method_sig(&mut self) -> ParseResult<TraitMethodSig> {
+        self.expect(Token::Fn)?;
+        let name = self.parse_method_name()?;
+        let args = self.parse_poly_args()?;
+        self.expect(Token::Arrow)?;
+        let ret_type = self.parse_poly_type()?;
+        self.skip_block()?;
+        Ok(TraitMethodSig { name, args, ret_type })
+    }
+
+    fn parse_poly_args(&mut self) -> ParseResult<Vec<PolyArg>> {
+        let mut args = Vec::new();
+        self.expect(Token::LParen)?;
+        if self.matches(Token::RParen).is_none() {
+            args.push(self.parse_poly_arg()?);
+            while self.matches(Token::Comma).is_some() {
+                args.push(self.parse_poly_arg()?);
+            }
+            self.expect(Token::RParen)?;
+        }
+        Ok(args)
+    }
+
+    fn parse_poly_arg(&mut self) -> ParseResult<PolyArg> {
+        let ty = self.parse_poly_type()?;
+        let (name, _) = self.parse_id()?;
+        Ok(PolyArg { name, ty })
+    }
+
+    fn parse_poly_type(&mut self) -> ParseResult<PolyType> {
+        let (token, span) = self.next()?;
+        let head = match token {
+            Token::U32Type => "u32".to_owned(),
+            Token::UsizeType => "usize".to_owned(),
+            Token::BoolType => "bool".to_owned(),
+            Token::Identifier(name) => name,
+            _ => return Err(ParseError::UnexpectedToken("type".to_owned(), token, span)),
+        };
+
+        let shape = if self.matches(Token::LSquare).is_some() {
+            if self.matches(Token::Mul).is_some() {
+                self.expect(Token::RSquare)?;
+                Some(ShapePattern::Any)
+            } else {
+                let axes = self.parse_axes()?;
+                self.expect(Token::RSquare)?;
+                Some(ShapePattern::Axes(axes))
+            }
+        } else {
+            None
+        };
+
+        Ok(PolyType { head, shape })
+    }
+
+    fn parse_trait_bound(&mut self) -> ParseResult<TraitBound> {
+        let (ty_name, _) = self.parse_id()?;
+        self.expect(Token::Colon)?;
+        let (trait_name, _) = self.parse_id()?;
+        Ok(TraitBound { ty_name, trait_name })
+    }
+
+    fn parse_method_name(&mut self) -> ParseResult<String> {
+        let (token, span) = self.next()?;
+        match token {
+            Token::Identifier(name) => Ok(name),
+            Token::Add => Ok("+".to_owned()),
+            Token::Sub => Ok("-".to_owned()),
+            Token::Mul => Ok("*".to_owned()),
+            Token::Div => Ok("/".to_owned()),
+            Token::Eq => Ok("==".to_owned()),
+            Token::Ne => Ok("!=".to_owned()),
+            Token::Lt => Ok("<".to_owned()),
+            Token::Le => Ok("<=".to_owned()),
+            Token::Gt => Ok(">".to_owned()),
+            Token::Ge => Ok(">=".to_owned()),
+            Token::Not => Ok("!".to_owned()),
+            _ => Err(ParseError::UnexpectedToken("method name".to_owned(), token, span)),
+        }
+    }
+
+    fn skip_block(&mut self) -> ParseResult<()> {
+        self.expect(Token::LBrace)?;
+        let mut depth = 1usize;
+        while depth > 0 {
+            let (token, _) = self.next()?;
+            match token {
+                Token::LBrace => depth += 1,
+                Token::RBrace => depth -= 1,
+                _ => {}
+            }
+        }
+        Ok(())
     }
 
     fn parse_prf_call(&mut self, id: String, at_span: Span) -> ParseResult<&'static Expr<'static, ParsedAst>> {

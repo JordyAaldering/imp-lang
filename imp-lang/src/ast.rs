@@ -1,7 +1,7 @@
 // Declarations
 mod program;
 mod fundef;
-mod fundefwrapper;
+mod traitdef;
 mod calltarget;
 // Statements
 mod stmt;
@@ -23,7 +23,7 @@ mod typ;
 // Declarations
 pub use program::*;
 pub use fundef::*;
-pub use fundefwrapper::*;
+pub use traitdef::*;
 pub use calltarget::*;
 // Statements
 pub use stmt::*;
@@ -241,7 +241,7 @@ impl AstConfig for TypedAst {
 
     type SsaLink<'ast> = Option<&'ast Expr<'ast, TypedAst>>;
 
-    /// Function dispatch: either the full wrapper (resolved at codegen) or a statically-known overload.
+    /// Function dispatch target for a direct free-function call.
     type Dispatch<'ast> = CallTarget<'ast>;
 
     type Operand<'ast> = Id<'ast, TypedAst>;

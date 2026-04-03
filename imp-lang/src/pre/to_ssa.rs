@@ -3,19 +3,20 @@ use std::collections::HashMap;
 use crate::ast::*;
 
 pub fn to_ssa<'ast>(program: Program<'ast, FlattenedAst>) -> Program<'ast, UntypedAst> {
-    let fundefs = program
-        .fundefs
+    let functions = program
+        .functions
         .into_iter()
-        .map(|(name, wrapper)| {
-            let overloads = wrapper
-                .overloads
-                .into_iter()
-                .map(|f| ToSsa::new().trav_fundef(f))
-                .collect();
-            (name, FundefWrapper { name: wrapper.name, overloads })
+        .map(|(name, fundef)| {
+            let ssa = ToSsa::new().trav_fundef(fundef);
+            (name, ssa)
         })
         .collect();
-    Program { fundefs }
+    Program {
+        functions,
+        generic_functions: HashMap::new(),
+        traits: program.traits,
+        impls: program.impls,
+    }
 }
 
 pub struct ToSsa<'ast> {

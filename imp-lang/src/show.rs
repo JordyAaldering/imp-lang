@@ -36,11 +36,91 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
     type Ast = Ast;
 
     fn visit_program(&mut self, program: &Program<'ast, Self::Ast>) {
-        for wrapper in program.fundefs.values() {
-            for fundef in &wrapper.overloads {
-                self.visit_fundef(fundef);
+        for fundef in program.functions.values() {
+            self.visit_fundef(fundef);
+            self.write("\n");
+        }
+
+        for fundef in program.generic_functions.values() {
+            self.write(&format!("fn {}<{}>(", fundef.name, fundef.type_param));
+            for arg in &fundef.args {
+                self.write_poly_type(&arg.ty);
+                self.write(&format!(" {}, ", arg.name));
+            }
+            self.write(") -> ");
+            self.write_poly_type(&fundef.ret_type);
+            if !fundef.where_bounds.is_empty() {
+                self.write("\nwhere\n");
+                for bound in &fundef.where_bounds {
+                    self.write("    ");
+                    self.write(&bound.ty_name);
+                    self.write(": ");
+                    self.write(&bound.trait_name);
+                    self.write("\n");
+                }
+            }
+            self.write("{\n");
+            self.depth += 1;
+            for stmt in &fundef.body {
+                self.visit_stmt(stmt);
+            }
+            self.depth -= 1;
+            self.write("}\n");
+        }
+
+        for trait_def in program.traits.values() {
+            self.write(&format!("trait {}<{}> {{\n", trait_def.name, trait_def.param));
+            self.depth += 1;
+            for method in &trait_def.methods {
+                self.indent();
+                self.write("fn ");
+                self.write(&method.name);
+                self.write("(");
+                for arg in &method.args {
+                    self.write_poly_type(&arg.ty);
+                    self.write(&format!(" {}, ", arg.name));
+                }
+                self.write(") -> ");
+                self.write_poly_type(&method.ret_type);
+                self.write(";\n");
+            }
+            self.depth -= 1;
+            self.write("}\n");
+        }
+
+        for impl_def in &program.impls {
+            self.write(&format!("impl {}<", impl_def.trait_name));
+            self.write_poly_type(&impl_def.for_type);
+            self.write(">\n");
+            if !impl_def.where_bounds.is_empty() {
+                self.write("    where ");
+                for (i, bound) in impl_def.where_bounds.iter().enumerate() {
+                    if i > 0 {
+                        self.write(", ");
+                    }
+                    self.write(&bound.ty_name);
+                    self.write(": ");
+                    self.write(&bound.trait_name);
+                }
                 self.write("\n");
             }
+            self.write("{\n");
+            self.depth += 1;
+            for method in &impl_def.methods {
+                self.indent();
+                self.write("fn ");
+                self.write(&method.name);
+                self.write("(");
+                for arg in &method.args {
+                    self.write_poly_type(&arg.ty);
+                    self.write(&format!(" {}, ", arg.name));
+                }
+                self.write(") -> ");
+                self.write_poly_type(&method.ret_type);
+                self.write(" { /* body omitted during early trait refactor */ }\n");
+            }
+            self.depth -= 1;
+            self.write("}\n");
         }
     }
 
@@ -232,6 +312,35 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
                     self.write(",")
                 }
                 self.write("]");
+            }
+        }
+    }
+}
+
+impl<'ast, Ast: AstConfig> Show<'ast, Ast> {
+    fn write_poly_type(&mut self, ty: &PolyType) {
+        self.write(&ty.head);
+        if let Some(shape) = &ty.shape {
+            match shape {
+                ShapePattern::Scalar => {}
+                ShapePattern::Any => self.write("[*]"),
+                ShapePattern::Axes(axes) => {
+                    self.write("[");
+                    for axis in axes {
+                        match axis {
+                            AxisPattern::Dim(DimPattern::Any) => self.write("_"),
+                            AxisPattern::Dim(DimPattern::Known(n)) => self.write(&n.to_string()),
+                            AxisPattern::Dim(DimPattern::Var(var)) => self.write(&var.name),
+                            AxisPattern::Rank(capture) => {
+                                self.write(&capture.dim_name);
+                                self.write(":");
+                                self.write(&capture.shp_name);
+                            }
+                        }
+                        self.write(",");
+                    }
+                    self.write("]");
+                }
             }
         }
     }

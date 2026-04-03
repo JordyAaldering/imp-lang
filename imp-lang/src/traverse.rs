@@ -6,9 +6,14 @@ pub trait Visit<'ast> {
     // Declarations
 
     fn visit_program(&mut self, program: &Program<'ast, Self::Ast>) {
-        for wrapper in program.fundefs.values() {
-            for fundef in &wrapper.overloads {
-                self.visit_fundef(fundef);
+        for fundef in program.functions.values() {
+            self.visit_fundef(fundef);
+        }
+
+        for fundef in program.generic_functions.values() {
+            self.visit_fargs_poly(&fundef.args);
+            for stmt in &fundef.body {
+                self.visit_stmt(stmt);
             }
         }
     }
@@ -32,6 +37,14 @@ pub trait Visit<'ast> {
     }
 
     fn visit_farg(&mut self, _arg: &'ast Farg) { }
+
+    fn visit_farg_poly(&mut self, _arg: &PolyArg) { }
+
+    fn visit_fargs_poly(&mut self, args: &[PolyArg]) {
+        for arg in args {
+            self.visit_farg_poly(arg);
+        }
+    }
 
     fn visit_vardec(&mut self, _vardec: &'ast VarInfo<'ast, Self::Ast>) { }
 
@@ -127,9 +140,13 @@ pub trait Rewrite<'ast> {
     // Declarations
 
     fn rewrite_program(&mut self, program: &mut Program<'ast, Self::Ast>) {
-        for wrapper in program.fundefs.values_mut() {
-            for fundef in &mut wrapper.overloads {
-                self.rewrite_fundef(fundef);
+        for fundef in program.functions.values_mut() {
+            self.rewrite_fundef(fundef);
+        }
+
+        for fundef in program.generic_functions.values_mut() {
+            for stmt in &mut fundef.body {
+                self.rewrite_stmt(stmt);
             }
         }
     }
@@ -243,19 +260,17 @@ pub trait Traverse<'ast> {
     // Declarations
 
     fn trav_program(&mut self, program: Program<'ast, Self::InAst>) -> Program<'ast, Self::OutAst> {
-        let mut fundefs = std::collections::HashMap::new();
-        for (name, wrapper) in program.fundefs {
-            let mut overloads = Vec::with_capacity(wrapper.overloads.len());
-            for fundef in wrapper.overloads {
-                overloads.push(self.trav_fundef(fundef));
-            }
-            fundefs.insert(name.clone(), FundefWrapper {
-                name,
-                overloads,
-            });
+        let mut functions = std::collections::HashMap::new();
+        for (name, fundef) in program.functions {
+            functions.insert(name, self.trav_fundef(fundef));
         }
 
-        Program { fundefs }
+        Program {
+            functions,
+            generic_functions: std::collections::HashMap::new(),
+            traits: program.traits,
+            impls: program.impls,
+        }
     }
 
     fn trav_fundef(&mut self, fundef: Fundef<'ast, Self::InAst>) -> Fundef<'ast, Self::OutAst> {

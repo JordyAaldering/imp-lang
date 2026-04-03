@@ -53,19 +53,17 @@ impl RenameFundefs {
     fn rename<'ast>(&self, program: &mut Program<'ast, TypedAst>) {
     let mut used_names = HashSet::new();
 
-    let mut wrapper_names: Vec<String> = program.fundefs.keys().cloned().collect();
-    wrapper_names.sort();
+    let mut function_names: Vec<String> = program.functions.keys().cloned().collect();
+    function_names.sort();
 
-    for wrapper_name in wrapper_names {
-        let Some(wrapper) = program.fundefs.get_mut(&wrapper_name) else {
+    for function_name in function_names {
+        let Some(fundef) = program.functions.get_mut(&function_name) else {
             continue;
         };
 
-        for fundef in &mut wrapper.overloads {
-            let base_name = mangle_fundef_name(&wrapper.name, &fundef.args);
-            let unique_name = make_unique(base_name, &mut used_names);
-            fundef.name = unique_name;
-        }
+        let base_name = mangle_fundef_name(&function_name, &fundef.args);
+        let unique_name = make_unique(base_name, &mut used_names);
+        fundef.name = unique_name;
     }
 }
 }

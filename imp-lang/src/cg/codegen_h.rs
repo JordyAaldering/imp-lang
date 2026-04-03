@@ -57,14 +57,12 @@ impl<'ast> Visit<'ast> for CompileH {
         self.output.push_str("    ImpDynDataBool data;\n");
         self.output.push_str("} ImpDynBool;\n");
 
-        let mut func_names: Vec<&str> = program.fundefs.keys().map(String::as_str).collect();
+        let mut func_names: Vec<&str> = program.functions.keys().map(String::as_str).collect();
         func_names.sort();
         for name in func_names {
-            let wrapper = &program.fundefs[name];
-            for fundef in &wrapper.overloads {
-                self.output.push('\n');
-                self.visit_fundef(fundef);
-            }
+            let fundef = &program.functions[name];
+            self.output.push('\n');
+            self.visit_fundef(fundef);
         }
     }
 
