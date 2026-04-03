@@ -346,9 +346,9 @@ impl<'src> Parser<'src> {
 
             self.expect(Token::RSquare)?;
 
-            Type { ty, shp: Shape::Vector(id) }
+            Type::vector(ty, &id)
         } else {
-            Type { ty, shp: Shape::Scalar }
+            Type::scalar(ty)
         };
 
         Ok((ty, span))

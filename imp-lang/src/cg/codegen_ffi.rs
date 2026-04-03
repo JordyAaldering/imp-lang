@@ -75,7 +75,7 @@ impl<'ast> Visit<'ast> for CompileFfi {
 }
 
 fn is_vector(ty: &Type) -> bool {
-    matches!(ty.shp, Shape::Vector(_))
+    ty.is_vector()
 }
 
 fn join_args(args: &Vec<&Farg>, map_ty: fn(&Type) -> String) -> String {
@@ -88,16 +88,18 @@ fn join_args(args: &Vec<&Farg>, map_ty: fn(&Type) -> String) -> String {
 fn rust_api_type(ty: &Type) -> String {
     let base = rust_base_type(ty);
 
-    match ty.shp {
-        Shape::Scalar => base.to_owned(),
-        Shape::Vector(_) => format!("imp_core::ImpArray<{}>", base),
+    if ty.is_vector() {
+        format!("imp_core::ImpArray<{}>", base)
+    } else {
+        base.to_owned()
     }
 }
 
 fn rust_ffi_type(ty: &Type) -> String {
-    match ty.shp {
-        Shape::Scalar => rust_base_type(ty).to_owned(),
-        Shape::Vector(_) => "imp_core::ImpArrayRaw".to_owned(),
+    if ty.is_vector() {
+        "imp_core::ImpArrayRaw".to_owned()
+    } else {
+        rust_base_type(ty).to_owned()
     }
 }
 
