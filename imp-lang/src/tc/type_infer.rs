@@ -4,7 +4,7 @@ use crate::{ast::*, traverse::Traverse};
 
 pub fn type_infer<'ast>(program: Program<'ast, UntypedAst>) -> Result<Program<'ast, TypedAst>, InferenceError> {
     let mut typed_wrappers: HashMap<String, FundefWrapper<'ast, TypedAst>> = HashMap::new();
-    
+
     // Collect and sort function names to ensure deterministic ordering
     let mut func_names: Vec<_> = program.fundefs.keys().cloned().collect();
     func_names.sort();

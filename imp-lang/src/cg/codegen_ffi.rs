@@ -26,53 +26,52 @@ impl<'ast> Visit<'ast> for CompileFfi {
     fn visit_program(&mut self, program: &Program<'ast, TypedAst>) {
         for wrapper in program.fundefs.values() {
             for fundef in &wrapper.overloads {
-                self.visit_fundef(fundef);
+                self.push("unsafe extern \"C\" {\n");
+                self.push(&format!("    fn IMP_{}(", fundef.name));
+                self.push(&join_args(&fundef.args, rust_ffi_type));
+                self.push(&format!(") -> {};\n", rust_ffi_type(&fundef.ret_type)));
+                self.push("}\n");
+            }
+
+            // For now we expose one wrapper API symbol in Rust.
+            // Overload-aware Rust dispatch can be added later.
+            if let Some(primary) = wrapper.overloads.first() {
+                self.push(&format!("fn {}(", wrapper.name));
+                self.push(&join_args(&primary.args, rust_api_type));
+                self.push(&format!(") -> {} {{\n", rust_api_type(&primary.ret_type)));
+
+                let mut call_args = Vec::with_capacity(primary.args.len());
+                for arg in &primary.args {
+                    if is_vector(&arg.ty) {
+                        self.push(&format!("    let mut __{}_ffi = {};\n", arg.name, arg.name));
+                        self.push(&format!("    let __{}_raw = __{}_ffi.as_raw();\n", arg.name, arg.name));
+                        call_args.push(format!("__{}_raw", arg.name));
+                    } else {
+                        call_args.push(arg.name.clone());
+                    }
+                }
+
+                if is_vector(&primary.ret_type) {
+                    self.push(&format!(
+                        "    let __raw = unsafe {{ IMP_{}({}) }};\n",
+                        primary.name,
+                        call_args.join(", ")
+                    ));
+                    self.push(&format!(
+                        "    unsafe {{ imp_core::ImpArray::<{}>::from_raw(__raw) }}\n",
+                        rust_base_type(&primary.ret_type)
+                    ));
+                } else {
+                    self.push(&format!(
+                        "    unsafe {{ IMP_{}({}) }}\n",
+                        primary.name,
+                        call_args.join(", ")
+                    ));
+                }
+
+                self.push("}\n");
             }
         }
-    }
-
-    fn visit_fundef(&mut self, fundef: &Fundef<'ast, TypedAst>) {
-        self.push("unsafe extern \"C\" {\n");
-        self.push(&format!("    fn IMP_{}(", fundef.name));
-        self.push(&join_args(&fundef.args, rust_ffi_type));
-        self.push(&format!(") -> {};\n", rust_ffi_type(&fundef.ret_type)));
-        self.push("}\n");
-
-        // Here we have the opportunity to add checks, dispatch to different implementations, etc.
-        self.push(&format!("fn {}(", fundef.name));
-        self.push(&join_args(&fundef.args, rust_api_type));
-        self.push(&format!(") -> {} {{\n", rust_api_type(&fundef.ret_type)));
-
-        let mut call_args = Vec::with_capacity(fundef.args.len());
-        for arg in &fundef.args {
-            if is_vector(&arg.ty) {
-                self.push(&format!("    let mut __{}_ffi = {};\n", arg.name, arg.name));
-                self.push(&format!("    let __{}_raw = __{}_ffi.as_raw();\n", arg.name, arg.name));
-                call_args.push(format!("__{}_raw", arg.name));
-            } else {
-                call_args.push(arg.name.clone());
-            }
-        }
-
-        if is_vector(&fundef.ret_type) {
-            self.push(&format!(
-                "    let __raw = unsafe {{ IMP_{}({}) }};\n",
-                fundef.name,
-                call_args.join(", ")
-            ));
-            self.push(&format!(
-                "    unsafe {{ imp_core::ImpArray::<{}>::from_raw(__raw) }}\n",
-                rust_base_type(&fundef.ret_type)
-            ));
-        } else {
-            self.push(&format!(
-                "    unsafe {{ IMP_{}({}) }}\n",
-                fundef.name,
-                call_args.join(", ")
-            ));
-        }
-
-        self.push("}\n");
     }
 }
 

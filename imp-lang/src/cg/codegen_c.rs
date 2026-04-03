@@ -1,9 +1,10 @@
-use crate::{ast::*, Visit};
+use crate::{ast::*, cg::rename_fundefs, Visit};
 
 pub struct CompileC {
     output: String,
     stem: String,
     arg_names: Vec<String>,
+    arg_types: Vec<Type>,
     expr_stack: Vec<String>,
     lhs_target: Option<(String, Type)>,
     indent: usize,
@@ -15,6 +16,7 @@ impl CompileC {
             output: String::new(),
             stem: stem.to_owned(),
             arg_names: Vec::new(),
+            arg_types: Vec::new(),
             expr_stack: Vec::new(),
             lhs_target: None,
             indent: 0,
@@ -76,6 +78,7 @@ impl<'ast> Visit<'ast> for CompileC {
 
     fn visit_fundef(&mut self, fundef: &Fundef<'ast, TypedAst>) {
         self.arg_names = fundef.args.iter().map(|arg| arg.name.clone()).collect();
+        self.arg_types = fundef.args.iter().map(|arg| arg.ty.clone()).collect();
         let args: Vec<String> = fundef.args.iter()
             .map(|arg| format!("{} {}", full_ctype(&arg.ty), arg.name))
             .collect();
@@ -281,7 +284,12 @@ impl<'ast> Visit<'ast> for CompileC {
     }
 
     fn visit_call(&mut self, call: &Call<'ast, TypedAst>) {
-        let name = TypedAst::dispatch_name(&call.id);
+        let base_name = TypedAst::dispatch_name(&call.id);
+        let arg_types: Vec<Type> = call.args.iter().map(|id| match id {
+            Id::Arg(i) => self.arg_types[*i].clone(),
+            Id::Var(v) => v.ty.clone(),
+        }).collect();
+        let name = rename_fundefs::mangle_call_name(&base_name, &arg_types);
         let args: Vec<String> = call.args.iter()
             .map(|arg| self.nameof(arg))
             .collect();

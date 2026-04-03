@@ -3,7 +3,7 @@ use super::*;
 /// A wrapper around one or more overloaded function definitions with the same name.
 /// During type inference, multiple definitions with the same name are grouped into
 /// a single wrapper, enabling runtime dispatch (checked during code generation).
-/// 
+///
 /// For now, we don't enforce non-overlapping signatures or validate overloads.
 /// Future work: add static overload resolution, trait-based dispatch, etc.
 #[derive(Clone, Debug)]
