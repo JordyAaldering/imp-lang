@@ -265,16 +265,4 @@ impl Type {
             Some(ShapePattern::Any) | None => RankPattern::Any,
         }
     }
-
-    pub fn legacy_vector_extent(&self) -> Option<String> {
-        match self.pattern_shape() {
-            Some(ShapePattern::Axes(axes)) if axes.len() == 1 => match &axes[0] {
-                AxisPattern::Dim(DimPattern::Any) => Some(".".to_owned()),
-                AxisPattern::Dim(DimPattern::Var(var)) => Some(var.name.clone()),
-                AxisPattern::Dim(DimPattern::Known(n)) => Some(n.to_string()),
-                _ => None,
-            },
-            _ => None,
-        }
-    }
 }
