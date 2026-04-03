@@ -29,9 +29,16 @@ impl CompileC {
         self.output.push('\n');
     }
 
-    fn render_expr<'ast>(&mut self, expr: &Expr<'ast, TypedAst>) -> String {
+    fn render_expr(&mut self, expr: &Expr<'_, TypedAst>) -> String {
         self.visit_expr(expr);
         self.expr_stack.pop().expect("expression stack underflow")
+    }
+
+    fn nameof(&mut self, id: &Id<'_, TypedAst>) -> String {
+        match id {
+            Id::Arg(i) => self.arg_names[*i].clone(),
+            Id::Var(v) => v.name.clone(),
+        }
     }
 }
 
@@ -141,6 +148,11 @@ impl<'ast> Visit<'ast> for CompileC {
         self.expr_stack.push(format!("{} {} {}", l, binary.op, r));
     }
 
+    fn visit_unary(&mut self, unary: &Unary<'ast, Self::Ast>) {
+        let r = self.render_expr(&Expr::Id(unary.r.clone()));
+        self.expr_stack.push(format!("{}{}", unary.op, r));
+    }
+
     fn visit_array(&mut self, array: &Array<'ast, Self::Ast>) {
         let (target_name, target_ty) = self.lhs_target.clone().expect("array target must be set");
         let data_name = format!("{}_data", target_name);
@@ -164,9 +176,14 @@ impl<'ast> Visit<'ast> for CompileC {
         ));
     }
 
-    fn visit_unary(&mut self, unary: &Unary<'ast, Self::Ast>) {
-        let r = self.render_expr(&Expr::Id(unary.r.clone()));
-        self.expr_stack.push(format!("{}{}", unary.op, r));
+    fn visit_sel(&mut self, sel: &Sel<'ast, Self::Ast>) {
+        let arr = self.nameof(&sel.arr);
+
+        // TODO: compute flat index from indices and shape
+        let idx0 = self.nameof(&sel.idx[0]);
+
+        // Obviously, the case should be derived from the actual type
+        self.expr_stack.push(format!("(({} *){}.data)[{}]", "uint32_t", arr, idx0));
     }
 
     fn visit_id(&mut self, id: &Id<'ast, Self::Ast>) {

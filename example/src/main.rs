@@ -16,4 +16,6 @@ fn main() {
     let arr2: ImpArray<u32> = arrays();
     assert_eq!(arr2.shp, vec![5]);
     println!("arr2.data = {:?}", arr2.data);
+
+    println!("sel = {}", sel());
 }

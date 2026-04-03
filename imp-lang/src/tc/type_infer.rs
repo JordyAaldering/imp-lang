@@ -197,7 +197,9 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
             idxs.push(idx);
         }
 
-        (Sel { arr, idx: idxs }, arr_ty)
+        let ty = Type { ty: arr_ty.ty, shp: Shape::Scalar };
+
+        (Sel { arr, idx: idxs }, ty)
     }
 
     ///
