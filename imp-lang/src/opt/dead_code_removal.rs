@@ -53,7 +53,7 @@ impl<'ast> Rewrite<'ast> for DeadCodeRemoval {
 
     fn rewrite_call(&mut self, mut call: Call<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
         for arg in &mut call.args {
-            *arg = self.rewrite_id(arg.clone());
+            *arg = self.rewrite_id(*arg);
         }
         Expr::Call(call)
     }
@@ -62,9 +62,9 @@ impl<'ast> Rewrite<'ast> for DeadCodeRemoval {
         let outer_used = mem::take(&mut self.used);
 
         self.rewrite_id(Id::Var(tensor.iv));
-        self.rewrite_id(tensor.ret.clone());
-        self.rewrite_id(tensor.lb.clone());
-        self.rewrite_id(tensor.ub.clone());
+        self.rewrite_id(tensor.ret);
+        self.rewrite_id(tensor.lb);
+        self.rewrite_id(tensor.ub);
 
         let mut kept_rev = Vec::with_capacity(tensor.body.len());
         for stmt in mem::take(&mut tensor.body).into_iter().rev() {
@@ -103,7 +103,7 @@ impl<'ast> Rewrite<'ast> for DeadCodeRemoval {
 
     fn rewrite_array(&mut self, mut array: Array<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
         for value in &mut array.values {
-            *value = self.rewrite_id(value.clone());
+            *value = self.rewrite_id(*value);
         }
         Expr::Array(array)
     }

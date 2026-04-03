@@ -1,5 +1,4 @@
-/// # Scanning-parsing (`scp`)
-
+//! # Scanning-parsing (`scp`)
 mod span;
 mod operator;
 mod lexer;

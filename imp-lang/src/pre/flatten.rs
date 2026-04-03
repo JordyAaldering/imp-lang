@@ -105,10 +105,9 @@ impl<'ast> Flatten<'ast> {
                     if let AxisPattern::Rank(capture) = axis {
                         self.bind_env(capture.dim_name.clone(), Id::Dim(i));
                         self.bind_env(capture.shp_name.clone(), Id::Shp(i));
-                    } else if let AxisPattern::Dim(DimPattern::Var(var)) = axis {
-                        if var.role == SymbolRole::Define {
-                            self.bind_env(var.name.clone(), Id::DimAt(i, k));
-                        }
+                    } else if let AxisPattern::Dim(DimPattern::Var(var)) = axis
+                        && var.role == SymbolRole::Define {
+                        self.bind_env(var.name.clone(), Id::DimAt(i, k));
                     }
                 }
             }

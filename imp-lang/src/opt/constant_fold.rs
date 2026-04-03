@@ -53,10 +53,9 @@ impl<'ast> Rewrite<'ast> for ConstantFold {
     }
 
     fn rewrite_binary(&mut self, binary: Binary<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
-        if matches!(binary.op, Bop::Add) {
-            if let (Some(l), Some(r)) = (self.const_u32(&binary.l), self.const_u32(&binary.r)) {
-                return Expr::U32(l + r);
-            }
+        if matches!(binary.op, Bop::Add)
+            && let (Some(l), Some(r)) = (self.const_u32(&binary.l), self.const_u32(&binary.r)) {
+            return Expr::U32(l + r);
         }
         Expr::Binary(binary)
     }

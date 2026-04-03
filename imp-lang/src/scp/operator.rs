@@ -9,6 +9,7 @@ pub trait Operator {
 }
 
 #[derive(Clone, Copy)]
+#[allow(clippy::enum_variant_names)]
 pub enum Assoc {
     /// Left-to-right associative (e.g. `+`)
     LeftToRight,

@@ -132,7 +132,7 @@ impl<'ast> Visit<'ast> for CompileC {
     }
 
     fn visit_return(&mut self, ret: &Return<'ast, Self::Ast>) {
-        let name = self.render_expr(&Expr::Id(ret.id.clone()));
+        let name = self.render_expr(&Expr::Id(ret.id));
         self.push_line(&format!("return {};", name));
     }
 
@@ -146,14 +146,14 @@ impl<'ast> Visit<'ast> for CompileC {
             let data_name = format!("{target_name}_data");
             let shp_name  = format!("{target_name}_shp");
             let len_name  = format!("{target_name}_len");
-            let lb = self.render_expr(&Expr::Id(tensor.lb.clone()));
-            let ub = self.render_expr(&Expr::Id(tensor.ub.clone()));
+            let lb = self.render_expr(&Expr::Id(tensor.lb));
+            let ub = self.render_expr(&Expr::Id(tensor.ub));
             self.push_line(&format!("size_t {len_name} = (size_t)({ub});"));
             self.push_line(&format!("{base} *{data_name} = ({base} *)malloc({len_name} * sizeof({base}));"));
             self.push_line(&format!("for (size_t {iv_name} = (size_t)({lb}); {iv_name} < (size_t)({ub}); {iv_name} += 1) {{"));
             self.indent += 1;
             for stmt in &tensor.body { self.visit_stmt(stmt); }
-            let ret = self.render_expr(&Expr::Id(tensor.ret.clone()));
+            let ret = self.render_expr(&Expr::Id(tensor.ret));
             self.push_line(&format!("{data_name}[{iv_name}] = {ret};"));
             self.indent -= 1;
             self.push_line("}");
@@ -224,7 +224,7 @@ impl<'ast> Visit<'ast> for CompileC {
         ));
         self.push_line(&format!("size_t {iv_name}_shp_arr_{t_uid}[1] = {{ {rank} }};"));
         self.push_line(&format!(
-            "ImpArrayRaw {iv_name} = (ImpArrayRaw) {{ .len = {rank}, .shp = {iv_name}_shp_arr_{t_uid}, .dim = 1, .data = (void *){iv_name}_data_{t_uid} }};"
+            "ImpArrayRaw {iv_name} __attribute__((unused)) = (ImpArrayRaw) {{ .len = {rank}, .shp = {iv_name}_shp_arr_{t_uid}, .dim = 1, .data = (void *){iv_name}_data_{t_uid} }};"
         ));
 
         // Row-major flat index: Σ (iv_d - lb_d) * stride_d
@@ -244,7 +244,7 @@ impl<'ast> Visit<'ast> for CompileC {
         }
 
         // Store element into the flat result buffer.
-        let mut ret = self.render_expr(&Expr::Id(tensor.ret.clone()));
+        let mut ret = self.render_expr(&Expr::Id(tensor.ret));
         if rank == 1 && ret == iv_name {
             ret = format!("(({iv_elem}*){iv_name}.data)[0]");
         }
@@ -266,8 +266,8 @@ impl<'ast> Visit<'ast> for CompileC {
         {
             panic!("dynamic union values are not yet supported in binary ops during C codegen");
         }
-        let l = self.render_expr(&Expr::Id(binary.l.clone()));
-        let r = self.render_expr(&Expr::Id(binary.r.clone()));
+        let l = self.render_expr(&Expr::Id(binary.l));
+        let r = self.render_expr(&Expr::Id(binary.r));
         self.expr_stack.push(format!("{} {} {}", l, binary.op, r));
     }
 
@@ -275,7 +275,7 @@ impl<'ast> Visit<'ast> for CompileC {
         if self.id_is_any(&unary.r) {
             panic!("dynamic union values are not yet supported in unary ops during C codegen");
         }
-        let r = self.render_expr(&Expr::Id(unary.r.clone()));
+        let r = self.render_expr(&Expr::Id(unary.r));
         self.expr_stack.push(format!("{}{}", unary.op, r));
     }
 
@@ -290,7 +290,7 @@ impl<'ast> Visit<'ast> for CompileC {
         self.push_line(&format!("{} *{} = ({} *)malloc({} * sizeof({}));", base, data_name, base, len_name, base));
 
         for (i, value) in array.values.iter().enumerate() {
-            let rendered = self.render_expr(&Expr::Id(value.clone()));
+            let rendered = self.render_expr(&Expr::Id(*value));
             self.push_line(&format!("{}[{}] = {};", data_name, i, rendered));
         }
 
@@ -330,7 +330,7 @@ impl<'ast> Visit<'ast> for CompileC {
         }).collect();
         let name = rename_fundefs::mangle_call_name(&base_name, &arg_types);
         let args: Vec<String> = call.args.iter()
-            .map(|arg| self.render_expr(&Expr::Id(arg.clone())))
+            .map(|arg| self.render_expr(&Expr::Id(*arg)))
             .collect();
         self.expr_stack.push(format!("IMP_{}({})", name, args.join(", ")));
     }

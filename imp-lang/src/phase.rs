@@ -4,6 +4,7 @@
 /// that way we can have a single `run_phase`, which takes care of breaking,
 /// but also profiling like memory usage and time taken.
 //#[derive(clap::ValueEnum)]
+#[allow(dead_code)]
 #[derive(Clone, Copy, Debug)]
 pub enum Phase {
     // Scanning-parsing

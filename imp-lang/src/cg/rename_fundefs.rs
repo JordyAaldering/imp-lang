@@ -86,11 +86,11 @@ fn make_unique(mut candidate: String, used_names: &mut HashSet<String>) -> Strin
     }
 }
 
-pub fn mangle_fundef_name(base_name: &str, args: &Vec<&Farg>) -> String {
+pub fn mangle_fundef_name(base_name: &str, args: &[&Farg]) -> String {
     format!("{}__{}", base_name, mangle_arg_types(args.iter().map(|arg| &arg.ty)))
 }
 
-pub fn mangle_call_name(base_name: &str, arg_types: &Vec<Type>) -> String {
+pub fn mangle_call_name(base_name: &str, arg_types: &[Type]) -> String {
     format!("{}__{}", base_name, mangle_arg_types(arg_types.iter()))
 }
 

@@ -17,7 +17,7 @@ use std::path::Path;
 use crate::{ast::*, traverse::*};
 
 pub fn compile(src: &str) -> Program<'static, TypedAst> {
-    let ast = scp::scanparse(&src).unwrap();
+    let ast = scp::scanparse(src).unwrap();
     println!("{}", show::show(&ast));
     let ast = tp::analyse_tp(ast);
     println!("{}", show::show(&ast));
@@ -41,7 +41,7 @@ pub fn rename_fundefs(ast: &mut Program<'static, TypedAst>) {
 pub fn emit_ffi(ast: &mut Program<'static, TypedAst>, outfile: &str) {
     rename_fundefs(ast);
     let mut cg = cg::codegen_ffi::CompileFfi::new();
-    cg.visit_program(&ast);
+    cg.visit_program(ast);
     std::fs::write(outfile, cg.finish()).unwrap();
 }
 

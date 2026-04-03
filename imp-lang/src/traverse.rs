@@ -3,9 +3,7 @@ use crate::ast::*;
 pub trait Visit<'ast> {
     type Ast: AstConfig + 'ast;
 
-    ///
-    /// Declarations
-    ///
+    // Declarations
 
     fn visit_program(&mut self, program: &Program<'ast, Self::Ast>) {
         for wrapper in program.fundefs.values() {
@@ -27,7 +25,7 @@ pub trait Visit<'ast> {
         }
     }
 
-    fn visit_fargs(&mut self, args: &Vec<&'ast Farg>) {
+    fn visit_fargs(&mut self, args: &[&'ast Farg]) {
         for arg in args {
             self.visit_farg(arg);
         }
@@ -37,9 +35,7 @@ pub trait Visit<'ast> {
 
     fn visit_vardec(&mut self, _vardec: &'ast VarInfo<'ast, Self::Ast>) { }
 
-    ///
-    /// Statements
-    ///
+    // Statements
 
     fn visit_stmt(&mut self, stmt: &Stmt<'ast, Self::Ast>) {
         match stmt {
@@ -52,9 +48,7 @@ pub trait Visit<'ast> {
 
     fn visit_return(&mut self, _ret: &Return<'ast, Self::Ast>) { }
 
-    ///
-    /// Expressions
-    ///
+    // Expressions
 
     fn visit_expr(&mut self, expr: &Expr<'ast, Self::Ast>) {
         use Expr::*;
@@ -109,9 +103,7 @@ pub trait Visit<'ast> {
         Self::Ast::visit_operand(self, &sel.idx);
     }
 
-    ///
-    /// Terminals
-    ///
+    // Terminals
 
     fn visit_id(&mut self, _id: &Id<'ast, Self::Ast>) { }
 
@@ -125,9 +117,7 @@ pub trait Visit<'ast> {
 pub trait Rewrite<'ast> {
     type Ast: AstConfig + 'ast;
 
-    ///
-    /// Declarations
-    ///
+    // Declarations
 
     fn rewrite_program(&mut self, program: &mut Program<'ast, Self::Ast>) {
         for wrapper in program.fundefs.values_mut() {
@@ -150,9 +140,7 @@ pub trait Rewrite<'ast> {
         arg
     }
 
-    ///
-    /// Statements
-    ///
+    // Statements
 
     fn rewrite_stmt(&mut self, stmt: &mut Stmt<'ast, Self::Ast>) {
         match stmt {
@@ -170,9 +158,7 @@ pub trait Rewrite<'ast> {
         ret.id = self.rewrite_id(ret.id.clone());
     }
 
-    ///
-    /// Expressions
-    ///
+    // Expressions
 
     fn rewrite_expr(&mut self, expr: Expr<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
         use Expr::*;
@@ -219,9 +205,7 @@ pub trait Rewrite<'ast> {
         Expr::Sel(sel)
     }
 
-    ///
-    /// Terminals
-    ///
+    // Terminals
 
     fn rewrite_id(&mut self, id: Id<'ast, Self::Ast>) -> Id<'ast, Self::Ast> {
         id
@@ -245,9 +229,7 @@ pub trait Traverse<'ast> {
 
     type OutAst: AstConfig + 'ast;
 
-    ///
-    /// Declarations
-    ///
+    // Declarations
 
     fn trav_program(&mut self, program: Program<'ast, Self::InAst>) -> Program<'ast, Self::OutAst> {
         let mut fundefs = std::collections::HashMap::new();
@@ -303,9 +285,7 @@ pub trait Traverse<'ast> {
         unimplemented!()
     }
 
-    ///
-    /// Statements
-    ///
+    // Statements
 
     fn trav_stmt(&mut self, stmt: Stmt<'ast, Self::InAst>) -> Stmt<'ast, Self::OutAst> {
         use Stmt::*;
@@ -319,9 +299,7 @@ pub trait Traverse<'ast> {
 
     fn trav_return(&mut self, ret: Return<'ast, Self::InAst>) -> Return<'ast, Self::OutAst>;
 
-    ///
-    /// Expressions
-    ///
+    // Expressions
 
     type ExprOut = Expr<'ast, Self::OutAst>;
 
@@ -351,9 +329,7 @@ pub trait Traverse<'ast> {
 
     fn trav_sel(&mut self, sel: Sel<'ast, Self::InAst>) -> Self::SelOut;
 
-    ///
-    /// Terminals
-    ///
+    // Terminals
 
     type IdOut = Id<'ast, Self::OutAst>;
 

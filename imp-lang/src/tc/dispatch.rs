@@ -7,6 +7,5 @@
 /// If all overloads have unique base type/argument count combinations, this is also straightforward.
 ///
 /// The main difficulty is when multiple overloads differ only in their type patterns.
-pub struct Dispatch {
-
-}
+#[allow(dead_code)]
+pub struct Dispatch {}

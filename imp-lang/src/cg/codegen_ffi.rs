@@ -17,8 +17,55 @@ use crate::{ast::*, traverse::Visit};
 /// For this, the C looks somewhat like:
 ///
 /// ```
+/// ImpArrayRaw IMP_iota__usize_0(size_t n) { ... }
+///
+/// ImpArrayRaw IMP_iota__usize_d(ImpArrayRaw n) { ... }
+///
+/// ImpArrayRaw IMP_iota__usize(union n) {
+///     // Generated wrapper function that checks `n` and dispatches to the correct overload.
+/// }
+/// ```
+///
+/// Although from the rust side we could just call the wrapper, we actually want to generate the same logic again
+/// The reason for this is because we deliberately do not generate checks in the C world.
+/// Once we have entered C-land, assuming that the input is correct, we should be pretty sure that our code is valid
+/// if our type patterns are explicit enough.
+///
+/// We still need the wrappers in the C side, as C functions may themselves call wrappers.
+///
+/// That does mean that this assumption of correct input must hold.
+/// If this is not the case, we don't want to abort.
+/// Thus, we regenerate the wrapper in Rust, adding the additional checks to ensure that the shapes are correct.
+///
+/// 2) The base-types may differ
 ///
 /// ```
+/// fn myadd(u32 x, u32 y) -> u32 { ...}
+///
+/// fn myadd(usize x, usize y) -> usize { ... }
+/// ```
+///
+/// It is not yet entirely clear what happens. Does this return a union type? For now, let's assume so
+///
+/// ```
+/// u32_union IMP_myadd__u32_0(u32_union n) { ... }
+///
+/// usize_union IMP_myadd__usize_d(usize_union n) { ... }
+/// ```
+///
+/// Now, we cannot have a single Rust function that dispatches to the correct overload, as the argument types differ.
+/// That is, unless we put everything in an enum on the rust side.
+/// But perhaps generating a trait on the rust side is a better idea.
+///
+/// 3) even argument counts may differ?
+///    It is not yet clear if argument counts will ever actually differ.
+///    If we disallow direct overloading, but instead support some kind of "traits",
+///    then at least the argument count stays the same.
+///
+/// ---
+///
+/// Clearly, there is still lots to figure out.
+/// First, some other things, like the union types and choice for argument counts, need to stabalise.
 pub struct CompileFfi {
     output: String,
 }

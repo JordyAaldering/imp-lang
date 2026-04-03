@@ -67,7 +67,7 @@ impl<'ast> ToSsa<'ast> {
     fn lookup_env(&self, name: &str) -> Option<Id<'ast, UntypedAst>> {
         for env in self.env_stack.iter().rev() {
             if let Some(id) = env.get(name) {
-                return Some(id.clone());
+                return Some(*id);
             }
         }
         None

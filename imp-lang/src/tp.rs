@@ -1,7 +1,5 @@
-/// # Type patterns (`tp`)
-///
-/// Prepare the parsed type patterns for safe internal use.
-
+//! # Type patterns (`tp`)
+//! Prepare the parsed type patterns for safe internal use.
 mod analyse_tp;
 mod check_tp;
 

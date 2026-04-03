@@ -14,4 +14,5 @@
 ///   foo(usize[d1] vec, u32[d1:shp1,d2:shp2] arr)
 /// Now, we know that d2 == dim(arr) - d1, so the pattern is always resolvable,
 /// and cases where the rank is too small will be rejected
+#[allow(dead_code)]
 pub struct CheckTypePatterns;

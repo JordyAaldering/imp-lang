@@ -1,7 +1,5 @@
-/// # Pre-processing (`pre`)
-///
-/// Prepare the parsed AST for safe internal use.
-
+//! # Pre-processing (`pre`)
+//! Prepare the parsed AST for safe internal use.
 mod flatten;
 mod to_ssa;
 

@@ -413,9 +413,7 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
 
     type OutAst = TypedAst;
 
-    ///
-    /// Declarations
-    ///
+    // Declarations
 
     fn trav_fundef(&mut self, fundef: Fundef<'ast, Self::InAst>) -> Fundef<'ast, Self::OutAst> {
         let Fundef { name, ret_type, args, body, decs: _ } = fundef;
@@ -444,9 +442,7 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
         self.alloc_farg(arg.name.clone(), arg.ty.clone())
     }
 
-    ///
-    /// Statements
-    ///
+    // Statements
 
     fn trav_assign(&mut self, assign: Assign<'ast, Self::InAst>) -> Assign<'ast, Self::OutAst> {
         let (new_expr, new_ty) = self.trav_expr((*assign.expr).clone());
@@ -462,9 +458,7 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
         Return { id }
     }
 
-    ///
-    /// Expressions
-    ///
+    // Expressions
 
     type ExprOut = (Expr<'ast, Self::OutAst>, Type);
 
@@ -674,9 +668,7 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
         (Sel { arr, idx }, ty)
     }
 
-    ///
-    /// Terminals
-    ///
+    // Terminals
 
     type IdOut = (Id<'ast, Self::OutAst>, Type);
 
@@ -739,12 +731,10 @@ fn types_compatible(expected: &Type, provided: &Type) -> bool {
 fn shapes_compatible(expected: &ShapePattern, provided: &ShapePattern) -> bool {
     // A `d:shp` rank capture is AUD-compatible with any shape on either side.
     let has_rank = |axes: &[AxisPattern]| axes.iter().any(|a| matches!(a, AxisPattern::Rank(_)));
-    if let ShapePattern::Axes(exp_axes) = expected {
-        if has_rank(exp_axes) { return true; }
-    }
-    if let ShapePattern::Axes(prov_axes) = provided {
-        if has_rank(prov_axes) { return true; }
-    }
+    if let ShapePattern::Axes(exp_axes) = expected
+        && has_rank(exp_axes) { return true; }
+    if let ShapePattern::Axes(prov_axes) = provided
+        && has_rank(prov_axes) { return true; }
     match (expected, provided) {
         (ShapePattern::Scalar, ShapePattern::Scalar) => true,
         (ShapePattern::Any, _) | (_, ShapePattern::Any) => true,

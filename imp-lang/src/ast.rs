@@ -119,7 +119,7 @@ impl AstConfig for ParsedAst {
         T: Traverse<'ast, InAst = Self> + ?Sized,
         T::IdOut: Into<T::ExprOut>,
     {
-        traverser.trav_expr((*operand).clone()).into()
+        traverser.trav_expr((*operand).clone())
     }
 
     fn dispatch_name<'ast>(dispatch: &Self::Dispatch<'ast>) -> String {

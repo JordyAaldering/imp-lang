@@ -1,5 +1,4 @@
-/// # Optimisation cycle (`opt`)
-
+//! # Optimisation cycle (`opt`)
 mod constant_fold;
 mod dead_code_removal;
 

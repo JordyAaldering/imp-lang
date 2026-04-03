@@ -82,7 +82,7 @@ impl<'src> Parser<'src> {
         while self.lexer.peek().is_some() {
             let fundef = self.parse_fundef()?;
             let name = fundef.name.clone();
-            fundefs.entry(name).or_insert_with(Vec::new).push(fundef);
+            fundefs.entry(name).or_default().push(fundef);
         }
 
         // Convert to program with wrappers
@@ -344,13 +344,11 @@ impl<'src> Parser<'src> {
 
 
     fn parse_binary_operator(&mut self, previous: &Option<impl Operator>) -> ParseResult<Option<(Bop, Span)>> {
-        if let Some((token, _)) = self.lexer.peek() {
-            if let Ok(op) = token.try_into() {
-                if operator::precedes(&previous, &op)? {
-                    let (_, span) = self.lexer.next().unwrap();
-                    return Ok(Some((op, span)));
-                }
-            }
+        if let Some((token, _)) = self.lexer.peek()
+            && let Ok(op) = token.try_into()
+            && operator::precedes(previous, &op)? {
+            let (_, span) = self.lexer.next().unwrap();
+            return Ok(Some((op, span)));
         }
 
         Ok(None)
