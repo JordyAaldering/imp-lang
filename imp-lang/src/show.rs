@@ -183,10 +183,10 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
         };
         self.write(ty_str);
 
-        match ty.pattern_shape() {
-            None | Some(ShapePattern::Scalar) => {}
-            Some(ShapePattern::Any) => self.write("[*]"),
-            Some(ShapePattern::Axes(axes)) => {
+        match &ty.shape {
+            ShapePattern::Scalar => {}
+            ShapePattern::Any => self.write("[*]"),
+            ShapePattern::Axes(axes) => {
                 self.write("[");
                 let mut first = true;
                 for axis in axes {

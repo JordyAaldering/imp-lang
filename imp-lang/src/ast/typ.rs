@@ -1,238 +1,113 @@
-#[derive(Clone, Debug)]
-pub struct Type {
-    pub ty: BaseType,
-    pub pattern: Option<TypePattern>,
-    pub knowledge: TypeKnowledge,
-}
-
+/// The base scalar element type.
 #[derive(Clone, Copy, Debug)]
 pub enum BaseType {
     U32,
     Bool,
 }
 
+/// A fully resolved type: element type, shape pattern, and compile-time knowledge.
 #[derive(Clone, Debug)]
-pub struct TypePattern {
-    /// Overall shape pattern of the type.
-    /// Example: `u32[n]` uses `ShapePattern::Axes([AxisPattern::Dim(DimPattern::Var(ExtentVar { .. }))])`.
+pub struct Type {
+    pub ty: BaseType,
+    /// Shape as declared in the source pattern.
     pub shape: ShapePattern,
-    /// Named symbols introduced in this type and their origin.
-    /// Example: in `fn (u32[n] a, u32[n] b) -> u32[n]`, `n` can be bound to `a`'s dim 0.
-    pub binds: Vec<PatternBinding>,
-    /// Additional compile-time predicates over symbols.
-    /// Example: `n == arg0.dim0`.
-    pub constraints: Vec<PatternConstraint>,
+    /// Compile-time knowledge about this shape, derived by `tp::analyse_tp`.
+    pub knowledge: TypeKnowledge,
 }
 
+/// The shape component of a type pattern.
 #[derive(Clone, Debug)]
 pub enum ShapePattern {
-    /// Rank-0 shape.
+    /// Rank-0; no array dimensions.
     /// Surface example: `u32`.
     Scalar,
-    /// Fully fixed rank and extents.
-    /// Surface examples: `u32[42]`, `u32[n]`, `u32[len,u,..rest,v,w]`.
+    /// Explicit list of dimension and rest patterns.
+    /// Surface examples: `u32[42]`, `u32[n]`, `u32[m,..rest,n]`.
     Axes(Vec<AxisPattern>),
-    /// Shape is unconstrained.
+    /// Shape fully unconstrained.
     /// Surface example: `u32[*]`.
     Any,
 }
 
+/// One entry in an `Axes` shape pattern.
 #[derive(Clone, Debug)]
-pub enum RankPattern {
-    /// Rank is unknown.
-    /// Surface example: `u32[*]`.
-    Any,
-    /// Rank is exactly this value.
-    /// Surface examples: `Exact(0)` for scalar `u32`, `Exact(1)` for vectors like `u32[n]`.
-    Exact(u8),
+pub enum AxisPattern {
+    /// A single dimension (`_`, `42`, or a named symbol).
+    Dim(DimPattern),
+    /// Variable-length capture of remaining dimensions (`..rest`).
+    Rest(RestPattern),
 }
 
+/// A single dimension pattern entry.
 #[derive(Clone, Debug)]
 pub enum DimPattern {
-    /// Dimension unconstrained.
-    /// Surface example: `u32[.]` or `u32[_]`.
+    /// Size unknown. Surface example: `u32[_]`.
     Any,
-    /// Dimension is a compile-time constant.
-    /// Surface example: `u32[42]`.
+    /// Compile-time constant. Surface example: `u32[42]`.
     Known(u64),
-    /// Dimension is a named variable symbol.
-    /// Surface examples: `u32[n]`, `u32[len]`.
+    /// Named symbol. Surface examples: `u32[n]`, `u32[len]`.
     Var(ExtentVar),
 }
 
+/// A named dimension symbol with its binding role.
 #[derive(Clone, Debug)]
 pub struct ExtentVar {
     pub name: String,
     pub role: SymbolRole,
 }
 
-#[derive(Clone, Copy, Debug)]
-pub enum SymbolRole {
-    /// First occurrence in left-to-right argument order.
-    Define,
-    /// Reuse of an already defined symbol.
-    Use,
-}
-
-#[derive(Clone, Debug)]
-pub enum AxisPattern {
-    /// Single dimension entry (`42`, `n`, `len`).
-    Dim(DimPattern),
-    /// Variable-length remainder capture (`..rest`) which may appear between dimensions.
-    Rest(RestPattern),
-}
-
+/// A `..rest` capture with its binding role.
 #[derive(Clone, Debug)]
 pub struct RestPattern {
     pub name: String,
     pub role: SymbolRole,
 }
 
-#[derive(Clone, Debug)]
-pub struct PatternBinding {
-    /// Symbol introduced by this type pattern.
-    /// Surface example: `n` in `u32[n]`.
-    pub name: String,
-    /// Where the symbol value comes from.
-    pub source: PatternBindingSource,
+/// Whether a symbol is first introduced here or constrained to equal a prior definition.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SymbolRole {
+    /// First occurrence — this site defines the symbol's value.
+    Define,
+    /// Subsequent occurrence — must equal the defining occurrence.
+    Use,
 }
 
-#[derive(Clone, Debug)]
-pub enum PatternBindingSource {
-    /// Bind from the local dimension index.
-    Dim(usize),
-    /// Bind from a rest capture index in the axis pattern.
-    Rest(usize),
-}
-
-#[derive(Clone, Debug)]
-pub enum PatternConstraint {
-    /// Two symbols must resolve to the same dimension.
-    /// Surface example: `n == m`.
-    SameSymbol {
-        left: String,
-        right: String,
-    },
-}
-
-/// SaC-inspired array knowledge classes, extended with type-pattern payloads.
+/// SaC-inspired compile-time knowledge classes for arrays, derived by `tp::analyse_tp`.
 #[derive(Clone, Debug)]
 pub enum TypeKnowledge {
-    /// Scalar values are not in the SaC AK lattice.
+    /// Rank-0 scalar; not an array.
     Scalar,
-    /// Array Known Value: compile-time known values and shape pattern.
-    /// Example: literal `[1, 2, 3]` has AKV with shape `[3]`.
-    AKV(AkvInfo),
-    /// Array Known Shape: compile-time known shape pattern.
-    /// Example: argument `u32[n]` usually starts in AKS.
-    AKS(AksInfo),
-    /// Array Known Dimension: known rank, symbolic or partially known extents.
-    /// Example: rank known to be 1 but extent unknown.
-    AKD(AkdInfo),
-    /// Array Unknown Dimension.
-    /// Example: unconstrained array parameter.
+    /// Array Known Shape: rank and all symbolic extents are statically constrained.
+    /// Example: `u32[n]`, `u32[42,m]`.
+    AKS,
+    /// Array Known Dimension: rank is known but at least one extent is unconstrained (`_`).
+    /// Example: `u32[_]`, `u32[n,_]`.
+    AKD,
+    /// Array Unknown Dimension: shape fully unconstrained.
+    /// Example: `u32[*]`.
     AUD,
-    /// Array Unknown Dimension Greater than N.
-    /// Example: `u32[m,n,..rest]` implies rank >= 2, so this can be represented as `AUDGN { min_rank: 2 }`.
+    /// Array Unknown Dimension Greater than N: a `..rest` capture is present.
+    /// Example: `u32[m,n,..rest]` gives `AUDGN { min_rank: 2 }`.
     AUDGN { min_rank: u8 },
-}
-
-#[derive(Clone, Debug)]
-pub struct AkvInfo {
-    pub shape: ShapePattern,
-    pub value_pattern: ValuePattern,
-}
-
-#[derive(Clone, Debug)]
-pub struct AksInfo {
-    pub shape: ShapePattern,
-}
-
-#[derive(Clone, Debug)]
-pub struct AkdInfo {
-    pub rank: RankPattern,
-    pub dims: Vec<DimPattern>,
-}
-
-#[derive(Clone, Debug)]
-pub enum ValuePattern {
-    Any,
-    Bool(bool),
-    U32(u32),
-    /// Opaque symbolic value expression (constant folding can refine this later).
-    Symbolic(String),
 }
 
 impl Type {
     pub fn scalar(ty: BaseType) -> Self {
-        Self {
-            ty,
-            pattern: Some(TypePattern {
-                shape: ShapePattern::Scalar,
-                binds: Vec::new(),
-                constraints: Vec::new(),
-            }),
-            knowledge: TypeKnowledge::Scalar,
-        }
+        Self { ty, shape: ShapePattern::Scalar, knowledge: TypeKnowledge::Scalar }
     }
 
     pub fn vector(ty: BaseType, extent: &str) -> Self {
         let dim = if extent == "." {
             DimPattern::Any
         } else {
-            DimPattern::Var(ExtentVar {
-                name: extent.to_owned(),
-                role: SymbolRole::Use,
-            })
+            DimPattern::Var(ExtentVar { name: extent.to_owned(), role: SymbolRole::Use })
         };
-
-        Self::vector_with_dim_pattern(ty, dim)
+        Self::vector_dim(ty, dim)
     }
 
-    pub fn vector_with_dim_pattern(ty: BaseType, dim: DimPattern) -> Self {
-        let shape = ShapePattern::Axes(vec![AxisPattern::Dim(dim)]);
-
-        Self {
-            ty,
-            pattern: Some(TypePattern {
-                shape: shape.clone(),
-                binds: Vec::new(),
-                constraints: Vec::new(),
-            }),
-            knowledge: TypeKnowledge::AKS(AksInfo { shape }),
-        }
-    }
-
-    pub fn with_axes(mut self, axes: Vec<AxisPattern>) -> Self {
-        self.pattern = Some(TypePattern {
-            shape: ShapePattern::Axes(axes),
-            binds: Vec::new(),
-            constraints: Vec::new(),
-        });
-        self
-    }
-
-    pub fn bind_symbol_to_dim(mut self, symbol: &str, dim_index: usize) -> Self {
-        if let Some(pattern) = &mut self.pattern {
-            pattern.binds.push(PatternBinding {
-                name: symbol.to_owned(),
-                source: PatternBindingSource::Dim(dim_index),
-            });
-        }
-        self
-    }
-
-    pub fn from_pattern(ty: BaseType, pattern: TypePattern, knowledge: TypeKnowledge) -> Self {
-        Self {
-            ty,
-            pattern: Some(pattern),
-            knowledge,
-        }
-    }
-
-    pub fn with_pattern(mut self, pattern: TypePattern) -> Self {
-        self.pattern = Some(pattern);
-        self
+    /// Rank-1 type with the given single dimension pattern.
+    pub fn vector_dim(ty: BaseType, dim: DimPattern) -> Self {
+        Self { ty, shape: ShapePattern::Axes(vec![AxisPattern::Dim(dim)]), knowledge: TypeKnowledge::AKS }
     }
 
     pub fn with_knowledge(mut self, knowledge: TypeKnowledge) -> Self {
@@ -241,28 +116,29 @@ impl Type {
     }
 
     pub fn is_scalar(&self) -> bool {
-        matches!(self.pattern_shape(), Some(ShapePattern::Scalar))
+        matches!(self.shape, ShapePattern::Scalar)
+    }
+
+    pub fn is_array(&self) -> bool {
+        !self.is_scalar()
+    }
+
+    /// Returns the exact rank if statically known, `None` when a `..rest` or `Any` is present.
+    pub fn rank(&self) -> Option<u8> {
+        match &self.shape {
+            ShapePattern::Scalar => Some(0),
+            ShapePattern::Axes(axes) => {
+                if axes.iter().any(|a| matches!(a, AxisPattern::Rest(_))) {
+                    None
+                } else {
+                    Some(axes.len() as u8)
+                }
+            }
+            ShapePattern::Any => None,
+        }
     }
 
     pub fn is_vector(&self) -> bool {
-        matches!(self.rank_pattern(), RankPattern::Exact(1))
-    }
-
-    pub fn pattern_shape(&self) -> Option<&ShapePattern> {
-        self.pattern.as_ref().map(|p| &p.shape)
-    }
-
-    pub fn rank_pattern(&self) -> RankPattern {
-        match self.pattern_shape() {
-            Some(ShapePattern::Scalar) => RankPattern::Exact(0),
-            Some(ShapePattern::Axes(axes)) => {
-                if axes.iter().any(|axis| matches!(axis, AxisPattern::Rest(_))) {
-                    RankPattern::Any
-                } else {
-                    RankPattern::Exact(axes.len() as u8)
-                }
-            }
-            Some(ShapePattern::Any) | None => RankPattern::Any,
-        }
+        self.rank() == Some(1)
     }
 }
