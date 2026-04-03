@@ -35,6 +35,12 @@ pub enum InferenceError {
         known_min_rank: Option<usize>,
         shape: ShapePattern,
     },
+    /// Array literal elements have different base types or ranks.
+    InhomogeneousArray {
+        element: usize,
+        expected: Type,
+        found: Type,
+    },
 }
 
 impl<'ast> TypeInfer<'ast> {
@@ -132,6 +138,50 @@ impl<'ast> TypeInfer<'ast> {
                 }
             }
         }
+    }
+
+    /// Build the type of an array literal. The element count becomes a leading `Known(n)` dimension
+    /// prepended to the element type's shape. Errors on base-type or rank mismatch between elements.
+    fn array_literal_type(&mut self, elem_types: Vec<Type>) -> Type {
+        let count = elem_types.len();
+
+        let Some(first) = elem_types.first() else {
+            // Empty literal: return u32[0] as a conservative scalar-element vector.
+            return Type::vector_dim(BaseType::U32, DimPattern::Known(0));
+        };
+
+        let base_ty = first.ty;
+        let elem_shape = first.shape.clone();
+        let elem_rank = first.rank();
+
+        for (i, ty) in elem_types.iter().enumerate().skip(1) {
+            if ty.ty != base_ty || ty.rank() != elem_rank {
+                self.errors.push(InferenceError::InhomogeneousArray {
+                    element: i,
+                    expected: first.clone(),
+                    found: ty.clone(),
+                });
+            }
+        }
+
+        let leading = AxisPattern::Dim(DimPattern::Known(count as u64));
+        let result_shape = match &elem_shape {
+            ShapePattern::Scalar => ShapePattern::Axes(vec![leading]),
+            ShapePattern::Axes(axes) => {
+                let mut new_axes = Vec::with_capacity(1 + axes.len());
+                new_axes.push(leading);
+                new_axes.extend_from_slice(axes);
+                ShapePattern::Axes(new_axes)
+            }
+            // Element shape is fully unknown; can only say rank >= 1.
+            ShapePattern::Any => ShapePattern::Axes(vec![leading, AxisPattern::Rest(RestPattern {
+                name: "_rest".to_owned(),
+                role: SymbolRole::Define,
+            })]),
+        };
+
+        let knowledge = Self::shape_knowledge(&result_shape);
+        Type { ty: base_ty, shape: result_shape, knowledge }
     }
 
     fn selection_result_type(&self, arr_ty: &Type, scalar_idx_count: usize) -> Result<Type, InferenceError> {
@@ -284,14 +334,16 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
 
     fn trav_array(&mut self, array: Array<'ast, Self::InAst>) -> Self::ArrayOut {
         let mut values = Vec::with_capacity(array.values.len());
+        let mut elem_types = Vec::with_capacity(array.values.len());
 
         for value in array.values {
-            let (value, _) = self.trav_id(value);
+            let (value, ty) = self.trav_id(value);
+            elem_types.push(ty);
             values.push(value);
         }
 
-        let array = Array { values };
-        (array, Type::vector(BaseType::U32, "."))
+        let ty = self.array_literal_type(elem_types);
+        (Array { values }, ty)
     }
 
     type SelOut = (Sel<'ast, Self::OutAst>, Type);

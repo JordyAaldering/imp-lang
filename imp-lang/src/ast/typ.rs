@@ -1,5 +1,5 @@
 /// The base scalar element type.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BaseType {
     U32,
     Usize,
