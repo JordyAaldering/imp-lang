@@ -1,0 +1,3 @@
+fn scalar_or_array(u32[*] a) -> u32[*] {
+    return a;
+}

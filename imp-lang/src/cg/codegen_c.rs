@@ -44,6 +44,13 @@ impl CompileC {
             Id::Var(v) => v.name.clone(),
         }
     }
+
+    fn id_type<'a>(&'a self, id: &'a Id<'_, TypedAst>) -> &'a Type {
+        match id {
+            Id::Arg(i) => &self.arg_types[*i],
+            Id::Var(v) => &v.ty,
+        }
+    }
 }
 
 impl<'ast> Visit<'ast> for CompileC {
@@ -51,7 +58,7 @@ impl<'ast> Visit<'ast> for CompileC {
 
     fn visit_program(&mut self, program: &Program<'ast, TypedAst>) {
         self.output.push_str(&format!("#include \"{}.h\"\n\n", self.stem));
-        self.output.push_str("static size_t imp_flat_index_u32(ImpArrayRaw arr, ImpArrayRaw idx) {\n");
+        self.output.push_str("__attribute__((unused)) static size_t imp_flat_index_u32(ImpArrayRaw arr, ImpArrayRaw idx) {\n");
         self.output.push_str("    size_t flat = 0;\n");
         self.output.push_str("    uint32_t *idx_data = (uint32_t *)idx.data;\n");
         self.output.push_str("    for (size_t d = 0; d < idx.len; d += 1) {\n");
@@ -59,7 +66,7 @@ impl<'ast> Visit<'ast> for CompileC {
         self.output.push_str("    }\n");
         self.output.push_str("    return flat;\n");
         self.output.push_str("}\n\n");
-        self.output.push_str("static size_t imp_flat_index_usize(ImpArrayRaw arr, ImpArrayRaw idx) {\n");
+        self.output.push_str("__attribute__((unused)) static size_t imp_flat_index_usize(ImpArrayRaw arr, ImpArrayRaw idx) {\n");
         self.output.push_str("    size_t flat = 0;\n");
         self.output.push_str("    size_t *idx_data = (size_t *)idx.data;\n");
         self.output.push_str("    for (size_t d = 0; d < idx.len; d += 1) {\n");
@@ -241,12 +248,20 @@ impl<'ast> Visit<'ast> for CompileC {
     }
 
     fn visit_binary(&mut self, binary: &Binary<'ast, Self::Ast>) {
+        if matches!(self.id_type(&binary.l).shape, ShapePattern::Any)
+            || matches!(self.id_type(&binary.r).shape, ShapePattern::Any)
+        {
+            panic!("dynamic union values are not yet supported in binary ops during C codegen");
+        }
         let l = self.render_expr(&Expr::Id(binary.l.clone()));
         let r = self.render_expr(&Expr::Id(binary.r.clone()));
         self.expr_stack.push(format!("{} {} {}", l, binary.op, r));
     }
 
     fn visit_unary(&mut self, unary: &Unary<'ast, Self::Ast>) {
+        if matches!(self.id_type(&unary.r).shape, ShapePattern::Any) {
+            panic!("dynamic union values are not yet supported in unary ops during C codegen");
+        }
         let r = self.render_expr(&Expr::Id(unary.r.clone()));
         self.expr_stack.push(format!("{}{}", unary.op, r));
     }
@@ -275,6 +290,11 @@ impl<'ast> Visit<'ast> for CompileC {
     }
 
     fn visit_sel(&mut self, sel: &Sel<'ast, Self::Ast>) {
+        if matches!(self.id_type(&sel.arr).shape, ShapePattern::Any)
+            || matches!(self.id_type(&sel.idx).shape, ShapePattern::Any)
+        {
+            panic!("dynamic union values are not yet supported in selection during C codegen");
+        }
         let arr = self.nameof(&sel.arr);
         let idx = self.nameof(&sel.idx);
         let elem_base = elem_ctype_of_id(&sel.arr);
@@ -322,6 +342,14 @@ fn base_ctype(ty: &Type) -> &'static str {
 }
 
 fn full_ctype(ty: &Type) -> String {
+    if matches!(ty.shape, ShapePattern::Any) {
+        return match ty.ty {
+            BaseType::U32 => "ImpDynU32".to_owned(),
+            BaseType::Usize => "ImpDynUsize".to_owned(),
+            BaseType::Bool => "ImpDynBool".to_owned(),
+        };
+    }
+
     if ty.is_array() {
         "ImpArrayRaw".to_owned()
     } else {
