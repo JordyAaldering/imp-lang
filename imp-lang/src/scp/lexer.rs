@@ -23,6 +23,8 @@ pub enum Token {
     // Keywords
     Fn,
     Return,
+    Trait,
+    Impl,
     // Arithmetic operators
     Add, Sub, Mul, Div,
     // Comparison operators
@@ -154,6 +156,10 @@ impl<'source> Iterator for Lexer<'source> {
             Fn
         } else if self.match_str("return") {
             Return
+        } else if self.match_str("trait") {
+            Trait
+        } else if self.match_str("impl") {
+            Impl
         } else {
             match self.next_char()? {
                 // Symbols
