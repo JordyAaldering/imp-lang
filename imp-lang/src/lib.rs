@@ -5,6 +5,7 @@ mod traverse;
 pub mod show;
 // Compiler phases
 mod scp;
+mod tp;
 mod pre;
 mod tc;
 mod opt;
@@ -14,11 +15,19 @@ use crate::{ast::*, traverse::*};
 
 pub fn compile(src: &str) -> Program<'static, TypedAst> {
     let ast = scp::scanparse(&src).unwrap();
+    println!("{}", show::show(&ast));
+    let ast = tp::analyse_tp(ast);
+    println!("{}", show::show(&ast));
     let ast = pre::flatten(ast);
+    println!("{}", show::show(&ast));
     let ast = pre::to_ssa(ast);
+    println!("{}", show::show(&ast));
     let ast = tc::type_infer(ast).unwrap();
+    println!("{}", show::show(&ast));
     let ast = opt::constant_fold(ast);
+    println!("{}", show::show(&ast));
     let ast = opt::dead_code_removal(ast);
+    println!("{}", show::show(&ast));
     ast
 }
 

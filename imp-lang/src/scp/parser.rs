@@ -335,23 +335,75 @@ impl<'src> Parser<'src> {
 
     fn parse_type(&mut self) -> ParseResult<(Type, Span)> {
         let (token, span) = self.next()?;
-        let ty = match token {
+        let base = match token {
             Token::U32Type => BaseType::U32,
             Token::BoolType => BaseType::Bool,
             _ => return Err(ParseError::UnexpectedToken("type".to_owned(), token, span)),
         };
 
         let ty = if self.matches(Token::LSquare).is_some() {
-            let (id, _) = self.parse_id()?;
-
-            self.expect(Token::RSquare)?;
-
-            Type::vector(ty, &id)
+            if self.matches(Token::Mul).is_some() {
+                // u32[*] — shape fully unconstrained
+                self.expect(Token::RSquare)?;
+                Type {
+                    ty: base,
+                    pattern: Some(TypePattern {
+                        shape: ShapePattern::Any,
+                        binds: Vec::new(),
+                        constraints: Vec::new(),
+                    }),
+                    knowledge: TypeKnowledge::AUD,
+                }
+            } else {
+                let axes = self.parse_axes()?;
+                self.expect(Token::RSquare)?;
+                // Knowledge and symbol roles are resolved later by tp::analyse_tp.
+                let shape = ShapePattern::Axes(axes);
+                Type {
+                    ty: base,
+                    pattern: Some(TypePattern {
+                        shape: shape.clone(),
+                        binds: Vec::new(),
+                        constraints: Vec::new(),
+                    }),
+                    knowledge: TypeKnowledge::AUD,
+                }
+            }
         } else {
-            Type::scalar(ty)
+            Type::scalar(base)
         };
 
         Ok((ty, span))
+    }
+
+    fn parse_axes(&mut self) -> ParseResult<Vec<AxisPattern>> {
+        let mut axes = Vec::new();
+        axes.push(self.parse_axis()?);
+        while self.matches(Token::Comma).is_some() {
+            axes.push(self.parse_axis()?);
+        }
+        Ok(axes)
+    }
+
+    fn parse_axis(&mut self) -> ParseResult<AxisPattern> {
+        let (token, span) = self.next()?;
+        match token {
+            Token::DotDot => {
+                let (name, _) = self.parse_id()?;
+                // Role will be resolved by tp::analyse_tp.
+                Ok(AxisPattern::Rest(RestPattern { name, role: SymbolRole::Define }))
+            }
+            Token::U32Value(n) => Ok(AxisPattern::Dim(DimPattern::Known(n as u64))),
+            Token::Identifier(name) => {
+                if name == "_" {
+                    Ok(AxisPattern::Dim(DimPattern::Any))
+                } else {
+                    // Role will be resolved by tp::analyse_tp.
+                    Ok(AxisPattern::Dim(DimPattern::Var(ExtentVar { name, role: SymbolRole::Define })))
+                }
+            }
+            _ => Err(ParseError::UnexpectedToken("axis pattern".to_owned(), token, span)),
+        }
     }
 
     fn parse_id(&mut self) -> ParseResult<(String, Span)> {
@@ -362,6 +414,7 @@ impl<'src> Parser<'src> {
         }
     }
 }
+
 
 impl TryInto<Bop> for &Token {
     type Error = ();

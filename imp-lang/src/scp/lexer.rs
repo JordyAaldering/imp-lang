@@ -18,6 +18,7 @@ pub enum Token {
     Comma,
     Colon,
     Semicolon,
+    DotDot,
     // Keywords
     Fn,
     Return,
@@ -163,6 +164,7 @@ impl<'source> Iterator for Lexer<'source> {
                 '!' => Not,
                 // Assignment
                 '=' => Assign,
+                '.' if self.match_char('.') => DotDot,
                 // Literals
                 c if c.is_ascii_digit() => {
                     while self.peek_char().is_some_and(|c| c.is_ascii_digit()) {
@@ -173,8 +175,8 @@ impl<'source> Iterator for Lexer<'source> {
                     let end_idx = self.current;
                     U32Value(self.src[start_idx..end_idx].parse().unwrap())
                 }
-                c if c.is_ascii_alphabetic() => {
-                    while self.peek_char().is_some_and(|c| c.is_ascii_alphanumeric()) {
+                c if c.is_ascii_alphabetic() || c == '_' => {
+                    while self.peek_char().is_some_and(|c| c.is_ascii_alphanumeric() || c == '_') {
                         self.current += 1;
                         self.col += 1;
                     }

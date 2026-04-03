@@ -128,9 +128,16 @@ pub trait Rewrite<'ast> {
     }
 
     fn rewrite_fundef(&mut self, fundef: &mut Fundef<'ast, Self::Ast>) {
+        let new_args = fundef.args.iter().map(|&arg| self.rewrite_farg(arg)).collect();
+        fundef.args = new_args;
+        fundef.ret_type = self.rewrite_type(fundef.ret_type.clone());
         for stmt in &mut fundef.body {
             self.rewrite_stmt(stmt);
         }
+    }
+
+    fn rewrite_farg(&mut self, arg: &'ast Farg) -> &'ast Farg {
+        arg
     }
 
     ///
@@ -212,9 +219,9 @@ pub trait Rewrite<'ast> {
         v
     }
 
-    // fn rewrite_type(&mut self, ty: Type) -> Type {
-    //     ty
-    // }
+    fn rewrite_type(&mut self, ty: Type) -> Type {
+        ty
+    }
 }
 
 pub trait Traverse<'ast> {

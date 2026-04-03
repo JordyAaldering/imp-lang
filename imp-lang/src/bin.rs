@@ -13,6 +13,5 @@ fn main() {
     } = Args::parse();
 
     let src = fs::read_to_string(file).unwrap();
-    let ast = imp_lang::compile(&src);
-    println!("{}", imp_lang::show::show(&ast));
+    let _ = imp_lang::compile(&src);
 }
