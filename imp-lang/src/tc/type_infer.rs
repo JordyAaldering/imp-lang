@@ -218,14 +218,14 @@ impl<'ast> TypeInfer<'ast> {
                 match &axes[0] {
                     AxisPattern::Dim(DimPattern::Known(k)) => {
                         let k = *k as usize;
-                        // iv is a usize[k] vector (or usize[0] for execute-once).
-                        let iv_ty = Type::vector_dim(BaseType::Usize, DimPattern::Known(k as u64));
+                            // iv has the same element type as ub; shape is [k].
+                            let iv_ty = Type::vector_dim(ub_ty.ty, DimPattern::Known(k as u64));
                         (iv_ty, Some(k))
                     }
                     AxisPattern::Dim(DimPattern::Any) => {
                         // ub rank-1 but unknown length → k unknown.
                         let iv_ty = Type {
-                            ty: BaseType::Usize,
+                                ty: ub_ty.ty,
                             shape: ShapePattern::Axes(vec![AxisPattern::Dim(DimPattern::Any)]),
                             knowledge: TypeKnowledge::AKD,
                         };
@@ -234,7 +234,7 @@ impl<'ast> TypeInfer<'ast> {
                     AxisPattern::Dim(DimPattern::Var(_)) => {
                         // Named extent (e.g., `usize[n]`): value unknown at compile time.
                         let iv_ty = Type {
-                            ty: BaseType::Usize,
+                                ty: ub_ty.ty,
                             shape: ShapePattern::Axes(vec![AxisPattern::Dim(DimPattern::Any)]),
                             knowledge: TypeKnowledge::AKD,
                         };
@@ -246,7 +246,7 @@ impl<'ast> TypeInfer<'ast> {
             _ => {
                 // Multi-rank ub, contains `..rest`, or `Any` shape: fully unknown.
                 let iv_ty = Type {
-                    ty: BaseType::Usize,
+                        ty: ub_ty.ty,
                     shape: ShapePattern::Any,
                     knowledge: TypeKnowledge::AUD,
                 };
