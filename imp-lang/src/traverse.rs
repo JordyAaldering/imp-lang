@@ -61,6 +61,7 @@ pub trait Visit<'ast> {
             Binary(n) => self.visit_binary(n),
             Unary(n) => self.visit_unary(n),
             Array(n) => self.visit_array(n),
+            Sel(n) => self.visit_sel(n),
             Id(n) => self.visit_id(n),
             Bool(n) => self.visit_bool(n),
             U32(n) => self.visit_u32(n),
@@ -90,6 +91,13 @@ pub trait Visit<'ast> {
     fn visit_array(&mut self, array: &Array<'ast, Self::Ast>) {
         for value in &array.values {
             Self::Ast::visit_operand(self, value);
+        }
+    }
+
+    fn visit_sel(&mut self, sel: &Sel<'ast, Self::Ast>) {
+        Self::Ast::visit_operand(self, &sel.arr);
+        for idx in &sel.idx {
+            Self::Ast::visit_operand(self, idx);
         }
     }
 
@@ -156,6 +164,8 @@ pub trait Rewrite<'ast> {
             Binary(n) => self.rewrite_binary(n),
             Unary(n) => self.rewrite_unary(n),
             Array(n) => self.rewrite_array(n),
+            Sel(n) => self.rewrite_sel(n),
+            // Terminals
             Id(n) => Id(self.rewrite_id(n)),
             Bool(v) => Bool(self.rewrite_bool(v)),
             U32(v) => U32(self.rewrite_u32(v)),
@@ -180,6 +190,10 @@ pub trait Rewrite<'ast> {
 
     fn rewrite_array(&mut self, array: Array<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
         Expr::Array(array)
+    }
+
+    fn rewrite_sel(&mut self, sel: Sel<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
+        Expr::Sel(sel)
     }
 
     ///
@@ -298,6 +312,10 @@ pub trait Traverse<'ast> {
     type ArrayOut = Array<'ast, Self::OutAst>;
 
     fn trav_array(&mut self, array: Array<'ast, Self::InAst>) -> Self::ArrayOut;
+
+    type SelOut = Sel<'ast, Self::OutAst>;
+
+    fn trav_sel(&mut self, sel: Sel<'ast, Self::InAst>) -> Self::SelOut;
 
     ///
     /// Terminals

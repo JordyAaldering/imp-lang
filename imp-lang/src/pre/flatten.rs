@@ -178,6 +178,16 @@ impl<'ast> Flatten<'ast> {
                 }
                 self.emit_expr(Expr::Array(Array { values }))
             }
+            Expr::Sel(sel) => {
+                let arr = self.trav_expr((*sel.arr).clone());
+
+                let mut idx = Vec::with_capacity(sel.idx.len());
+                for i in sel.idx {
+                    idx.push(self.trav_expr(i.clone()));
+                }
+
+                self.emit_expr(Expr::Sel(Sel { arr, idx }))
+            }
             Expr::Id(id) => self.trav_id(id),
             Expr::Bool(v) => self.emit_expr(Expr::Bool(v)),
             Expr::U32(v) => self.emit_expr(Expr::U32(v)),

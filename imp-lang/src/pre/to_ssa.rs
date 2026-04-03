@@ -133,6 +133,10 @@ impl<'ast> ToSsa<'ast> {
                 let n = self.trav_array(n);
                 self.emit_expr(Expr::Array(n))
             }
+            Expr::Sel(n) => {
+                let n = self.trav_sel(n);
+                self.emit_expr(Expr::Sel(n))
+            }
             Expr::Id(id) => self.trav_id(id),
             Expr::Bool(v) => self.emit_expr(Expr::Bool(v)),
             Expr::U32(v) => self.emit_expr(Expr::U32(v)),
@@ -196,6 +200,17 @@ impl<'ast> ToSsa<'ast> {
             values.push(self.trav_id(value));
         }
         Array { values }
+    }
+
+    fn trav_sel(&mut self, sel: Sel<'ast, FlattenedAst>) -> Sel<'ast, UntypedAst> {
+        let arr = self.trav_id(sel.arr);
+
+        let mut idx = Vec::with_capacity(sel.idx.len());
+        for i in sel.idx {
+            idx.push(self.trav_id(i));
+        }
+
+        Sel { arr, idx }
     }
 
     fn trav_id(&mut self, id: Id<'ast, FlattenedAst>) -> Id<'ast, UntypedAst> {

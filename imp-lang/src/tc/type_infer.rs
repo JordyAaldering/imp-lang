@@ -103,31 +103,35 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
             Tensor(n) => {
                 let (expr, ty) = self.trav_tensor(n);
                 (Tensor(expr), ty)
-            },
+            }
             Binary(n) => {
                 let (expr, ty) = self.trav_binary(n);
                 (Binary(expr), ty)
-            },
+            }
             Unary(n) => {
                 let (expr, ty) = self.trav_unary(n);
                 (Unary(expr), ty)
-            },
+            }
             Array(n) => {
                 let (expr, ty) = self.trav_array(n);
                 (Array(expr), ty)
             }
+            Sel(n) => {
+                let (expr, ty) = self.trav_sel(n);
+                (Sel(expr), ty)
+            }
             Id(n) => {
                 let (id, ty) = self.trav_id(n);
                 (Id(id), ty)
-            },
+            }
             Bool(n) => {
                 let (expr, ty) = self.trav_bool(n);
                 (Bool(expr), ty)
-            },
+            }
             U32(n) => {
                 let (expr, ty) = self.trav_u32(n);
                 (U32(expr), ty)
-            },
+            }
         }
     }
 
@@ -180,6 +184,20 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
 
         let array = Array { values };
         (array, Type::vector(BaseType::U32, "."))
+    }
+
+    type SelOut = (Sel<'ast, Self::OutAst>, Type);
+
+    fn trav_sel(&mut self, sel: Sel<'ast, Self::InAst>) -> Self::SelOut {
+        let (arr, arr_ty) = self.trav_id(sel.arr);
+
+        let mut idxs = Vec::with_capacity(sel.idx.len());
+        for idx in sel.idx {
+            let (idx, _idx_ty) = self.trav_id(idx);
+            idxs.push(idx);
+        }
+
+        (Sel { arr, idx: idxs }, arr_ty)
     }
 
     ///

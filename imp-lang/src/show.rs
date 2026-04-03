@@ -95,6 +95,7 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
             Binary(n) => self.visit_binary(n),
             Unary(n) => self.visit_unary(n),
             Array(n) => self.visit_array(n),
+            Sel(n) => self.visit_sel(n),
             Id(n) => self.visit_id(n),
             Bool(n) => self.visit_bool(n),
             U32(n) => self.visit_u32(n),
@@ -143,6 +144,16 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
         for v in &array.values {
             Ast::visit_operand(self, v);
             self.output.push_str(", ");
+        }
+        self.output.push(']');
+    }
+
+    fn visit_sel(&mut self, sel: &Sel<'ast, Self::Ast>) {
+        Ast::visit_operand(self, &sel.arr);
+        self.output.push('[');
+        for idx in &sel.idx {
+            Ast::visit_operand(self, idx);
+            self.output.push(',');
         }
         self.output.push(']');
     }

@@ -11,6 +11,7 @@ mod tensor;
 mod binary;
 mod unary;
 mod array;
+mod sel;
 // Terminals
 mod id;
 mod typ;
@@ -28,6 +29,7 @@ pub use tensor::*;
 pub use binary::*;
 pub use unary::*;
 pub use array::*;
+pub use sel::*;
 // Terminals
 pub use id::*;
 pub use typ::*;

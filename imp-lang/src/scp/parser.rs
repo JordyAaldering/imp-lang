@@ -216,6 +216,25 @@ impl<'src> Parser<'src> {
         })))
     }
 
+    fn parse_array(&mut self) -> ParseResult<&'static Expr<'static, ParsedAst>> {
+        self.expect(Token::LSquare)?;
+
+        let mut values = Vec::new();
+
+        if self.matches(Token::RSquare).is_none() {
+            values.push(self.parse_expr(None::<Bop>)?);
+
+            while self.matches(Token::Comma).is_some() {
+                let v = self.parse_expr(None::<Bop>)?;
+                values.push(v);
+            }
+
+            self.expect(Token::RSquare)?;
+        }
+
+        Ok(self.alloc_expr(Expr::Array(Array { values })))
+    }
+
     fn parse_binary(&mut self, prev_op: Option<impl Operator>) -> ParseResult<&'static Expr<'static, ParsedAst>> {
         let (token, span_start) = self.next()?;
 
@@ -264,25 +283,6 @@ impl<'src> Parser<'src> {
     fn parse_unary(&mut self, op: Uop) -> ParseResult<&'static Expr<'static, ParsedAst>> {
         let r = self.parse_expr(Some(op))?;
         Ok(self.alloc_expr(Expr::Unary(Unary { r, op })))
-    }
-
-    fn parse_array(&mut self) -> ParseResult<&'static Expr<'static, ParsedAst>> {
-        self.expect(Token::LSquare)?;
-
-        let mut values = Vec::new();
-
-        if self.matches(Token::RSquare).is_none() {
-            values.push(self.parse_expr(None::<Bop>)?);
-
-            while self.matches(Token::Comma).is_some() {
-                let v = self.parse_expr(None::<Bop>)?;
-                values.push(v);
-            }
-
-            self.expect(Token::RSquare)?;
-        }
-
-        Ok(self.alloc_expr(Expr::Array(Array { values })))
     }
 
     fn parse_binary_operator(&mut self, previous: &Option<impl Operator>) -> ParseResult<Option<(Bop, Span)>> {
