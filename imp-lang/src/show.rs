@@ -183,10 +183,8 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
         };
         self.write(ty_str);
 
-        let shp_str = match &ty.shp {
-            Shape::Scalar => "",
-            Shape::Vector(n) => &format!("[{}]", n),
-        };
-        self.write(shp_str);
+        if let Some(extent) = ty.legacy_vector_extent() {
+            self.write(&format!("[{}]", extent));
+        }
     }
 }

@@ -211,8 +211,9 @@ fn base_ctype(ty: &Type) -> &'static str {
 }
 
 fn full_ctype(ty: &Type) -> String {
-    match &ty.shp {
-        Shape::Scalar => base_ctype(ty).to_owned(),
-        Shape::Vector(_) => "ImpArrayRaw".to_owned(),
+    if ty.is_vector() {
+        "ImpArrayRaw".to_owned()
+    } else {
+        base_ctype(ty).to_owned()
     }
 }
