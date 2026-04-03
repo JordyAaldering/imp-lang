@@ -43,9 +43,8 @@ impl Rewrite<'static> for AnalyseTp {
     }
 
     fn rewrite_type(&mut self, mut ty: Type) -> Type {
-        let Some(pattern) = &mut ty.pattern else { return ty };
-        resolve_shape_roles(&mut pattern.shape, &mut self.defined);
-        ty.knowledge = knowledge_from_shape(ty.pattern.as_ref().unwrap().shape.clone());
+        resolve_shape_roles(&mut ty.shape, &mut self.defined);
+        ty.knowledge = knowledge_from_shape(&ty.shape);
         ty
     }
 }
@@ -77,11 +76,11 @@ fn resolve_role(name: &str, defined: &mut HashSet<String>) -> SymbolRole {
 }
 
 /// Derive the `TypeKnowledge` value from an already role-resolved `ShapePattern`.
-fn knowledge_from_shape(shape: ShapePattern) -> TypeKnowledge {
+fn knowledge_from_shape(shape: &ShapePattern) -> TypeKnowledge {
     match shape {
         ShapePattern::Scalar => TypeKnowledge::Scalar,
         ShapePattern::Any => TypeKnowledge::AUD,
-        ShapePattern::Axes(ref axes) => {
+        ShapePattern::Axes(axes) => {
             let has_rest = axes.iter().any(|a| matches!(a, AxisPattern::Rest(_)));
             if has_rest {
                 let min_rank = axes.iter()
@@ -89,18 +88,10 @@ fn knowledge_from_shape(shape: ShapePattern) -> TypeKnowledge {
                     .count() as u8;
                 return TypeKnowledge::AUDGN { min_rank };
             }
-            let has_unknown_dim = axes.iter().any(|a| matches!(a, AxisPattern::Dim(DimPattern::Any)));
-            if has_unknown_dim {
-                let dims = axes.iter().map(|a| match a {
-                    AxisPattern::Dim(d) => d.clone(),
-                    AxisPattern::Rest(_) => unreachable!(),
-                }).collect();
-                TypeKnowledge::AKD(AkdInfo {
-                    rank: RankPattern::Exact(axes.len() as u8),
-                    dims,
-                })
+            if axes.iter().any(|a| matches!(a, AxisPattern::Dim(DimPattern::Any))) {
+                TypeKnowledge::AKD
             } else {
-                TypeKnowledge::AKS(AksInfo { shape })
+                TypeKnowledge::AKS
             }
         }
     }

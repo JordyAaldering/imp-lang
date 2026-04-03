@@ -347,25 +347,16 @@ impl<'src> Parser<'src> {
                 self.expect(Token::RSquare)?;
                 Type {
                     ty: base,
-                    pattern: Some(TypePattern {
-                        shape: ShapePattern::Any,
-                        binds: Vec::new(),
-                        constraints: Vec::new(),
-                    }),
+                    shape: ShapePattern::Any,
                     knowledge: TypeKnowledge::AUD,
                 }
             } else {
                 let axes = self.parse_axes()?;
                 self.expect(Token::RSquare)?;
                 // Knowledge and symbol roles are resolved later by tp::analyse_tp.
-                let shape = ShapePattern::Axes(axes);
                 Type {
                     ty: base,
-                    pattern: Some(TypePattern {
-                        shape: shape.clone(),
-                        binds: Vec::new(),
-                        constraints: Vec::new(),
-                    }),
+                    shape: ShapePattern::Axes(axes),
                     knowledge: TypeKnowledge::AUD,
                 }
             }
