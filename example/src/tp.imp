@@ -1,3 +1,12 @@
 fn mean_example(usize u, u32[u,u,x,x] a, u32[u,x,v,..rest,w] b) -> u32[p,u,..rest,u,u] {
-    return a;
+    a2 = a;
+    return a2;
+}
+
+fn meaner_example(usize u, u32[u,u,x,x] a, u32[u,x,v,..rest,w] b) -> bool {
+    a2 = a;
+    subarr = a2[0];
+    scalar = a2[0,1,2,3];
+    or_scalar = subarr[1,2,3];
+    return scalar == or_scalar;
 }
