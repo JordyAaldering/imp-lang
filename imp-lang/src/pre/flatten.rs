@@ -6,7 +6,14 @@ pub fn flatten<'ast>(program: Program<'ast, ParsedAst>) -> Program<'ast, Flatten
     let fundefs = program
         .fundefs
         .into_iter()
-        .map(|f| Flatten::new().trav_fundef(f))
+        .map(|(name, wrapper)| {
+            let overloads = wrapper
+                .overloads
+                .into_iter()
+                .map(|f| Flatten::new().trav_fundef(f))
+                .collect();
+            (name, FundefWrapper { name: wrapper.name, overloads })
+        })
         .collect();
     Program { fundefs }
 }

@@ -1,6 +1,8 @@
 // Declarations
 mod program;
 mod fundef;
+mod fundefwrapper;
+mod calltarget;
 // Statements
 mod stmt;
 mod assign;
@@ -20,6 +22,8 @@ mod typ;
 // Declarations
 pub use program::*;
 pub use fundef::*;
+pub use fundefwrapper::*;
+pub use calltarget::*;
 // Statements
 pub use stmt::*;
 pub use assign::*;
@@ -67,6 +71,9 @@ pub trait AstConfig: Clone + fmt::Debug {
     where
         T: Traverse<'ast, InAst = Self> + ?Sized,
         T::IdOut: Into<T::ExprOut>;
+
+    /// Extract the function name from a dispatch value, for display and codegen.
+    fn dispatch_name<'ast>(dispatch: &Self::Dispatch<'ast>) -> String;
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -113,6 +120,10 @@ impl AstConfig for ParsedAst {
         T::IdOut: Into<T::ExprOut>,
     {
         traverser.trav_expr((*operand).clone()).into()
+    }
+
+    fn dispatch_name<'ast>(dispatch: &Self::Dispatch<'ast>) -> String {
+        dispatch.clone()
     }
 }
 
@@ -161,6 +172,10 @@ impl AstConfig for FlattenedAst {
     {
         traverser.trav_id(operand).into()
     }
+
+    fn dispatch_name<'ast>(dispatch: &Self::Dispatch<'ast>) -> String {
+        dispatch.clone()
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -208,6 +223,10 @@ impl AstConfig for UntypedAst {
     {
         traverser.trav_id(operand).into()
     }
+
+    fn dispatch_name<'ast>(dispatch: &Self::Dispatch<'ast>) -> String {
+        dispatch.clone()
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -220,7 +239,8 @@ impl AstConfig for TypedAst {
 
     type SsaLink<'ast> = Option<&'ast Expr<'ast, TypedAst>>;
 
-    type Dispatch<'ast> = &'ast Fundef<'ast, TypedAst>;
+    /// Function dispatch: either the full wrapper (resolved at codegen) or a statically-known overload.
+    type Dispatch<'ast> = CallTarget<'ast>;
 
     type Operand<'ast> = Id<'ast, TypedAst>;
 
@@ -252,5 +272,9 @@ impl AstConfig for TypedAst {
         T::IdOut: Into<T::ExprOut>,
     {
         traverser.trav_id(operand).into()
+    }
+
+    fn dispatch_name<'ast>(dispatch: &Self::Dispatch<'ast>) -> String {
+        dispatch.name().to_owned()
     }
 }

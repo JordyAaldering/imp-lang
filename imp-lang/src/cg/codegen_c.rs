@@ -2,6 +2,7 @@ use crate::{ast::*, Visit};
 
 pub struct CompileC {
     output: String,
+    stem: String,
     arg_names: Vec<String>,
     expr_stack: Vec<String>,
     lhs_target: Option<(String, Type)>,
@@ -9,9 +10,10 @@ pub struct CompileC {
 }
 
 impl CompileC {
-    pub fn new() -> Self {
+    pub fn new(stem: &str) -> Self {
         Self {
             output: String::new(),
+            stem: stem.to_owned(),
             arg_names: Vec::new(),
             expr_stack: Vec::new(),
             lhs_target: None,
@@ -46,16 +48,7 @@ impl<'ast> Visit<'ast> for CompileC {
     type Ast = TypedAst;
 
     fn visit_program(&mut self, program: &Program<'ast, TypedAst>) {
-        self.output.push_str("#include <stdlib.h>\n");
-        self.output.push_str("#include <stdbool.h>\n");
-        self.output.push_str("#include <stdint.h>\n");
-        self.output.push('\n');
-        self.output.push_str("typedef struct {\n");
-        self.output.push_str("    size_t len;\n");
-        self.output.push_str("    size_t dim;\n");
-        self.output.push_str("    size_t *shp;\n");
-        self.output.push_str("    void *data;\n");
-        self.output.push_str("} ImpArrayRaw;\n\n");
+        self.output.push_str(&format!("#include \"{}.h\"\n\n", self.stem));
         self.output.push_str("static size_t imp_flat_index_u32(ImpArrayRaw arr, ImpArrayRaw idx) {\n");
         self.output.push_str("    size_t flat = 0;\n");
         self.output.push_str("    uint32_t *idx_data = (uint32_t *)idx.data;\n");
@@ -73,9 +66,11 @@ impl<'ast> Visit<'ast> for CompileC {
         self.output.push_str("    return flat;\n");
         self.output.push_str("}\n\n");
 
-        for fundef in &program.fundefs {
-            self.visit_fundef(fundef);
-            self.output.push('\n');
+        for wrapper in program.fundefs.values() {
+            for fundef in &wrapper.overloads {
+                self.visit_fundef(fundef);
+                self.output.push('\n');
+            }
         }
     }
 
@@ -283,6 +278,14 @@ impl<'ast> Visit<'ast> for CompileC {
         let flat_fn = flat_index_fn_of_id(&sel.idx);
 
         self.expr_stack.push(format!("(({elem_base} *){arr}.data)[{flat_fn}({arr}, {idx})]"));
+    }
+
+    fn visit_call(&mut self, call: &Call<'ast, TypedAst>) {
+        let name = TypedAst::dispatch_name(&call.id);
+        let args: Vec<String> = call.args.iter()
+            .map(|arg| self.nameof(arg))
+            .collect();
+        self.expr_stack.push(format!("IMP_{}({})", name, args.join(", ")));
     }
 
     fn visit_id(&mut self, id: &Id<'ast, Self::Ast>) {

@@ -3,13 +3,56 @@ use std::collections::HashMap;
 use crate::{ast::*, traverse::Traverse};
 
 pub fn type_infer<'ast>(program: Program<'ast, UntypedAst>) -> Result<Program<'ast, TypedAst>, InferenceError> {
-    let mut infer = TypeInfer::new();
-    let typed = infer.trav_program(program);
-    if let Some(err) = infer.errors.into_iter().next() {
-        Err(err)
-    } else {
-        Ok(typed)
+    let mut typed_wrappers: HashMap<String, FundefWrapper<'ast, TypedAst>> = HashMap::new();
+    
+    // Collect and sort function names to ensure deterministic ordering
+    let mut func_names: Vec<_> = program.fundefs.keys().cloned().collect();
+    func_names.sort();
+
+    // First pass: create stub wrappers for all functions to enable forward references
+    let mut wrappers_by_name: HashMap<String, &'ast FundefWrapper<'ast, TypedAst>> = HashMap::new();
+    for name in &func_names {
+        if let Some(wrapper) = program.fundefs.get(name) {
+            // Build stub overloads using annotation types from the untyped fundefs
+            let stub_overloads: Vec<Fundef<'ast, TypedAst>> = wrapper.overloads.iter().map(|untyped_fundef| {
+                Fundef {
+                    name: untyped_fundef.name.clone(),
+                    ret_type: untyped_fundef.ret_type.clone(),
+                    args: untyped_fundef.args.clone(),
+                    decs: Vec::new(),
+                    body: Vec::new(),
+                }
+            }).collect();
+            let stub_wrapper = Box::leak(Box::new(FundefWrapper {
+                name: name.clone(),
+                overloads: stub_overloads,
+            }));
+            wrappers_by_name.insert(name.clone(), stub_wrapper);
+        }
     }
+
+    // Second pass: type-check each function with all function signatures available
+    for name in func_names {
+        let wrapper = program.fundefs.get(&name).unwrap();
+        let mut typed_overloads = Vec::with_capacity(wrapper.overloads.len());
+
+        for fundef in &wrapper.overloads {
+            let mut infer = TypeInfer::new(&wrappers_by_name);
+            let typed = infer.trav_fundef(fundef.clone());
+            if let Some(err) = infer.errors.into_iter().next() {
+                return Err(err);
+            }
+            typed_overloads.push(typed);
+        }
+
+        // Replace the stub wrapper with the fully typed one
+        let typed_wrapper = FundefWrapper { name: name.clone(), overloads: typed_overloads };
+        let typed_wrapper_ref = Box::leak(Box::new(typed_wrapper.clone()));
+        wrappers_by_name.insert(name.clone(), typed_wrapper_ref);
+        typed_wrappers.insert(name.clone(), typed_wrapper);
+    }
+
+    Ok(Program { fundefs: typed_wrappers })
 }
 
 pub struct TypeInfer<'ast> {
@@ -17,6 +60,8 @@ pub struct TypeInfer<'ast> {
     idmap: HashMap<*const VarInfo<'ast, UntypedAst>, &'ast VarInfo<'ast, TypedAst>>,
     new_ids: Vec<&'ast VarInfo<'ast, TypedAst>>,
     errors: Vec<InferenceError>,
+    /// Mapping of function names to their typed wrapper stubs (for call resolution).
+    wrappers: HashMap<String, &'ast FundefWrapper<'ast, TypedAst>>,
 }
 
 #[allow(dead_code)]
@@ -39,15 +84,33 @@ pub enum InferenceError {
         expected: Type,
         found: Type,
     },
+    /// Call to undefined function.
+    UndefinedFunction {
+        name: String,
+    },
+    /// Call argument count mismatch.
+    CallArgumentCountMismatch {
+        func_name: String,
+        expected: usize,
+        provided: usize,
+    },
+    /// Call argument type mismatch.
+    CallArgumentTypeMismatch {
+        func_name: String,
+        arg_index: usize,
+        expected: Type,
+        provided: Type,
+    },
 }
 
 impl<'ast> TypeInfer<'ast> {
-    pub fn new() -> Self {
+    pub fn new(wrappers: &HashMap<String, &'ast FundefWrapper<'ast, TypedAst>>) -> Self {
         Self {
             args: Vec::new(),
             idmap: HashMap::new(),
             new_ids: Vec::new(),
             errors: Vec::new(),
+            wrappers: wrappers.clone(),
         }
     }
 
@@ -444,12 +507,61 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
         }
     }
 
-    // Perhaps this additionally needs to return the dispatch.
-    // Or do we look for dispatches in another phase? Perhaps that would be better
     type CallOut = (Call<'ast, Self::OutAst>, Type);
 
     fn trav_call(&mut self, call: Call<'ast, Self::InAst>) -> Self::CallOut {
-        todo!()
+        let func_name = &call.id;
+
+        // Look up the wrapper by name.
+        let Some(&wrapper) = self.wrappers.get(func_name) else {
+            self.errors.push(InferenceError::UndefinedFunction { name: func_name.clone() });
+            // Traverse arguments anyway to catch errors in them.
+            for arg in call.args {
+                let (_id, _ty) = self.trav_id(arg);
+            }
+            // Return a stub with a dummy error-type result. Use the first available wrapper as a placeholder.
+            let stub_wrapper = self.wrappers.values().next().copied().expect("at least one function must be defined");
+            let stub_call = Call { id: CallTarget::Wrapper(stub_wrapper), args: vec![] };
+            return (stub_call, Type {
+                ty: BaseType::U32,
+                shape: ShapePattern::Any,
+                knowledge: TypeKnowledge::AUD,
+            });
+        };
+
+        // For now, dispatch to the first overload for arity/type checking.
+        // Future: select the correct overload based on argument types.
+        let target = wrapper.overloads.first().expect("wrapper must have at least one overload");
+
+        // Check argument count.
+        if call.args.len() != target.args.len() {
+            self.errors.push(InferenceError::CallArgumentCountMismatch {
+                func_name: func_name.clone(),
+                expected: target.args.len(),
+                provided: call.args.len(),
+            });
+        }
+
+        // Type-check each argument.
+        let mut typed_args = Vec::with_capacity(call.args.len());
+        for (arg_idx, arg) in call.args.into_iter().enumerate() {
+            let (typed_arg, arg_ty) = self.trav_id(arg);
+            if arg_idx < target.args.len() {
+                let expected_ty = &target.args[arg_idx].ty;
+                if !types_compatible(expected_ty, &arg_ty) {
+                    self.errors.push(InferenceError::CallArgumentTypeMismatch {
+                        func_name: func_name.clone(),
+                        arg_index: arg_idx,
+                        expected: expected_ty.clone(),
+                        provided: arg_ty,
+                    });
+                }
+            }
+            typed_args.push(typed_arg);
+        }
+
+        let typed_call = Call { id: CallTarget::Wrapper(wrapper), args: typed_args };
+        (typed_call, target.ret_type.clone())
     }
 
     type TensorOut = (Tensor<'ast, Self::OutAst>, Type);
@@ -595,4 +707,50 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
 
 fn unifies(a: Type, _b: Type) -> Result<Type, InferenceError> {
     Ok(a)
+}
+
+/// Check if two types are compatible for parameter passing.
+/// For now, we use structural equality (no variance or polymorphism).
+fn types_compatible(expected: &Type, provided: &Type) -> bool {
+    expected.ty == provided.ty
+        && shapes_compatible(&expected.shape, &provided.shape)
+}
+
+/// Check if two shape patterns are compatible.
+/// For now, we use structural equality; later this could support variance.
+fn shapes_compatible(expected: &ShapePattern, provided: &ShapePattern) -> bool {
+    match (expected, provided) {
+        (ShapePattern::Scalar, ShapePattern::Scalar) => true,
+        (ShapePattern::Any, _) | (_, ShapePattern::Any) => true,
+        (ShapePattern::Axes(exp_axes), ShapePattern::Axes(prov_axes)) => {
+            if exp_axes.len() != prov_axes.len() {
+                return false;
+            }
+            exp_axes
+                .iter()
+                .zip(prov_axes.iter())
+                .all(|(e, p)| axes_compatible(e, p))
+        }
+        // Mismatched scalar/axes are not compatible
+        _ => false,
+    }
+}
+
+/// Check if two axis patterns are compatible.
+fn axes_compatible(expected: &AxisPattern, provided: &AxisPattern) -> bool {
+    match (expected, provided) {
+        (AxisPattern::Dim(exp_d), AxisPattern::Dim(prov_d)) => dims_compatible(exp_d, prov_d),
+        (AxisPattern::Rest(exp_r), AxisPattern::Rest(prov_r)) => exp_r.name == prov_r.name,
+        _ => false,
+    }
+}
+
+/// Check if two dimension patterns are compatible.
+fn dims_compatible(expected: &DimPattern, provided: &DimPattern) -> bool {
+    match (expected, provided) {
+        (DimPattern::Any, _) | (_, DimPattern::Any) => true,
+        (DimPattern::Known(e), DimPattern::Known(p)) => e == p,
+        (DimPattern::Var(e), DimPattern::Var(p)) => e.name == p.name,
+        _ => false,
+    }
 }

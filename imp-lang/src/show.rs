@@ -36,9 +36,11 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
     type Ast = Ast;
 
     fn visit_program(&mut self, program: &Program<'ast, Self::Ast>) {
-        for fundef in &program.fundefs {
-            self.visit_fundef(fundef);
-            self.write("\n");
+        for wrapper in program.fundefs.values() {
+            for fundef in &wrapper.overloads {
+                self.visit_fundef(fundef);
+                self.write("\n");
+            }
         }
     }
 
@@ -110,8 +112,7 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
     }
 
     fn visit_call(&mut self, call: &Call<'ast, Self::Ast>) {
-        // TODO: visit dispatch (either string name, or get name from function pointer)
-        self.write("NAMETODO");
+        self.write(&Self::Ast::dispatch_name(&call.id));
 
         self.write("(");
         for arg in &call.args {

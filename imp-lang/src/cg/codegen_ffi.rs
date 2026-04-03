@@ -24,8 +24,10 @@ impl<'ast> Visit<'ast> for CompileFfi {
     type Ast = TypedAst;
 
     fn visit_program(&mut self, program: &Program<'ast, TypedAst>) {
-        for fundef in &program.fundefs {
-            self.visit_fundef(fundef);
+        for wrapper in program.fundefs.values() {
+            for fundef in &wrapper.overloads {
+                self.visit_fundef(fundef);
+            }
         }
     }
 

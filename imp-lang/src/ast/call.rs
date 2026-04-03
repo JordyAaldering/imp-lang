@@ -2,10 +2,10 @@ use super::*;
 
 /// Function application (call)
 ///
-/// Example: `arr[iv]` where `iv` is a rank-1 integer vector.
+/// Example: `foo(x, y)` where `x` and `y` are operands (Ids or expressions).
 ///
-/// Scalar selections are written by constructing an explicit index vector,
-/// e.g. `arr[[i]]` or `arr[[i,j]]`.
+/// The `id` field holds the function's dispatch (name or identifier),
+/// and `args` holds the argument operands.
 #[derive(Clone, Debug)]
 pub struct Call<'ast, Ast: AstConfig> {
     pub id: Ast::Dispatch<'ast>,

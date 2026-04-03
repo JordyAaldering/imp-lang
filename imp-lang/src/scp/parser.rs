@@ -77,13 +77,21 @@ impl<'src> Parser<'src> {
 
 impl<'src> Parser<'src> {
     pub fn parse_program(&mut self) -> ParseResult<Program<'static, ParsedAst>> {
-        let mut fundefs = Vec::new();
+        let mut fundefs: std::collections::HashMap<String, Vec<Fundef<'static, ParsedAst>>> = std::collections::HashMap::new();
 
         while self.lexer.peek().is_some() {
-            fundefs.push(self.parse_fundef()?);
+            let fundef = self.parse_fundef()?;
+            let name = fundef.name.clone();
+            fundefs.entry(name).or_insert_with(Vec::new).push(fundef);
         }
 
-        Ok(Program { fundefs })
+        // Convert to program with wrappers
+        let wrappers = fundefs
+            .into_iter()
+            .map(|(name, overloads)| (name.clone(), FundefWrapper { name, overloads }))
+            .collect();
+
+        Ok(Program { fundefs: wrappers })
     }
 
     fn parse_fundef(&mut self) -> ParseResult<Fundef<'static, ParsedAst>> {

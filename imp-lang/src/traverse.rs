@@ -8,8 +8,10 @@ pub trait Visit<'ast> {
     ///
 
     fn visit_program(&mut self, program: &Program<'ast, Self::Ast>) {
-        for fundef in &program.fundefs {
-            self.visit_fundef(fundef);
+        for wrapper in program.fundefs.values() {
+            for fundef in &wrapper.overloads {
+                self.visit_fundef(fundef);
+            }
         }
     }
 
@@ -127,8 +129,10 @@ pub trait Rewrite<'ast> {
     ///
 
     fn rewrite_program(&mut self, program: &mut Program<'ast, Self::Ast>) {
-        for fundef in &mut program.fundefs {
-            self.rewrite_fundef(fundef);
+        for wrapper in program.fundefs.values_mut() {
+            for fundef in &mut wrapper.overloads {
+                self.rewrite_fundef(fundef);
+            }
         }
     }
 
@@ -244,9 +248,16 @@ pub trait Traverse<'ast> {
     ///
 
     fn trav_program(&mut self, program: Program<'ast, Self::InAst>) -> Program<'ast, Self::OutAst> {
-        let mut fundefs = Vec::with_capacity(program.fundefs.len());
-        for fundef in program.fundefs {
-            fundefs.push(self.trav_fundef(fundef));
+        let mut fundefs = std::collections::HashMap::new();
+        for (name, wrapper) in program.fundefs {
+            let mut overloads = Vec::with_capacity(wrapper.overloads.len());
+            for fundef in wrapper.overloads {
+                overloads.push(self.trav_fundef(fundef));
+            }
+            fundefs.insert(name.clone(), FundefWrapper {
+                name,
+                overloads,
+            });
         }
 
         Program { fundefs }

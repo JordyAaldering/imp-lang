@@ -3,6 +3,7 @@
 mod ast;
 mod traverse;
 pub mod show;
+use std::path::Path;
 // Compiler phases
 mod scp;
 mod tp;
@@ -38,7 +39,14 @@ pub fn emit_ffi(ast: &Program<'static, TypedAst>, outfile: &str) {
 }
 
 pub fn emit_c(ast: &Program<'static, TypedAst>, outfile: &str) {
-    let mut cg = cg::codegen_c::CompileC::new();
+    let stem = Path::new(outfile).file_stem().unwrap().to_str().unwrap().to_owned();
+    let mut cg = cg::codegen_c::CompileC::new(&stem);
+    cg.visit_program(ast);
+    std::fs::write(outfile, cg.finish()).unwrap();
+}
+
+pub fn emit_h(ast: &Program<'static, TypedAst>, outfile: &str) {
+    let mut cg = cg::codegen_h::CompileH::new();
     cg.visit_program(ast);
     std::fs::write(outfile, cg.finish()).unwrap();
 }

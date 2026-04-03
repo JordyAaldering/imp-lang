@@ -6,7 +6,14 @@ pub fn to_ssa<'ast>(program: Program<'ast, FlattenedAst>) -> Program<'ast, Untyp
     let fundefs = program
         .fundefs
         .into_iter()
-        .map(|f| ToSsa::new().trav_fundef(f))
+        .map(|(name, wrapper)| {
+            let overloads = wrapper
+                .overloads
+                .into_iter()
+                .map(|f| ToSsa::new().trav_fundef(f))
+                .collect();
+            (name, FundefWrapper { name: wrapper.name, overloads })
+        })
         .collect();
     Program { fundefs }
 }

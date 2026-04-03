@@ -11,7 +11,8 @@ fn iota_inner(u32 n) -> u32[n] {
 }
 
 fn iota(u32 n) -> u32[n] {
-    return iota_inner(n);
+    res = iota_inner(n);
+    return res;
 }
 
 fn arrays() -> u32[n] {
