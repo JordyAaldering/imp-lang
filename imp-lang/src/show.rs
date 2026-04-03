@@ -189,10 +189,7 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
             ShapePattern::Any => self.write("[*]"),
             ShapePattern::Axes(axes) => {
                 self.write("[");
-                let mut first = true;
                 for axis in axes {
-                    if !first { self.write(","); }
-                    first = false;
                     match axis {
                         AxisPattern::Dim(DimPattern::Any) => self.write("_"),
                         AxisPattern::Dim(DimPattern::Known(n)) => self.write(&n.to_string()),
@@ -202,6 +199,7 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
                             self.write(&rest.name);
                         }
                     }
+                    self.write(",")
                 }
                 self.write("]");
             }
