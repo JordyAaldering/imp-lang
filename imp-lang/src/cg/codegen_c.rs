@@ -109,36 +109,117 @@ impl<'ast> Visit<'ast> for CompileC {
 
     fn visit_tensor(&mut self, tensor: &Tensor<'ast, Self::Ast>) {
         let (target_name, target_ty) = self.lhs_target.clone().expect("tensor target must be set");
-        let data_name = format!("{}_data", target_name);
-        let shp_name = format!("{}_shp", target_name);
-        let len_name = format!("{}_len", target_name);
-
-        let lb = self.render_expr(&Expr::Id(tensor.lb.clone()));
-        let ub = self.render_expr(&Expr::Id(tensor.ub.clone()));
-        let iv = &tensor.iv.name;
         let base = base_ctype(&target_ty);
+        let iv_name = tensor.iv.name.clone();
 
-        self.push_line(&format!("size_t {} = (size_t)({});", len_name, ub));
-        self.push_line(&format!("{} *{} = ({} *)malloc({} * sizeof({}));", base, data_name, base, len_name, base));
+        // ── Backward-compat path: scalar iv (old syntax where lb/ub are plain scalars) ──
+        if tensor.iv.ty.is_scalar() {
+            let data_name = format!("{target_name}_data");
+            let shp_name  = format!("{target_name}_shp");
+            let len_name  = format!("{target_name}_len");
+            let lb = self.render_expr(&Expr::Id(tensor.lb.clone()));
+            let ub = self.render_expr(&Expr::Id(tensor.ub.clone()));
+            self.push_line(&format!("size_t {len_name} = (size_t)({ub});"));
+            self.push_line(&format!("{base} *{data_name} = ({base} *)malloc({len_name} * sizeof({base}));"));
+            self.push_line(&format!("for (size_t {iv_name} = (size_t)({lb}); {iv_name} < (size_t)({ub}); {iv_name} += 1) {{"));
+            self.indent += 1;
+            for stmt in &tensor.body { self.visit_stmt(stmt); }
+            let ret = self.render_expr(&Expr::Id(tensor.ret.clone()));
+            self.push_line(&format!("{data_name}[{iv_name}] = {ret};"));
+            self.indent -= 1;
+            self.push_line("}");
+            self.push_line(&format!("size_t *{shp_name} = (size_t *)malloc(sizeof(size_t));"));
+            self.push_line(&format!("{shp_name}[0] = {len_name};"));
+            self.push_line(&format!(
+                "ImpArrayRaw {target_name} = (ImpArrayRaw) {{ .len = {len_name}, .shp = {shp_name}, .dim = 1, .data = (void *){data_name} }};"
+            ));
+            return;
+        }
+
+        // ── New path: vector iv, lb, ub are ImpArrayRaw vectors ──
+        let rank = tensor.iv.ty.rank()
+            .expect("tensor iv must have a statically-known rank for C codegen") as usize;
+
+        let lb_name = self.nameof(&tensor.lb);
+        let ub_name = self.nameof(&tensor.ub);
+        // Determine the element type stored inside lb/ub (for correct pointer cast).
+        let lb_elem = elem_ctype_of_id(&tensor.lb);
+        let ub_elem = elem_ctype_of_id(&tensor.ub);
+
+        // Extract scalar lower/upper bound per dimension.
+        for d in 0..rank {
+            self.push_line(&format!(
+                "size_t {iv_name}_lb{d} = (size_t)(({lb_elem}*){lb_name}.data)[{d}];"
+            ));
+            self.push_line(&format!(
+                "size_t {iv_name}_ub{d} = (size_t)(({ub_elem}*){ub_name}.data)[{d}];"
+            ));
+        }
+
+        // Total element count in the result (product of extents).
+        let len_name  = format!("{target_name}_len");
+        let data_name = format!("{target_name}_data");
+        let shp_name  = format!("{target_name}_shp");
+        let extents: Vec<String> = (0..rank)
+            .map(|d| format!("({iv_name}_ub{d} - {iv_name}_lb{d})"))
+            .collect();
+        let total_len = if extents.is_empty() { "1".to_owned() } else { extents.join(" * ") };
+        self.push_line(&format!("size_t {len_name} = {total_len};"));
+        self.push_line(&format!("{base} *{data_name} = ({base} *)malloc({len_name} * sizeof({base}));"));
+
+        // Heap-allocate the result shape array.
+        self.push_line(&format!("size_t *{shp_name} = (size_t *)malloc({rank} * sizeof(size_t));"));
+        for d in 0..rank {
+            self.push_line(&format!("{shp_name}[{d}] = {iv_name}_ub{d} - {iv_name}_lb{d};"));
+        }
+
+        // Generate k nested for-loops.
+        for d in 0..rank {
+            self.push_line(&format!(
+                "for (size_t {iv_name}_{d} = {iv_name}_lb{d}; {iv_name}_{d} < {iv_name}_ub{d}; {iv_name}_{d} += 1) {{"
+            ));
+            self.indent += 1;
+        }
+
+        // Build iv as a stack-allocated ImpArrayRaw so that iv[i] selections work.
+        let iv_components: Vec<String> = (0..rank).map(|d| format!("{iv_name}_{d}")).collect();
         self.push_line(&format!(
-            "for (size_t {} = {}; {} < {}; {} += 1) {{",
-            iv, lb, iv, ub, iv
+            "size_t {iv_name}_data[{rank}] = {{ {} }};",
+            iv_components.join(", ")
+        ));
+        self.push_line(&format!("size_t {iv_name}_shp_arr[1] = {{ {rank} }};"));
+        self.push_line(&format!(
+            "ImpArrayRaw {iv_name} = (ImpArrayRaw) {{ .len = {rank}, .shp = {iv_name}_shp_arr, .dim = 1, .data = (void *){iv_name}_data }};"
         ));
 
-        self.indent += 1;
+        // Row-major flat index: Σ (iv_d - lb_d) * stride_d
+        let flat_terms: Vec<String> = (0..rank).map(|d| {
+            let stride: Vec<String> = (d + 1..rank)
+                .map(|j| format!("({iv_name}_ub{j} - {iv_name}_lb{j})"))
+                .collect();
+            let stride_expr = if stride.is_empty() { "1".to_owned() } else { stride.join(" * ") };
+            format!("({iv_name}_{d} - {iv_name}_lb{d}) * {stride_expr}")
+        }).collect();
+        let flat_expr = if flat_terms.is_empty() { "0".to_owned() } else { flat_terms.join(" + ") };
+        self.push_line(&format!("size_t {iv_name}_flat = {flat_expr};"));
+
+        // Body statements.
         for stmt in &tensor.body {
             self.visit_stmt(stmt);
         }
-        let ret = self.render_expr(&Expr::Id(tensor.ret.clone()));
-        self.push_line(&format!("{}[{}] = {};", data_name, iv, ret));
-        self.indent -= 1;
 
-        self.push_line("}");
-        self.push_line(&format!("size_t *{} = (size_t *)malloc(sizeof(size_t));", shp_name));
-        self.push_line(&format!("{}[0] = {};", shp_name, len_name));
+        // Store element into the flat result buffer.
+        let ret = self.render_expr(&Expr::Id(tensor.ret.clone()));
+        self.push_line(&format!("{data_name}[{iv_name}_flat] = {ret};"));
+
+        // Close nested loops.
+        for _ in 0..rank {
+            self.indent -= 1;
+            self.push_line("}");
+        }
+
         self.push_line(&format!(
-            "ImpArrayRaw {} = (ImpArrayRaw) {{ .len = {}, .shp = {}, .dim = 1, .data = (void *){} }};",
-            target_name, len_name, shp_name, data_name
+            "ImpArrayRaw {target_name} = (ImpArrayRaw) {{ .len = {len_name}, .shp = {shp_name}, .dim = {rank}, .data = (void *){data_name} }};"
         ));
     }
 
@@ -178,12 +259,12 @@ impl<'ast> Visit<'ast> for CompileC {
 
     fn visit_sel(&mut self, sel: &Sel<'ast, Self::Ast>) {
         let arr = self.nameof(&sel.arr);
+        let elem_base = elem_ctype_of_id(&sel.arr);
 
-        // TODO: compute flat index from indices and shape
+        // TODO: compute flat index from multiple indices and shape
         let idx0 = self.nameof(&sel.idx[0]);
 
-        // Obviously, the case should be derived from the actual type
-        self.expr_stack.push(format!("(({} *){}.data)[{}]", "uint32_t", arr, idx0));
+        self.expr_stack.push(format!("(({elem_base} *){arr}.data)[{idx0}]"));
     }
 
     fn visit_id(&mut self, id: &Id<'ast, Self::Ast>) {
@@ -212,9 +293,17 @@ fn base_ctype(ty: &Type) -> &'static str {
 }
 
 fn full_ctype(ty: &Type) -> String {
-    if ty.is_vector() {
+    if ty.is_array() {
         "ImpArrayRaw".to_owned()
     } else {
         base_ctype(ty).to_owned()
+    }
+}
+
+/// The C element type for the data pointer stored inside an ImpArrayRaw id.
+fn elem_ctype_of_id(id: &Id<'_, TypedAst>) -> &'static str {
+    match id {
+        Id::Var(v) => base_ctype(&v.ty),
+        Id::Arg(_) => "uint32_t",  // args used directly as array bounds are uncommon
     }
 }
