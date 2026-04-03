@@ -1,0 +1,3 @@
+fn planar_selection(usize[n] idx, u32[n:oshp,i:ishp] arr) -> u32[i:ishp] {
+    return { arr[idx][iv] | (o*ishp) <= iv < ishp }
+}

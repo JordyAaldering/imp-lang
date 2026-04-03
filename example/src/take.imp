@@ -1,0 +1,4 @@
+fn take(usize[n] shp, u32[n:oshp,i:ishp] arr) -> u32[n:shp]
+{
+    return { arr[iv] | (0*shp) <= iv < shp };
+}

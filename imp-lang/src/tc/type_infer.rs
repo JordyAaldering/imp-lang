@@ -193,6 +193,136 @@ impl<'ast> TypeInfer<'ast> {
             knowledge,
         })
     }
+
+    /// Given the type of `ub` (the upper-bound operand of a tensor expression),
+    /// return:
+    ///   - the type to assign to the index variable `iv`
+    ///   - `Some(k)` as the number of leading `Any` dimensions the tensor adds to the
+    ///     element type, or `None` when it cannot be determined statically (→ AUD result).
+    ///
+    /// Semantics:
+    ///   - Scalar `ub`: backward-compatible 1-D iteration; `iv` gets the same base type.
+    ///   - `ub : T[k]` (rank-1, known size k): k-dimensional iteration; `iv` is `usize[k]`.
+    ///       - k = 0 → execute once (empty iteration space), result = element type.
+    ///   - Anything else (unknown rank, `..rest` present, `Any` shape): unknown → AUD.
+    fn tensor_iv_and_dims(ub_ty: &Type) -> (Type, Option<usize>) {
+        match &ub_ty.shape {
+            ShapePattern::Scalar => {
+                // Backward-compatible 1-D: scalar ub, scalar iv of the same base type.
+                (Type::scalar(ub_ty.ty), Some(1))
+            }
+            ShapePattern::Axes(axes)
+                if axes.len() == 1 && matches!(axes[0], AxisPattern::Dim(_)) =>
+            {
+                // Rank-1 ub: its element count gives the iteration dimensionality k.
+                match &axes[0] {
+                    AxisPattern::Dim(DimPattern::Known(k)) => {
+                        let k = *k as usize;
+                        // iv is a usize[k] vector (or usize[0] for execute-once).
+                        let iv_ty = Type::vector_dim(BaseType::Usize, DimPattern::Known(k as u64));
+                        (iv_ty, Some(k))
+                    }
+                    AxisPattern::Dim(DimPattern::Any) => {
+                        // ub rank-1 but unknown length → k unknown.
+                        let iv_ty = Type {
+                            ty: BaseType::Usize,
+                            shape: ShapePattern::Axes(vec![AxisPattern::Dim(DimPattern::Any)]),
+                            knowledge: TypeKnowledge::AKD,
+                        };
+                        (iv_ty, None)
+                    }
+                    AxisPattern::Dim(DimPattern::Var(_)) => {
+                        // Named extent (e.g., `usize[n]`): value unknown at compile time.
+                        let iv_ty = Type {
+                            ty: BaseType::Usize,
+                            shape: ShapePattern::Axes(vec![AxisPattern::Dim(DimPattern::Any)]),
+                            knowledge: TypeKnowledge::AKD,
+                        };
+                        (iv_ty, None)
+                    }
+                    _ => unreachable!("guard ensured AxisPattern::Dim"),
+                }
+            }
+            _ => {
+                // Multi-rank ub, contains `..rest`, or `Any` shape: fully unknown.
+                let iv_ty = Type {
+                    ty: BaseType::Usize,
+                    shape: ShapePattern::Any,
+                    knowledge: TypeKnowledge::AUD,
+                };
+                (iv_ty, None)
+            }
+        }
+    }
+
+    /// Prepend `leading_axes` to `elem_ty`'s shape to produce the result type of a tensor.
+    ///
+    /// If `leading_axes` is empty the element type is returned unchanged (execute-once case).
+    /// The axes may carry concrete `Var` names (from `extract_ub_axes`) or be `Any`.
+    fn tensor_result_type(elem_ty: Type, leading_axes: Vec<AxisPattern>) -> Type {
+        if leading_axes.is_empty() {
+            return elem_ty;
+        }
+        let result_shape = match elem_ty.shape {
+            ShapePattern::Scalar => ShapePattern::Axes(leading_axes),
+            ShapePattern::Axes(elem_axes) => {
+                let mut new_axes = leading_axes;
+                new_axes.extend(elem_axes);
+                ShapePattern::Axes(new_axes)
+            }
+            ShapePattern::Any => {
+                // Element shape fully unknown; record leading dims and capture the rest.
+                let mut axes = leading_axes;
+                axes.push(AxisPattern::Rest(RestPattern {
+                    name: "_rest".to_owned(),
+                    role: SymbolRole::Define,
+                }));
+                ShapePattern::Axes(axes)
+            }
+        };
+        let knowledge = Self::shape_knowledge(&result_shape);
+        Type { ty: elem_ty.ty, shape: result_shape, knowledge }
+    }
+
+    /// Try to extract one named/constant `AxisPattern` per element from `ub`'s SSA-defining
+    /// array literal.  Returns `None` if `ub` is not a locally-defined array literal.
+    ///
+    /// For `ub = [cols]` (arg) → `[Dim(Var("cols", Use))]`.
+    /// For `ub = [3]`   (u32 literal absorbed into SSA) → `[Dim(Known(3))]`.
+    /// For `ub = []`    → `[]` (execute-once case).
+    fn extract_ub_axes(&self, ub: &Id<'ast, UntypedAst>) -> Option<Vec<AxisPattern>> {
+        let lvis = match ub {
+            Id::Var(v) => v,
+            Id::Arg(_) => return None,
+        };
+
+        let arr = match lvis.ssa? {
+            Expr::Array(arr) => arr,
+            _ => return None,
+        };
+
+        let mut axes = Vec::with_capacity(arr.values.len());
+        for elem in &arr.values {
+            let dp = match elem {
+                Id::Arg(i) => DimPattern::Var(ExtentVar {
+                    name: self.args[*i].name.clone(),
+                    role: SymbolRole::Use,
+                }),
+                Id::Var(v) => {
+                    // If the var's SSA is a U32 literal, use Known; otherwise Var by name.
+                    match v.ssa {
+                        Some(Expr::U32(val)) => DimPattern::Known(*val as u64),
+                        _ => DimPattern::Var(ExtentVar {
+                            name: v.name.clone(),
+                            role: SymbolRole::Use,
+                        }),
+                    }
+                }
+            };
+            axes.push(AxisPattern::Dim(dp));
+        }
+        Some(axes)
+    }
 }
 
 impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
@@ -296,10 +426,21 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
     type TensorOut = (Tensor<'ast, Self::OutAst>, Type);
 
     fn trav_tensor(&mut self, tensor: Tensor<'ast, Self::InAst>) -> Self::TensorOut {
-        let (lb, _) = self.trav_id(tensor.lb);
-        let (ub, _) = self.trav_id(tensor.ub);
+        // Inspect ub's SSA expression *before* traversal so we can extract named extents.
+        let ub_named_axes = self.extract_ub_axes(&tensor.ub);
 
-        let iv_new = self.alloc_lvis(tensor.iv.name.clone(), Type::scalar(BaseType::U32), None);
+        let (lb, _lb_ty) = self.trav_id(tensor.lb);
+        let (ub, ub_ty) = self.trav_id(tensor.ub);
+
+        // Determine iv's type using the typed ub shape (gives the rank / iv length).
+        let (iv_ty, leading_k) = Self::tensor_iv_and_dims(&ub_ty);
+
+        // Prefer the named axes from the SSA inspection; fall back to anonymous `Any` axes.
+        let leading_axes: Option<Vec<AxisPattern>> = ub_named_axes.or_else(|| {
+            leading_k.map(|k| (0..k).map(|_| AxisPattern::Dim(DimPattern::Any)).collect())
+        });
+
+        let iv_new = self.alloc_lvis(tensor.iv.name.clone(), iv_ty, None);
         self.idmap.insert(tensor.iv as *const _, iv_new);
         self.new_ids.push(iv_new);
 
@@ -308,10 +449,19 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
             body.push(self.trav_stmt(stmt));
         }
 
-        let (ret, _ret_ty) = self.trav_id(tensor.ret);
+        let (ret, ret_ty) = self.trav_id(tensor.ret);
+
+        let result_ty = match leading_axes {
+            Some(axes) => Self::tensor_result_type(ret_ty, axes),
+            None => Type {
+                ty: ret_ty.ty,
+                shape: ShapePattern::Any,
+                knowledge: TypeKnowledge::AUD,
+            },
+        };
 
         let tensor = Tensor { iv: iv_new, lb, ub, ret, body };
-        (tensor, Type::vector(BaseType::U32, "."))
+        (tensor, result_ty)
     }
 
     type BinaryOut = (Binary<'ast, Self::OutAst>, Type);

@@ -1,4 +1,4 @@
-fn arrays() -> u32[n] {
+fn arrays() -> u32[5] {
     a = [1,2,3,4,5];
     return a;
 }

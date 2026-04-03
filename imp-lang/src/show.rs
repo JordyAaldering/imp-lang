@@ -55,6 +55,7 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
         for id in &fundef.decs {
             self.indent();
             Self::Ast::visit_type(self, &id.ty);
+            self.write(" ");
             self.write(&id.name);
             self.write("/* meta-info here, like AKV constant value knowledge and other relevant info */");
             self.write(";\n");

@@ -6,8 +6,8 @@ fn addthem(u32 a, u32 b, u32 c) -> u32 {
     return a + b + c;
 }
 
-fn iota(u32 n) -> u32[ub] {
-    return { iv | 0 <= iv < n };
+fn iota(u32 n) -> u32[n] {
+    return { iv[0] | [0] <= iv < [n] };
 }
 
 fn arrays() -> u32[n] {
