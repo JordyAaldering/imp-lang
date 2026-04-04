@@ -1,14 +1,12 @@
 #![feature(associated_type_defaults)]
 
 mod ast;
-mod phase;
 mod traverse;
 mod show;
 // Compiler phases
 mod scp;
 mod tp;
 mod pre;
-mod mono;
 mod tc;
 mod opt;
 mod cg;
@@ -20,7 +18,7 @@ use crate::{ast::*, traverse::*};
 pub fn compile(src: &str) -> Program<'static, TypedAst> {
     let ast = scp::scanparse(src).unwrap();
     println!("{}", show::show(&ast));
-    let ast = mono::monomorphise_generics(ast);
+    let ast = cg::mono::monomorphise_generics(ast);
     println!("{}", show::show(&ast));
     let ast = tp::analyse_tp(ast);
     println!("{}", show::show(&ast));
