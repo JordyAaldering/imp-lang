@@ -1,14 +1,12 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, mem};
 
-use crate::ast::*;
+use crate::{ast::*, traverse::Traverse};
 
 pub fn flatten<'ast>(program: Program<'ast, ParsedAst>) -> Program<'ast, FlattenedAst> {
-    let functions = program
-        .functions
+    let functions = program.functions
         .into_iter()
         .map(|(name, fundef)| {
-            let flattened = Flatten::new().trav_fundef(fundef);
-            (name, flattened)
+            (name, Flatten::new().trav_fundef(fundef))
         })
         .collect();
     Program {
@@ -21,7 +19,7 @@ pub fn flatten<'ast>(program: Program<'ast, ParsedAst>) -> Program<'ast, Flatten
 
 struct Flatten<'ast> {
     uid: usize,
-    body_stack: Vec<Vec<Stmt<'ast, FlattenedAst>>>,
+    new_assigns: Vec<Stmt<'ast, FlattenedAst>>,
     env_stack: Vec<HashMap<String, Id<'ast, FlattenedAst>>>,
 }
 
@@ -29,7 +27,7 @@ impl<'ast> Flatten<'ast> {
     fn new() -> Self {
         Self {
             uid: 0,
-            body_stack: Vec::new(),
+            new_assigns: Vec::new(),
             env_stack: Vec::new(),
         }
     }
@@ -37,10 +35,6 @@ impl<'ast> Flatten<'ast> {
     fn fresh_uid(&mut self) -> String {
         self.uid += 1;
         format!("_flat_{}", self.uid)
-    }
-
-    fn alloc_farg(&self, name: String, ty: Type) -> &'ast Farg {
-        Box::leak(Box::new(Farg { name, ty }))
     }
 
     fn alloc_lvis(&self, name: String, ty: Option<Type>) -> &'ast VarInfo<'ast, FlattenedAst> {
@@ -56,7 +50,7 @@ impl<'ast> Flatten<'ast> {
     }
 
     fn pop_env(&mut self) {
-        self.env_stack.pop().expect("env stack underflow");
+        self.env_stack.pop().unwrap();
     }
 
     fn bind_env(&mut self, name: String, id: Id<'ast, FlattenedAst>) {
@@ -76,31 +70,28 @@ impl<'ast> Flatten<'ast> {
         let name = self.fresh_uid();
         let lvis = self.alloc_lvis(name.clone(), None);
         let expr = self.alloc_expr(expr);
-        self.body_stack
-            .last_mut()
-            .expect("missing body")
-            .push(Stmt::Assign(Assign { lvis, expr }));
+
+        self.new_assigns.push(Stmt::Assign(Assign { lvis, expr }));
+
         let id = Id::Var(name.clone());
         self.bind_env(name, id.clone());
         id
     }
+}
 
-    fn trav_fundef(&mut self, fundef: Fundef<'ast, ParsedAst>) -> Fundef<'ast, FlattenedAst> {
-        let mut args = Vec::with_capacity(fundef.args.len());
-        for arg in fundef.args {
-            args.push(self.alloc_farg(arg.name.clone(), arg.ty.clone()));
-        }
+impl<'ast> Traverse<'ast> for Flatten<'ast> {
+    type InAst = ParsedAst;
 
+    type OutAst = FlattenedAst;
+
+    fn trav_fundef(&mut self, fundef: Fundef<'ast, Self::InAst>) -> Fundef<'ast, Self::OutAst> {
         self.push_env();
-        for (i, arg) in args.iter().enumerate() {
+
+        for (i, arg) in fundef.args.iter().enumerate() {
             self.bind_env(arg.name.clone(), Id::Arg(i));
         }
-        self.body_stack.push(Vec::new());
 
-        // Bind `d` and `shp` from `d:shp` rank captures directly in the env.
-        // Also bind dimension variables from regular Dim type patterns (e.g. `usize[d]`).
-        // No assignment stmts are injected — these are pure projections of the farg resolved at codegen.
-        for (i, arg) in args.iter().enumerate() {
+        for (i, arg) in fundef.args.iter().enumerate() {
             if let ShapePattern::Axes(axes) = &arg.ty.shape {
                 for (k, axis) in axes.iter().enumerate() {
                     if let AxisPattern::Rank(capture) = axis {
@@ -114,139 +105,129 @@ impl<'ast> Flatten<'ast> {
             }
         }
 
+        let mut body = Vec::new();
         for stmt in fundef.body {
-            self.trav_stmt(stmt);
+            let stmt = self.trav_stmt(stmt);
+            body.extend(mem::take(&mut self.new_assigns));
+            body.push(stmt);
         }
 
-        let body = self.body_stack.pop().expect("missing function body");
         self.pop_env();
 
         Fundef {
             name: fundef.name,
-            args,
+            args: fundef.args,
             decs: Vec::new(),
             body,
             ret_type: fundef.ret_type,
         }
     }
 
-    fn trav_stmt(&mut self, stmt: Stmt<'ast, ParsedAst>) {
-        match stmt {
-            Stmt::Assign(assign) => {
-                let rhs = self.trav_expr((*assign.expr).clone());
-                let lhs_name = assign.lvis.name.clone();
-                let lhs_lvis = self.alloc_lvis(lhs_name.clone(), assign.lvis.ty.clone());
-                let rhs_expr = self.alloc_expr(Expr::Id(rhs));
-                self.body_stack
-                    .last_mut()
-                    .expect("missing body")
-                    .push(Stmt::Assign(Assign {
-                        lvis: lhs_lvis,
-                        expr: rhs_expr,
-                    }));
-                self.bind_env(lhs_name.clone(), Id::Var(lhs_name));
-            }
-            Stmt::Return(ret) => {
-                let id = self.trav_id(ret.id);
-                self.body_stack
-                    .last_mut()
-                    .expect("missing body")
-                    .push(Stmt::Return(Return { id }));
-            }
-        }
+    fn trav_assign(&mut self, assign: Assign<'ast, Self::InAst>) -> Assign<'ast, Self::OutAst> {
+        let rhs = self.trav_expr((*assign.expr).clone());
+        let lhs_name = assign.lvis.name.clone();
+        let lhs_lvis = self.alloc_lvis(lhs_name.clone(), assign.lvis.ty.clone());
+        let rhs_expr = self.alloc_expr(Expr::Id(rhs));
+
+        self.bind_env(lhs_name.clone(), Id::Var(lhs_name));
+
+        Assign { lvis: lhs_lvis, expr: rhs_expr }
     }
 
-    fn trav_expr(&mut self, expr: Expr<'ast, ParsedAst>) -> Id<'ast, FlattenedAst> {
-        match expr {
-            Expr::Call(call) => {
-                let call = self.trav_call(call);
-                self.emit_expr(Expr::Call(call))
-            }
-            Expr::PrfCall(prf_call) => {
-                let prf_call = self.trav_prf_call(prf_call);
-                self.emit_expr(Expr::PrfCall(prf_call))
-            }
-            Expr::Tensor(tensor) => {
-                let lb = self.trav_expr((*tensor.lb).clone());
-                let ub = self.trav_expr((*tensor.ub).clone());
-
-                self.push_env();
-                self.bind_env(tensor.iv.name.clone(), Id::Var(tensor.iv.name.clone()));
-
-                self.body_stack.push(Vec::new());
-                for stmt in tensor.body {
-                    self.trav_stmt(stmt);
-                }
-                let ret = self.trav_expr((*tensor.ret).clone());
-                let body = self.body_stack.pop().expect("missing tensor body");
-
-                self.pop_env();
-
-                let iv = self.alloc_lvis(tensor.iv.name.clone(), tensor.iv.ty.clone());
-                self.emit_expr(Expr::Tensor(Tensor {
-                    body,
-                    ret,
-                    iv,
-                    lb,
-                    ub,
-                }))
-            }
-            Expr::Binary(binary) => {
-                let l = self.trav_expr((*binary.l).clone());
-                let r = self.trav_expr((*binary.r).clone());
-                self.emit_expr(Expr::Binary(Binary {
-                    l,
-                    r,
-                    op: binary.op,
-                }))
-            }
-            Expr::Unary(unary) => {
-                let r = self.trav_expr((*unary.r).clone());
-                self.emit_expr(Expr::Unary(Unary { r, op: unary.op }))
-            }
-            Expr::Array(array) => {
-                let mut values = Vec::with_capacity(array.values.len());
-                for value in array.values {
-                    values.push(self.trav_expr(value.clone()));
-                }
-                self.emit_expr(Expr::Array(Array { values }))
-            }
-            Expr::Sel(sel) => {
-                let arr = self.trav_expr((*sel.arr).clone());
-                let idx = self.trav_expr((*sel.idx).clone());
-                self.emit_expr(Expr::Sel(Sel { arr, idx }))
-            }
-            Expr::Id(id) => self.trav_id(id),
-            Expr::Bool(v) => self.emit_expr(Expr::Bool(v)),
-            Expr::U32(v) => self.emit_expr(Expr::U32(v)),
-        }
+    fn trav_return(&mut self, ret: Return<'ast, Self::InAst>) -> Return<'ast, Self::OutAst> {
+        let id = self.trav_id(ret.id);
+        Return { id }
     }
 
-    fn trav_call(&mut self, call: Call<'ast, ParsedAst>) -> Call<'ast, FlattenedAst> {
+    type ExprOut = Id<'ast, Self::OutAst>;
+
+    fn trav_expr(&mut self, expr: Expr<'ast, Self::InAst>) -> Self::ExprOut {
+        use Expr::*;
+        let expr = match expr {
+            Call(n) => Call(self.trav_call(n)),
+            PrfCall(n) => PrfCall(self.trav_prf_call(n)),
+            Tensor(n) => Tensor(self.trav_tensor(n)),
+            Binary(n) => Binary(self.trav_binary(n)),
+            Unary(n) => Unary(self.trav_unary(n)),
+            Array(n) => Array(self.trav_array(n)),
+            Sel(n) => Sel(self.trav_sel(n)),
+            Id(n) => Id(self.trav_id(n)),
+            Bool(v) => Bool(v),
+            U32(v) => U32(v),
+        };
+        self.emit_expr(expr)
+    }
+
+    fn trav_call(&mut self, call: Call<'ast, Self::InAst>) -> Self::CallOut {
         let mut args = Vec::with_capacity(call.args.len());
         for arg in call.args {
             args.push(self.trav_expr(arg.clone()));
         }
 
-        Call {
-            id: call.id,
-            args,
-        }
+        Call { id: call.id, args }
     }
 
-    fn trav_prf_call(&mut self, prf_call: PrfCall<'ast, ParsedAst>) -> PrfCall<'ast, FlattenedAst> {
+    fn trav_prf_call(&mut self, prf_call: PrfCall<'ast, Self::InAst>) -> Self::PrfCallOut {
         let mut args = Vec::with_capacity(prf_call.args.len());
         for arg in prf_call.args {
             args.push(self.trav_expr(arg.clone()));
         }
 
-        PrfCall {
-            id: prf_call.id,
-            args,
-        }
+        PrfCall { id: prf_call.id, args }
     }
 
-    fn trav_id(&mut self, id: Id<'ast, ParsedAst>) -> Id<'ast, FlattenedAst> {
+    fn trav_tensor(&mut self, tensor: Tensor<'ast, Self::InAst>) -> Self::TensorOut {
+        let lb = self.trav_expr((*tensor.lb).clone());
+        let ub = self.trav_expr((*tensor.ub).clone());
+
+        self.push_env();
+        self.bind_env(tensor.iv.name.clone(), Id::Var(tensor.iv.name.clone()));
+        let old_assigns = mem::take(&mut self.new_assigns);
+
+        let mut body = Vec::new();
+        for stmt in tensor.body {
+            let stmt = self.trav_stmt(stmt);
+            body.extend(mem::take(&mut self.new_assigns));
+            body.push(stmt);
+        }
+
+        let ret = self.trav_expr((*tensor.ret).clone());
+        body.extend(mem::take(&mut self.new_assigns));
+
+        self.new_assigns = old_assigns;
+        self.pop_env();
+
+        let iv = self.alloc_lvis(tensor.iv.name.clone(), tensor.iv.ty.clone());
+
+        Tensor { body, ret, iv, lb, ub }
+    }
+
+    fn trav_binary(&mut self, binary: Binary<'ast, Self::InAst>) -> Self::BinaryOut {
+        let l = self.trav_expr((*binary.l).clone());
+        let r = self.trav_expr((*binary.r).clone());
+        Binary { l, r, op: binary.op }
+    }
+
+    fn trav_unary(&mut self, unary: Unary<'ast, Self::InAst>) -> Self::UnaryOut {
+        let r = self.trav_expr((*unary.r).clone());
+        Unary { r, op: unary.op }
+    }
+
+    fn trav_array(&mut self, array: Array<'ast, Self::InAst>) -> Self::ArrayOut {
+        let mut values = Vec::with_capacity(array.values.len());
+        for value in array.values {
+            values.push(self.trav_expr(value.clone()));
+        }
+        Array { values }
+    }
+
+    fn trav_sel(&mut self, sel: Sel<'ast, Self::InAst>) -> Self::SelOut {
+        let arr = self.trav_expr((*sel.arr).clone());
+        let idx = self.trav_expr((*sel.idx).clone());
+        Sel { arr, idx }
+    }
+
+    fn trav_id(&mut self, id: Id<'ast, Self::InAst>) -> Self::IdOut {
         match id {
             Id::Arg(i) => Id::Arg(i),
             Id::Var(name) => self.lookup_env(&name).unwrap_or(Id::Var(name)),

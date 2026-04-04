@@ -6,8 +6,7 @@ fn makevector(u32 ub) -> u32[ub] {
 }
 
 fn makematrix(u32 cols, u32 rows) -> u32[cols,rows] {
-    zero = [0];
-    res = { { @addSxS(@selAxV(iv, zero), @selAxV(jv, zero)) | [0] <= jv < [cols] }
+    res = { { @addSxS(@selAxV(iv, [0]), @selAxV(jv, [0])) | [0] <= jv < [cols] }
           | [0] <= iv < [rows] };
     return res;
 }
