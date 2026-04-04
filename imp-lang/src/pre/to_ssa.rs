@@ -125,8 +125,6 @@ impl<'ast> Traverse<'ast> for ToSsa<'ast> {
             Call(n) => Call(self.trav_call(n)),
             PrfCall(n) => PrfCall(self.trav_prf_call(n)),
             Tensor(n) => Tensor(self.trav_tensor(n)),
-            Binary(n) => Binary(self.trav_binary(n)),
-            Unary(n) => Unary(self.trav_unary(n)),
             Array(n) => Array(self.trav_array(n)),
             Sel(n) => Sel(self.trav_sel(n)),
             Id(n) => Id(self.trav_id(n)),
@@ -182,17 +180,6 @@ impl<'ast> Traverse<'ast> for ToSsa<'ast> {
             lb,
             ub,
         }
-    }
-
-    fn trav_binary(&mut self, binary: Binary<'ast, Self::InAst>) -> Self::BinaryOut {
-        let l = self.trav_id(binary.l);
-        let r = self.trav_id(binary.r);
-        Binary { l, r, op: binary.op }
-    }
-
-    fn trav_unary(&mut self, unary: Unary<'ast, Self::InAst>) -> Self::UnaryOut {
-        let r = self.trav_id(unary.r);
-        Unary { r, op: unary.op }
     }
 
     fn trav_array(&mut self, array: Array<'ast, Self::InAst>) -> Self::ArrayOut {

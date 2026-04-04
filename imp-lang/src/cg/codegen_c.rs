@@ -259,24 +259,6 @@ impl<'ast> Visit<'ast> for CompileC {
         ));
     }
 
-    fn visit_binary(&mut self, binary: &Binary<'ast, Self::Ast>) {
-        if self.id_is_any(&binary.l) || self.id_is_any(&binary.r)
-        {
-            panic!("dynamic union values are not yet supported in binary ops during C codegen");
-        }
-        let l = self.render_expr(&Expr::Id(binary.l));
-        let r = self.render_expr(&Expr::Id(binary.r));
-        self.expr_stack.push(format!("{} {} {}", l, binary.op, r));
-    }
-
-    fn visit_unary(&mut self, unary: &Unary<'ast, Self::Ast>) {
-        if self.id_is_any(&unary.r) {
-            panic!("dynamic union values are not yet supported in unary ops during C codegen");
-        }
-        let r = self.render_expr(&Expr::Id(unary.r));
-        self.expr_stack.push(format!("{}{}", unary.op, r));
-    }
-
     fn visit_array(&mut self, array: &Array<'ast, Self::Ast>) {
         let (target_name, target_ty) = self.lhs_target.clone().expect("array target must be set");
         let data_name = format!("{}_data", target_name);
@@ -314,6 +296,30 @@ impl<'ast> Visit<'ast> for CompileC {
     }
 
     fn visit_call(&mut self, call: &Call<'ast, TypedAst>) {
+        // Temporary: the user (or stdlib) should define the necessary traits and we should use those
+        if let CallTarget::TraitMethod { method_name, .. } = &call.id {
+            let args: Vec<String> = call.args.iter()
+                .map(|arg| self.render_expr(&Expr::Id(*arg)))
+                .collect();
+            let rendered = match (method_name.as_str(), args.as_slice()) {
+                ("+", [l, r]) => format!("{l} + {r}"),
+                ("-", [l, r]) => format!("{l} - {r}"),
+                ("*", [l, r]) => format!("{l} * {r}"),
+                ("/", [l, r]) => format!("{l} / {r}"),
+                ("==", [l, r]) => format!("{l} == {r}"),
+                ("!=", [l, r]) => format!("{l} != {r}"),
+                ("<", [l, r]) => format!("{l} < {r}"),
+                ("<=", [l, r]) => format!("{l} <= {r}"),
+                (">", [l, r]) => format!("{l} > {r}"),
+                (">=", [l, r]) => format!("{l} >= {r}"),
+                ("-", [r]) => format!("-{r}"),
+                ("!", [r]) => format!("!{r}"),
+                _ => panic!("unsupported trait-method operator call: {} with {} args", method_name, args.len()),
+            };
+            self.expr_stack.push(rendered);
+            return;
+        }
+
         let base_name = TypedAst::dispatch_name(&call.id);
         let arg_types: Vec<Type> = call.args.iter().map(|id| match id {
             Id::Arg(i) => self.arg_types[*i].clone(),

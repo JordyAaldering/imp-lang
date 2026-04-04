@@ -474,6 +474,34 @@ impl<'ast> TypeInfer<'ast> {
             }
         }
     }
+
+    fn operator_trait(call_name: &str, arity: usize) -> Option<(&'static str, &'static str)> {
+        match (call_name, arity) {
+            ("+", 2) => Some(("Add", "+")),
+            ("-", 2) => Some(("Sub", "-")),
+            ("*", 2) => Some(("Mul", "*")),
+            ("/", 2) => Some(("Div", "/")),
+            ("==", 2) => Some(("Eq", "==")),
+            ("!=", 2) => Some(("Ne", "!=")),
+            ("<", 2) => Some(("Lt", "<")),
+            ("<=", 2) => Some(("Le", "<=")),
+            (">", 2) => Some(("Gt", ">")),
+            (">=", 2) => Some(("Ge", ">=")),
+            ("-", 1) => Some(("Neg", "-")),
+            ("!", 1) => Some(("Not", "!")),
+            _ => None,
+        }
+    }
+
+    fn operator_fallback_type(call_name: &str, arg_types: &[Type]) -> Option<Type> {
+        match call_name {
+            "==" | "!=" | "<" | "<=" | ">" | ">=" | "!" => Some(Type::scalar(BaseType::Bool)),
+            "+" | "-" | "*" | "/" => {
+                Some(arg_types.first().cloned().unwrap_or_else(|| Type::scalar(BaseType::U32)))
+            }
+            _ => None,
+        }
+    }
 }
 
 impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
@@ -545,14 +573,6 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
                 let (expr, ty) = self.trav_tensor(n);
                 (Tensor(expr), ty)
             }
-            Binary(n) => {
-                let (expr, ty) = self.trav_binary(n);
-                (Binary(expr), ty)
-            }
-            Unary(n) => {
-                let (expr, ty) = self.trav_unary(n);
-                (Unary(expr), ty)
-            }
             Array(n) => {
                 let (expr, ty) = self.trav_array(n);
                 (Array(expr), ty)
@@ -580,6 +600,27 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
 
     fn trav_call(&mut self, call: Call<'ast, Self::InAst>) -> Self::CallOut {
         let func_name = &call.id;
+
+        if let Some((trait_name, method_name)) = Self::operator_trait(func_name, call.args.len()) {
+            let mut typed_args = Vec::with_capacity(call.args.len());
+            let mut arg_types = Vec::with_capacity(call.args.len());
+            for arg in call.args {
+                let (typed_arg, ty) = self.trav_id(arg);
+                typed_args.push(typed_arg);
+                arg_types.push(ty);
+            }
+
+            let ty = Self::operator_fallback_type(func_name, &arg_types)
+                .unwrap_or_else(|| Type::scalar(BaseType::U32));
+            let typed_call = Call {
+                id: CallTarget::TraitMethod {
+                    trait_name: trait_name.to_owned(),
+                    method_name: method_name.to_owned(),
+                },
+                args: typed_args,
+            };
+            return (typed_call, ty);
+        }
 
         let Some(&target) = self.functions.get(func_name) else {
             self.errors.push(InferenceError::UndefinedFunction { name: func_name.clone() });
@@ -753,22 +794,6 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
         (tensor, result_ty)
     }
 
-    type BinaryOut = (Binary<'ast, Self::OutAst>, Type);
-
-    fn trav_binary(&mut self, binary: Binary<'ast, Self::InAst>) -> Self::BinaryOut {
-        let (l, l_ty) = self.trav_id(binary.l);
-        let (r, r_ty) = self.trav_id(binary.r);
-        let ty = unifies(l_ty, r_ty).unwrap();
-        (Binary { l, r, op: binary.op }, ty)
-    }
-
-    type UnaryOut = (Unary<'ast, Self::OutAst>, Type);
-
-    fn trav_unary(&mut self, unary: Unary<'ast, Self::InAst>) -> Self::UnaryOut {
-        let (r, r_ty) = self.trav_id(unary.r);
-        (Unary { r, op: unary.op }, r_ty)
-    }
-
     type ArrayOut = (Array<'ast, Self::OutAst>, Type);
 
     fn trav_array(&mut self, array: Array<'ast, Self::InAst>) -> Self::ArrayOut {
@@ -864,10 +889,6 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
     fn trav_u32(&mut self, value: u32) -> Self::U32Out {
         (value, Type::scalar(BaseType::U32))
     }
-}
-
-fn unifies(a: Type, _b: Type) -> Result<Type, InferenceError> {
-    Ok(a)
 }
 
 /// Check if two types are compatible for parameter passing.

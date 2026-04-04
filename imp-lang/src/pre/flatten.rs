@@ -147,8 +147,6 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
             Call(n) => Call(self.trav_call(n)),
             PrfCall(n) => PrfCall(self.trav_prf_call(n)),
             Tensor(n) => Tensor(self.trav_tensor(n)),
-            Binary(n) => Binary(self.trav_binary(n)),
-            Unary(n) => Unary(self.trav_unary(n)),
             Array(n) => Array(self.trav_array(n)),
             Sel(n) => Sel(self.trav_sel(n)),
             Id(n) => Id(self.trav_id(n)),
@@ -200,17 +198,6 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
         let iv = self.alloc_lvis(tensor.iv.name.clone(), tensor.iv.ty.clone());
 
         Tensor { body, ret, iv, lb, ub }
-    }
-
-    fn trav_binary(&mut self, binary: Binary<'ast, Self::InAst>) -> Self::BinaryOut {
-        let l = self.trav_expr((*binary.l).clone());
-        let r = self.trav_expr((*binary.r).clone());
-        Binary { l, r, op: binary.op }
-    }
-
-    fn trav_unary(&mut self, unary: Unary<'ast, Self::InAst>) -> Self::UnaryOut {
-        let r = self.trav_expr((*unary.r).clone());
-        Unary { r, op: unary.op }
     }
 
     fn trav_array(&mut self, array: Array<'ast, Self::InAst>) -> Self::ArrayOut {

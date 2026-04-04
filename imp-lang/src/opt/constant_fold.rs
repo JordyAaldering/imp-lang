@@ -52,14 +52,6 @@ impl<'ast> Rewrite<'ast> for ConstantFold {
         assign.expr = Box::leak(Box::new(new_expr));
     }
 
-    fn rewrite_binary(&mut self, binary: Binary<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
-        if matches!(binary.op, Bop::Add)
-            && let (Some(l), Some(r)) = (self.const_u32(&binary.l), self.const_u32(&binary.r)) {
-            return Expr::U32(l + r);
-        }
-        Expr::Binary(binary)
-    }
-
     fn rewrite_prf_call(&mut self, prf_call: PrfCall<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
         let args = prf_call.args;
         match (prf_call.id, args.as_slice()) {

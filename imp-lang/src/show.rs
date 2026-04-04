@@ -182,8 +182,6 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
             Call(n) => self.visit_call(n),
             PrfCall(n) => self.visit_prf_call(n),
             Tensor(n) => self.visit_tensor(n),
-            Binary(n) => self.visit_binary(n),
-            Unary(n) => self.visit_unary(n),
             Array(n) => self.visit_array(n),
             Sel(n) => self.visit_sel(n),
             Id(n) => self.visit_id(n),
@@ -236,19 +234,6 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
         self.write(" < ");
         Ast::visit_operand(self, &tensor.ub);
         self.write(" }");
-    }
-
-    fn visit_binary(&mut self, binary: &Binary<'ast, Self::Ast>) {
-        Ast::visit_operand(self, &binary.l);
-        self.write(" ");
-        self.write(&binary.op.to_string());
-        self.write(" ");
-        Ast::visit_operand(self, &binary.r);
-    }
-
-    fn visit_unary(&mut self, unary: &Unary<'ast, Self::Ast>) {
-        self.write(&unary.op.to_string());
-        Ast::visit_operand(self, &unary.r);
     }
 
     fn visit_array(&mut self, array: &Array<'ast, Self::Ast>) {

@@ -32,6 +32,44 @@ enum ParsedFnItem {
 
 type ParseResult<T> = Result<T, ParseError>;
 
+#[derive(Clone, Copy)]
+pub(super) enum Bop {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Eq,
+    Ne,
+}
+
+impl Bop {
+    fn symbol(self) -> &'static str {
+        match self {
+            Bop::Add => "+",
+            Bop::Sub => "-",
+            Bop::Mul => "*",
+            Bop::Div => "/",
+            Bop::Eq => "==",
+            Bop::Ne => "!=",
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+pub(super) enum Uop {
+    Neg,
+    Not,
+}
+
+impl Uop {
+    fn symbol(self) -> &'static str {
+        match self {
+            Uop::Neg => "-",
+            Uop::Not => "!",
+        }
+    }
+}
+
 impl<'src> Parser<'src> {
     pub fn new(lexer: Lexer<'src>) -> Self {
         Self {
@@ -342,10 +380,9 @@ impl<'src> Parser<'src> {
 
         while let Some((op, _loc)) = self.parse_binary_operator(&prev_op)? {
             let right = self.parse_expr(Some(op))?;
-            left = self.alloc_expr(Expr::Binary(Binary {
-                l: left,
-                r: right,
-                op,
+            left = self.alloc_expr(Expr::Call(Call {
+                id: op.symbol().to_owned(),
+                args: vec![left, right],
             }));
 
             left = self.parse_postfix(left)?;
@@ -364,7 +401,10 @@ impl<'src> Parser<'src> {
 
     fn parse_unary(&mut self, op: Uop) -> ParseResult<&'static Expr<'static, ParsedAst>> {
         let r = self.parse_expr(Some(op))?;
-        Ok(self.alloc_expr(Expr::Unary(Unary { r, op })))
+        Ok(self.alloc_expr(Expr::Call(Call {
+            id: op.symbol().to_owned(),
+            args: vec![r],
+        })))
     }
 
     fn parse_call(&mut self, id: String) -> ParseResult<&'static Expr<'static, ParsedAst>> {

@@ -6,12 +6,19 @@ use super::*;
 #[derive(Clone, Debug)]
 pub enum CallTarget<'ast> {
     Function(&'ast Fundef<'ast, TypedAst>),
+    TraitMethod {
+        trait_name: String,
+        method_name: String,
+    },
 }
 
 impl<'ast> CallTarget<'ast> {
-    pub fn name(&self) -> &str {
+    pub fn name(&self) -> String {
         match self {
-            CallTarget::Function(f) => &f.name,
+            CallTarget::Function(f) => f.name.clone(),
+            CallTarget::TraitMethod { trait_name, method_name } => {
+                format!("{trait_name}::{method_name}")
+            }
         }
     }
 }

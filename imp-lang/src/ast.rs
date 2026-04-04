@@ -12,8 +12,6 @@ mod expr;
 mod call;
 mod prf;
 mod tensor;
-mod binary;
-mod unary;
 mod array;
 mod sel;
 // Terminals
@@ -34,8 +32,6 @@ pub use expr::*;
 pub use call::*;
 pub use prf::*;
 pub use tensor::*;
-pub use binary::*;
-pub use unary::*;
 pub use array::*;
 pub use sel::*;
 // Terminals
@@ -277,6 +273,6 @@ impl AstConfig for TypedAst {
     }
 
     fn dispatch_name<'ast>(dispatch: &Self::Dispatch<'ast>) -> String {
-        dispatch.name().to_owned()
+        dispatch.name()
     }
 }

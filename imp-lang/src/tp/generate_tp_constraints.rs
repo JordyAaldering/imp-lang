@@ -31,4 +31,5 @@
 //! And in the generated wrapper function (both on the Rust and C side),
 //! the conditional checks if this condition holds, continuing with the other cases if not.
 
+#[allow(dead_code)]
 pub struct GenTPConstraints;

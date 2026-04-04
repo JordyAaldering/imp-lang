@@ -97,17 +97,6 @@ impl<'ast> Rewrite<'ast> for DeadCodeRemoval {
         Expr::Tensor(tensor)
     }
 
-    fn rewrite_binary(&mut self, mut binary: Binary<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
-        binary.l = self.rewrite_id(binary.l);
-        binary.r = self.rewrite_id(binary.r);
-        Expr::Binary(binary)
-    }
-
-    fn rewrite_unary(&mut self, mut unary: Unary<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
-        unary.r = self.rewrite_id(unary.r);
-        Expr::Unary(unary)
-    }
-
     fn rewrite_array(&mut self, mut array: Array<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
         for value in &mut array.values {
             *value = self.rewrite_id(*value);

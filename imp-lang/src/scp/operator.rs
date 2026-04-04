@@ -1,5 +1,3 @@
-use crate::ast;
-
 use super::parser::ParseError;
 
 pub trait Operator {
@@ -33,27 +31,26 @@ pub fn precedes(l: &Option<impl Operator>, r: &impl Operator) -> Result<bool, Pa
     }
 }
 
-impl Operator for ast::Bop {
+impl Operator for super::parser::Bop {
     fn precedence(&self) -> usize {
-        use ast::Bop::*;
+        use super::parser::Bop::*;
         match self {
             Eq | Ne => 2,
-            Lt | Le | Gt | Ge => 3,
             Add | Sub => 4,
             Mul | Div => 5,
         }
     }
 
     fn associativity(&self) -> Assoc {
-        use ast::Bop::*;
+        use super::parser::Bop::*;
         match self {
             Add | Sub | Mul | Div => Assoc::LeftToRight,
-            Eq | Ne | Lt | Le | Gt | Ge => Assoc::NonAssoc,
+            Eq | Ne => Assoc::NonAssoc,
         }
     }
 }
 
-impl Operator for ast::Uop {
+impl Operator for super::parser::Uop {
     /// Unary operators always have precedence
     fn precedence(&self) -> usize {
         256

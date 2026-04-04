@@ -69,8 +69,6 @@ pub trait Visit<'ast> {
             Call(n) => self.visit_call(n),
             PrfCall(n) => self.visit_prf_call(n),
             Tensor(n) => self.visit_tensor(n),
-            Binary(n) => self.visit_binary(n),
-            Unary(n) => self.visit_unary(n),
             Array(n) => self.visit_array(n),
             Sel(n) => self.visit_sel(n),
             Id(n) => self.visit_id(n),
@@ -101,15 +99,6 @@ pub trait Visit<'ast> {
         }
 
         Self::Ast::visit_operand(self, &tensor.ret);
-    }
-
-    fn visit_binary(&mut self, binary: &Binary<'ast, Self::Ast>) {
-        Self::Ast::visit_operand(self, &binary.l);
-        Self::Ast::visit_operand(self, &binary.r);
-    }
-
-    fn visit_unary(&mut self, unary: &Unary<'ast, Self::Ast>) {
-        Self::Ast::visit_operand(self, &unary.r);
     }
 
     fn visit_array(&mut self, array: &Array<'ast, Self::Ast>) {
@@ -190,8 +179,6 @@ pub trait Rewrite<'ast> {
             Call(n) => self.rewrite_call(n),
             PrfCall(n) => self.rewrite_prf_call(n),
             Tensor(n) => self.rewrite_tensor(n),
-            Binary(n) => self.rewrite_binary(n),
-            Unary(n) => self.rewrite_unary(n),
             Array(n) => self.rewrite_array(n),
             Sel(n) => self.rewrite_sel(n),
             // Terminals
@@ -215,14 +202,6 @@ pub trait Rewrite<'ast> {
             self.rewrite_stmt(stmt);
         }
         Expr::Tensor(tensor)
-    }
-
-    fn rewrite_binary(&mut self, binary: Binary<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
-        Expr::Binary(binary)
-    }
-
-    fn rewrite_unary(&mut self, unary: Unary<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
-        Expr::Unary(unary)
     }
 
     fn rewrite_array(&mut self, array: Array<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
@@ -342,14 +321,6 @@ pub trait Traverse<'ast> {
     type TensorOut = Tensor<'ast, Self::OutAst>;
 
     fn trav_tensor(&mut self, tensor: Tensor<'ast, Self::InAst>) -> Self::TensorOut;
-
-    type BinaryOut = Binary<'ast, Self::OutAst>;
-
-    fn trav_binary(&mut self, binary: Binary<'ast, Self::InAst>) -> Self::BinaryOut;
-
-    type UnaryOut = Unary<'ast, Self::OutAst>;
-
-    fn trav_unary(&mut self, unary: Unary<'ast, Self::InAst>) -> Self::UnaryOut;
 
     type ArrayOut = Array<'ast, Self::OutAst>;
 
