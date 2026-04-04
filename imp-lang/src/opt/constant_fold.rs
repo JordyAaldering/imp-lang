@@ -45,53 +45,41 @@ impl<'ast> Rewrite<'ast> for ConstantFold {
         let new_expr = self.rewrite_expr((*assign.expr).clone());
 
         match &new_expr {
-            Expr::U32(v) => { self.known.insert(Self::ptr(assign.lvis), *v); }
-            _ => { self.known.remove(&Self::ptr(assign.lvis)); }
+            Expr::U32(v) => {
+                self.known.insert(Self::ptr(assign.lvis), *v);
+                assign.expr = Box::leak(Box::new(new_expr));
+            }
+            _ => {
+                debug_assert!(!self.known.contains_key(&Self::ptr(assign.lvis)));
+            }
         }
-
-        assign.expr = Box::leak(Box::new(new_expr));
     }
 
     fn rewrite_prf_call(&mut self, prf_call: PrfCall<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
-        let args = prf_call.args;
-        match (prf_call.id, args.as_slice()) {
+        match (&prf_call.id, &prf_call.args.as_slice()) {
             (Prf::AddSxS, [l, r]) => {
                 if let (Some(l), Some(r)) = (self.const_u32(l), self.const_u32(r)) {
-                    Expr::U32(l + r)
-                } else {
-                    Expr::PrfCall(PrfCall { id: Prf::AddSxS, args })
+                    return Expr::U32(l + r);
                 }
             }
             (Prf::SubSxS, [l, r]) => {
                 if let (Some(l), Some(r)) = (self.const_u32(l), self.const_u32(r)) {
-                    Expr::U32(l - r)
-                } else {
-                    Expr::PrfCall(PrfCall { id: Prf::SubSxS, args })
+                    return Expr::U32(l - r);
                 }
             }
             (Prf::MulSxS, [l, r]) => {
                 if let (Some(l), Some(r)) = (self.const_u32(l), self.const_u32(r)) {
-                    Expr::U32(l * r)
-                } else {
-                    Expr::PrfCall(PrfCall { id: Prf::MulSxS, args })
+                    return Expr::U32(l * r);
                 }
             }
             (Prf::DivSxS, [l, r]) => {
-                if let (Some(l), Some(r)) = (self.const_u32(l), self.const_u32(r))
-                    && r != 0 {
-                    Expr::U32(l / r)
-                } else {
-                    Expr::PrfCall(PrfCall { id: Prf::DivSxS, args })
+                if let (Some(l), Some(r)) = (self.const_u32(l), self.const_u32(r)) && r != 0 {
+                    return Expr::U32(l / r);
                 }
             }
-            _ => Expr::PrfCall(PrfCall { id: prf_call.id, args }),
+            _ => (),
         }
-    }
 
-    fn rewrite_tensor(&mut self, mut tensor: Tensor<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
-        for stmt in &mut tensor.body {
-            self.rewrite_stmt(stmt);
-        }
-        Expr::Tensor(tensor)
+        Expr::PrfCall(prf_call)
     }
 }
