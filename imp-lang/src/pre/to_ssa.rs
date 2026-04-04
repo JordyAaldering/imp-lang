@@ -1,14 +1,12 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, mem};
 
-use crate::ast::*;
+use crate::{ast::*, traverse::Traverse};
 
 pub fn to_ssa<'ast>(program: Program<'ast, FlattenedAst>) -> Program<'ast, UntypedAst> {
-    let functions = program
-        .functions
+    let functions = program.functions
         .into_iter()
         .map(|(name, fundef)| {
-            let ssa = ToSsa::new().trav_fundef(fundef);
-            (name, ssa)
+            (name, ToSsa::new().trav_fundef(fundef))
         })
         .collect();
     Program {
@@ -21,8 +19,8 @@ pub fn to_ssa<'ast>(program: Program<'ast, FlattenedAst>) -> Program<'ast, Untyp
 
 pub struct ToSsa<'ast> {
     uid: usize,
-    ids: Vec<&'ast VarInfo<'ast, UntypedAst>>,
-    body_stack: Vec<Vec<Stmt<'ast, UntypedAst>>>,
+    decs: Vec<&'ast VarInfo<'ast, UntypedAst>>,
+    new_assigns: Vec<Stmt<'ast, UntypedAst>>,
     env_stack: Vec<HashMap<String, Id<'ast, UntypedAst>>>,
 }
 
@@ -30,8 +28,8 @@ impl<'ast> ToSsa<'ast> {
     fn new() -> Self {
         Self {
             uid: 0,
-            ids: Vec::new(),
-            body_stack: Vec::new(),
+            decs: Vec::new(),
+            new_assigns: Vec::new(),
             env_stack: Vec::new(),
         }
     }
@@ -41,12 +39,8 @@ impl<'ast> ToSsa<'ast> {
         format!("_ssa_{}", self.uid)
     }
 
-    fn alloc_farg(&self, name: String, ty: Type) -> &'ast Farg {
-        Box::leak(Box::new(Farg { name, ty }))
-    }
-
-    fn alloc_lvis(&self, name: String, ty: Option<Type>, ssa: Option<&'ast Expr<'ast, UntypedAst>>) -> &'ast VarInfo<'ast, UntypedAst> {
-        Box::leak(Box::new(VarInfo { name, ty, ssa }))
+    fn alloc_lvis(&self, name: String, ssa: Option<&'ast Expr<'ast, UntypedAst>>) -> &'ast VarInfo<'ast, UntypedAst> {
+        Box::leak(Box::new(VarInfo { name, ty: None, ssa }))
     }
 
     fn alloc_expr(&self, expr: Expr<'ast, UntypedAst>) -> &'ast Expr<'ast, UntypedAst> {
@@ -58,11 +52,11 @@ impl<'ast> ToSsa<'ast> {
     }
 
     fn pop_env(&mut self) {
-        self.env_stack.pop().expect("env stack underflow");
+        self.env_stack.pop().unwrap();
     }
 
     fn bind_env(&mut self, name: String, id: Id<'ast, UntypedAst>) {
-        self.env_stack.last_mut().expect("missing env").insert(name, id);
+        self.env_stack.last_mut().unwrap().insert(name, id);
     }
 
     fn lookup_env(&self, name: &str) -> Option<Id<'ast, UntypedAst>> {
@@ -73,105 +67,75 @@ impl<'ast> ToSsa<'ast> {
         }
         None
     }
+}
+
+impl<'ast> Traverse<'ast> for ToSsa<'ast> {
+    type InAst = FlattenedAst;
+
+    type OutAst = UntypedAst;
 
     fn trav_fundef(&mut self, fundef: Fundef<'ast, FlattenedAst>) -> Fundef<'ast, UntypedAst> {
-        let mut args = Vec::with_capacity(fundef.args.len());
-
-        for arg in fundef.args {
-            args.push(self.alloc_farg(arg.name.clone(), arg.ty.clone()));
-        }
-
         self.push_env();
-        for (i, arg) in args.iter().enumerate() {
+
+        for (i, arg) in fundef.args.iter().enumerate() {
             self.bind_env(arg.name.clone(), Id::Arg(i));
         }
-        self.body_stack = vec![Vec::new()];
 
+        let mut body = Vec::new();
         for stmt in fundef.body {
-            self.trav_stmt(stmt);
+            let stmt = self.trav_stmt(stmt);
+            body.extend(mem::take(&mut self.new_assigns));
+            body.push(stmt);
         }
 
-        let body = self.body_stack.pop().expect("missing body stack");
         self.pop_env();
 
         Fundef {
             name: fundef.name,
-            args,
-            decs: self.ids.clone(),
+            args: fundef.args,
+            decs: mem::take(&mut self.decs),
             body,
             ret_type: fundef.ret_type,
         }
     }
 
-    fn trav_stmt(&mut self, stmt: Stmt<'ast, FlattenedAst>) {
-        match stmt {
-            Stmt::Assign(assign) => self.trav_assign(assign),
-            Stmt::Return(ret) => self.trav_return(ret),
-        }
+    fn trav_assign(&mut self, assign: Assign<'ast, Self::InAst>) -> Assign<'ast, Self::OutAst> {
+        let old_name = assign.lvis.name.clone();
+        let new_name = self.fresh_uid();
+
+        let expr = self.trav_expr((*assign.expr).clone());
+        let expr = self.alloc_expr(expr);
+        let lvis = self.alloc_lvis(new_name, Some(expr));
+        self.bind_env(old_name, Id::Var(lvis));
+        self.decs.push(lvis);
+
+        Assign { lvis, expr }
     }
 
-    fn trav_assign(&mut self, assign: Assign<'ast, FlattenedAst>) {
-        let id = self.trav_expr((*assign.expr).clone());
-        self.bind_env(assign.lvis.name.clone(), id);
-    }
-
-    fn trav_return(&mut self, ret: Return<'ast, FlattenedAst>) {
+    fn trav_return(&mut self, ret: Return<'ast, Self::InAst>) -> Return<'ast, Self::OutAst> {
         let id = self.trav_id(ret.id);
-        self.body_stack
-            .last_mut()
-            .expect("missing body")
-            .push(Stmt::Return(Return { id }));
+        Return { id }
     }
 
-    fn trav_expr(&mut self, expr: Expr<'ast, FlattenedAst>) -> Id<'ast, UntypedAst> {
+    fn trav_expr(&mut self, expr: Expr<'ast, Self::InAst>) -> Self::ExprOut {
+        println!("Processing expr: {:#?}", expr);
+
+        use Expr::*;
         match expr {
-            Expr::Call(n) => {
-                let call = self.trav_call(n);
-                self.emit_expr(Expr::Call(call))
-            }
-            Expr::PrfCall(n) => {
-                let prf_call = self.trav_prf_call(n);
-                self.emit_expr(Expr::PrfCall(prf_call))
-            }
-            Expr::Tensor(n) => {
-                let n = self.trav_tensor(n);
-                self.emit_expr(Expr::Tensor(n))
-            }
-            Expr::Binary(n) => {
-                let n = self.trav_binary(n);
-                self.emit_expr(Expr::Binary(n))
-            }
-            Expr::Unary(n) => {
-                let n = self.trav_unary(n);
-                self.emit_expr(Expr::Unary(n))
-            }
-            Expr::Array(n) => {
-                let n = self.trav_array(n);
-                self.emit_expr(Expr::Array(n))
-            }
-            Expr::Sel(n) => {
-                let n = self.trav_sel(n);
-                self.emit_expr(Expr::Sel(n))
-            }
-            Expr::Id(id) => self.trav_id(id),
-            Expr::Bool(v) => self.emit_expr(Expr::Bool(v)),
-            Expr::U32(v) => self.emit_expr(Expr::U32(v)),
+            Call(n) => Call(self.trav_call(n)),
+            PrfCall(n) => PrfCall(self.trav_prf_call(n)),
+            Tensor(n) => Tensor(self.trav_tensor(n)),
+            Binary(n) => Binary(self.trav_binary(n)),
+            Unary(n) => Unary(self.trav_unary(n)),
+            Array(n) => Array(self.trav_array(n)),
+            Sel(n) => Sel(self.trav_sel(n)),
+            Id(n) => Id(self.trav_id(n)),
+            Bool(v) => Bool(v),
+            U32(v) => U32(v),
         }
     }
 
-    fn emit_expr(&mut self, expr: Expr<'ast, UntypedAst>) -> Id<'ast, UntypedAst> {
-        let name = self.fresh_uid();
-        let expr_ref = self.alloc_expr(expr);
-        let lvis = self.alloc_lvis(name, None, Some(expr_ref));
-        self.ids.push(lvis);
-        self.body_stack
-            .last_mut()
-            .expect("missing body")
-            .push(Stmt::Assign(Assign { lvis, expr: expr_ref }));
-        Id::Var(lvis)
-    }
-
-    fn trav_call(&mut self, call: Call<'ast, FlattenedAst>) -> Call<'ast, UntypedAst> {
+    fn trav_call(&mut self, call: Call<'ast, Self::InAst>) -> Self::CallOut {
         let new_args = call.args.into_iter().map(|arg| self.trav_id(arg)).collect();
         Call {
             id: call.id,
@@ -179,7 +143,7 @@ impl<'ast> ToSsa<'ast> {
         }
     }
 
-    fn trav_prf_call(&mut self, prf_call: PrfCall<'ast, FlattenedAst>) -> PrfCall<'ast, UntypedAst> {
+    fn trav_prf_call(&mut self, prf_call: PrfCall<'ast, Self::InAst>) -> Self::PrfCallOut {
         let args = prf_call.args.into_iter().map(|arg| self.trav_id(arg)).collect();
         PrfCall {
             id: prf_call.id,
@@ -187,23 +151,28 @@ impl<'ast> ToSsa<'ast> {
         }
     }
 
-    fn trav_tensor(&mut self, tensor: Tensor<'ast, FlattenedAst>) -> Tensor<'ast, UntypedAst> {
+    fn trav_tensor(&mut self, tensor: Tensor<'ast, Self::InAst>) -> Self::TensorOut {
         let lb = self.trav_id(tensor.lb);
         let ub = self.trav_id(tensor.ub);
 
-        let iv_lvis = self.alloc_lvis(tensor.iv.name.clone(), None, None);
-        self.ids.push(iv_lvis);
+        let iv_lvis = self.alloc_lvis(tensor.iv.name.clone(), None);
+        self.decs.push(iv_lvis);
 
         self.push_env();
         self.bind_env(tensor.iv.name.clone(), Id::Var(iv_lvis));
+        let old_assigns = mem::take(&mut self.new_assigns);
 
-        self.body_stack.push(Vec::new());
+        let mut body = Vec::new();
         for stmt in tensor.body {
-            self.trav_stmt(stmt);
+            let stmt = self.trav_stmt(stmt);
+            body.extend(mem::take(&mut self.new_assigns));
+            body.push(stmt);
         }
-        let ret = self.trav_id(tensor.ret);
-        let body = self.body_stack.pop().expect("missing tensor body");
 
+        let ret = self.trav_id(tensor.ret);
+        body.extend(mem::take(&mut self.new_assigns));
+
+        self.new_assigns = old_assigns;
         self.pop_env();
 
         Tensor {
@@ -215,18 +184,18 @@ impl<'ast> ToSsa<'ast> {
         }
     }
 
-    fn trav_binary(&mut self, binary: Binary<'ast, FlattenedAst>) -> Binary<'ast, UntypedAst> {
+    fn trav_binary(&mut self, binary: Binary<'ast, Self::InAst>) -> Self::BinaryOut {
         let l = self.trav_id(binary.l);
         let r = self.trav_id(binary.r);
         Binary { l, r, op: binary.op }
     }
 
-    fn trav_unary(&mut self, unary: Unary<'ast, FlattenedAst>) -> Unary<'ast, UntypedAst> {
+    fn trav_unary(&mut self, unary: Unary<'ast, Self::InAst>) -> Self::UnaryOut {
         let r = self.trav_id(unary.r);
         Unary { r, op: unary.op }
     }
 
-    fn trav_array(&mut self, array: Array<'ast, FlattenedAst>) -> Array<'ast, UntypedAst> {
+    fn trav_array(&mut self, array: Array<'ast, Self::InAst>) -> Self::ArrayOut {
         let mut values = Vec::with_capacity(array.values.len());
         for value in array.values {
             values.push(self.trav_id(value));
@@ -234,13 +203,13 @@ impl<'ast> ToSsa<'ast> {
         Array { values }
     }
 
-    fn trav_sel(&mut self, sel: Sel<'ast, FlattenedAst>) -> Sel<'ast, UntypedAst> {
+    fn trav_sel(&mut self, sel: Sel<'ast, Self::InAst>) -> Self::SelOut {
         let arr = self.trav_id(sel.arr);
         let idx = self.trav_id(sel.idx);
         Sel { arr, idx }
     }
 
-    fn trav_id(&mut self, id: Id<'ast, FlattenedAst>) -> Id<'ast, UntypedAst> {
+    fn trav_id(&mut self, id: Id<'ast, Self::InAst>) -> Id<'ast, Self::OutAst> {
         match id {
             Id::Arg(i) => Id::Arg(i),
             Id::Var(v) => self
