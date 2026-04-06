@@ -575,6 +575,8 @@ impl<'src> Parser<'src> {
         Ok(self.alloc_expr(Expr::Array(Array { values })))
     }
 
+    // TODO: as with binary operators, this should assume that a trait Sel is defined.
+    // Currently, we just map this to @selAxV, but that should change.
     fn parse_sel(&mut self, arr: &'static Expr<'static, ParsedAst>) -> ParseResult<&'static Expr<'static, ParsedAst>> {
         self.expect(Token::LSquare)?;
 
