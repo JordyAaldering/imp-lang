@@ -13,7 +13,6 @@ mod call;
 mod prf;
 mod tensor;
 mod array;
-mod sel;
 // Terminals
 mod id;
 mod typ;
@@ -33,7 +32,6 @@ pub use call::*;
 pub use prf::*;
 pub use tensor::*;
 pub use array::*;
-pub use sel::*;
 // Terminals
 pub use id::*;
 pub use typ::*;

@@ -6,7 +6,6 @@ pub enum Expr<'ast, Ast: AstConfig> {
     PrfCall(PrfCall<'ast, Ast>),
     Tensor(Tensor<'ast, Ast>),
     Array(Array<'ast, Ast>),
-    Sel(Sel<'ast, Ast>),
     // Terminals
     Id(Id<'ast, Ast>),
     Bool(bool),

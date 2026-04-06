@@ -126,7 +126,6 @@ impl<'ast> Traverse<'ast> for ToSsa<'ast> {
             PrfCall(n) => PrfCall(self.trav_prf_call(n)),
             Tensor(n) => Tensor(self.trav_tensor(n)),
             Array(n) => Array(self.trav_array(n)),
-            Sel(n) => Sel(self.trav_sel(n)),
             Id(n) => Id(self.trav_id(n)),
             Bool(v) => Bool(v),
             U32(v) => U32(v),
@@ -188,12 +187,6 @@ impl<'ast> Traverse<'ast> for ToSsa<'ast> {
             values.push(self.trav_id(value));
         }
         Array { values }
-    }
-
-    fn trav_sel(&mut self, sel: Sel<'ast, Self::InAst>) -> Self::SelOut {
-        let arr = self.trav_id(sel.arr);
-        let idx = self.trav_id(sel.idx);
-        Sel { arr, idx }
     }
 
     fn trav_id(&mut self, id: Id<'ast, Self::InAst>) -> Id<'ast, Self::OutAst> {

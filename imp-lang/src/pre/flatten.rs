@@ -148,7 +148,6 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
             PrfCall(n) => PrfCall(self.trav_prf_call(n)),
             Tensor(n) => Tensor(self.trav_tensor(n)),
             Array(n) => Array(self.trav_array(n)),
-            Sel(n) => Sel(self.trav_sel(n)),
             Id(n) => Id(self.trav_id(n)),
             Bool(v) => Bool(v),
             U32(v) => U32(v),
@@ -206,12 +205,6 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
             values.push(self.trav_expr(value.clone()));
         }
         Array { values }
-    }
-
-    fn trav_sel(&mut self, sel: Sel<'ast, Self::InAst>) -> Self::SelOut {
-        let arr = self.trav_expr((*sel.arr).clone());
-        let idx = self.trav_expr((*sel.idx).clone());
-        Sel { arr, idx }
     }
 
     fn trav_id(&mut self, id: Id<'ast, Self::InAst>) -> Self::IdOut {

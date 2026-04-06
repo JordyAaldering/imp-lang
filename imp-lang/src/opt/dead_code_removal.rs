@@ -104,12 +104,6 @@ impl<'ast> Rewrite<'ast> for DeadCodeRemoval {
         Expr::Array(array)
     }
 
-    fn rewrite_sel(&mut self, mut sel: Sel<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
-        sel.arr = self.rewrite_id(sel.arr);
-        sel.idx = self.rewrite_id(sel.idx);
-        Expr::Sel(sel)
-    }
-
     fn rewrite_id(&mut self, id: Id<'ast, Self::Ast>) -> Id<'ast, Self::Ast> {
         if let Id::Var(v) = &id {
             self.used.insert(Self::ptr(v));

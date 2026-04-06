@@ -2,11 +2,7 @@ use std::iter::Peekable;
 
 use crate::ast::*;
 
-use super::{
-    lexer::{Lexer, Token},
-    operator::{self, Operator},
-    span::Span,
-};
+use super::{lexer::*, operator::*, span::*};
 
 pub struct Parser<'src> {
     lexer: Peekable<Lexer<'src>>,
@@ -31,44 +27,6 @@ enum ParsedFnItem {
 }
 
 type ParseResult<T> = Result<T, ParseError>;
-
-#[derive(Clone, Copy)]
-pub(super) enum Bop {
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Eq,
-    Ne,
-}
-
-impl Bop {
-    fn symbol(self) -> &'static str {
-        match self {
-            Bop::Add => "+",
-            Bop::Sub => "-",
-            Bop::Mul => "*",
-            Bop::Div => "/",
-            Bop::Eq => "==",
-            Bop::Ne => "!=",
-        }
-    }
-}
-
-#[derive(Clone, Copy)]
-pub(super) enum Uop {
-    Neg,
-    Not,
-}
-
-impl Uop {
-    fn symbol(self) -> &'static str {
-        match self {
-            Uop::Neg => "-",
-            Uop::Not => "!",
-        }
-    }
-}
 
 impl<'src> Parser<'src> {
     pub fn new(lexer: Lexer<'src>) -> Self {
@@ -623,17 +581,14 @@ impl<'src> Parser<'src> {
         let idx = self.parse_expr(None::<Bop>)?;
         self.expect(Token::RSquare)?;
 
-        Ok(self.alloc_expr(Expr::Sel(Sel {
-            arr,
-            idx,
-        })))
+        Ok(self.alloc_expr(Expr::PrfCall(PrfCall { id: Prf::SelAxV, args: vec![arr, idx] })))
     }
 
 
     fn parse_binary_operator(&mut self, previous: &Option<impl Operator>) -> ParseResult<Option<(Bop, Span)>> {
         if let Some((token, _)) = self.lexer.peek()
             && let Ok(op) = token.try_into()
-            && operator::precedes(previous, &op)? {
+            && precedes(previous, &op)? {
             let (_, span) = self.lexer.next().unwrap();
             return Ok(Some((op, span)));
         }
@@ -716,35 +671,6 @@ impl<'src> Parser<'src> {
         match token {
             Token::Identifier(id) => Ok((id, span)),
             _ => Err(ParseError::UnexpectedToken("identifier".to_owned(), token, span)),
-        }
-    }
-}
-
-
-impl TryInto<Bop> for &Token {
-    type Error = ();
-
-    fn try_into(self) -> Result<Bop, Self::Error> {
-        match self {
-            Token::Add => Ok(Bop::Add),
-            Token::Sub => Ok(Bop::Sub),
-            Token::Mul => Ok(Bop::Mul),
-            Token::Div => Ok(Bop::Div),
-            Token::Eq => Ok(Bop::Eq),
-            Token::Ne => Ok(Bop::Ne),
-            _ => Err(()),
-        }
-    }
-}
-
-impl TryInto<Uop> for &Token {
-    type Error = ();
-
-    fn try_into(self) -> Result<Uop, Self::Error> {
-        match self {
-            Token::Sub => Ok(Uop::Neg),
-            Token::Not => Ok(Uop::Not),
-            _ => Err(()),
         }
     }
 }

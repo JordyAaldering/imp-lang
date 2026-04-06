@@ -282,19 +282,6 @@ impl<'ast> Visit<'ast> for CompileC {
         ));
     }
 
-    fn visit_sel(&mut self, sel: &Sel<'ast, Self::Ast>) {
-        if self.id_is_any(&sel.arr) || self.id_is_any(&sel.idx)
-        {
-            panic!("dynamic union values are not yet supported in selection during C codegen");
-        }
-        let arr = self.nameof(&sel.arr);
-        let idx = self.nameof(&sel.idx);
-        let elem_base = elem_ctype_of_id(&sel.arr);
-        let flat_fn = flat_index_fn_of_id(&sel.idx);
-
-        self.expr_stack.push(format!("(({elem_base} *){arr}.data)[{flat_fn}({arr}, {idx})]"));
-    }
-
     fn visit_call(&mut self, call: &Call<'ast, TypedAst>) {
         // Temporary: the user (or stdlib) should define the necessary traits and we should use those
         if let CallTarget::TraitMethod { method_name, .. } = &call.id {
