@@ -1,4 +1,5 @@
-use crate::{ast::*, cg::rename_fundefs, Visit};
+use crate::{ast::*, cg::{mono, rename_fundefs}, Visit};
+use std::collections::HashSet;
 
 pub struct CompileC {
     output: String,
@@ -10,6 +11,8 @@ pub struct CompileC {
     indent: usize,
     shp_uid: usize,
     tensor_uid: usize,
+    impls: Vec<ImplDef>,
+    emitted_trait_shims: HashSet<String>,
 }
 
 impl CompileC {
@@ -24,6 +27,8 @@ impl CompileC {
             indent: 0,
             shp_uid: 0,
             tensor_uid: 0,
+            impls: Vec::new(),
+            emitted_trait_shims: HashSet::new(),
         }
     }
 
@@ -59,12 +64,152 @@ impl CompileC {
             Id::Dim(_) | Id::Shp(_) | Id::DimAt(_, _) => false,
         }
     }
+
+    fn id_type(&self, id: &Id<'_, TypedAst>) -> Type {
+        match id {
+            Id::Arg(i) => self.arg_types[*i].clone(),
+            Id::Var(v) => v.ty.clone(),
+            Id::Dim(_) | Id::DimAt(_, _) => Type::scalar(BaseType::Usize),
+            Id::Shp(_) => Type {
+                ty: BaseType::Usize,
+                shape: ShapePattern::Axes(vec![AxisPattern::Dim(DimPattern::Any)]),
+                knowledge: TypeKnowledge::AKD,
+            },
+        }
+    }
+
+    fn operator_ret_type(&self, method_name: &str, arg_types: &[Type]) -> Type {
+        match method_name {
+            "==" | "!=" | "<" | "<=" | ">" | ">=" | "!" => Type::scalar(BaseType::Bool),
+            "+" | "-" | "*" | "/" => arg_types.first().cloned().unwrap_or_else(|| Type::scalar(BaseType::U32)),
+            _ => arg_types.first().cloned().unwrap_or_else(|| Type::scalar(BaseType::U32)),
+        }
+    }
+
+    fn trait_shim_name(&self, trait_name: &str, method_name: &str, arg_types: &[Type]) -> String {
+        mono::trait_shim_name(trait_name, method_name, arg_types)
+    }
+
+    fn has_impl_for_call(&self, trait_name: &str, method_name: &str, arg_types: &[Type]) -> bool {
+        mono::has_impl_for_call(&self.impls, trait_name, method_name, arg_types)
+    }
+
+    fn emit_trait_shim(&mut self, trait_name: &str, method_name: &str, arg_types: &[Type]) {
+        let shim_name = self.trait_shim_name(trait_name, method_name, arg_types);
+        if self.emitted_trait_shims.contains(&shim_name) {
+            return;
+        }
+        if !self.has_impl_for_call(trait_name, method_name, arg_types) {
+            panic!("missing impl for {}::{} with arg types {:?}", trait_name, method_name, arg_types);
+        }
+
+        self.emitted_trait_shims.insert(shim_name.clone());
+
+        let ret_type = self.operator_ret_type(method_name, arg_types);
+        let args_decl = arg_types.iter().enumerate()
+            .map(|(i, ty)| format!("{} a{}", full_ctype(ty), i))
+            .collect::<Vec<_>>()
+            .join(", ");
+        self.push_line(&format!("static {} IMP_{}({}) {{", full_ctype(&ret_type), shim_name, args_decl));
+        self.indent += 1;
+        let binary_array = arg_types.len() == 2 && arg_types[0].is_array() && arg_types[1].is_array();
+        if binary_array {
+            let op = match method_name {
+                "+" => "+",
+                "-" => "-",
+                "*" => "*",
+                "/" => "/",
+                _ => panic!("unsupported array trait dispatch operator {}", method_name),
+            };
+            let elem = base_ctype(&arg_types[0]);
+            self.push_line("size_t len = a0.len;");
+            self.push_line(&format!("size_t *shp = (size_t *)malloc(a0.dim * sizeof(size_t));"));
+            self.push_line("for (size_t i = 0; i < a0.dim; i += 1) { shp[i] = a0.shp[i]; }");
+            self.push_line(&format!("{} *data = ({})malloc(len * sizeof({}));", format!("{elem}"), format!("{elem} *"), elem));
+            self.push_line(&format!("for (size_t i = 0; i < len; i += 1) {{ data[i] = (({elem}*)a0.data)[i] {op} (({elem}*)a1.data)[i]; }}"));
+            self.push_line("ImpArrayRaw out = (ImpArrayRaw) { .len = len, .dim = a0.dim, .shp = shp, .data = (void *)data };");
+            self.push_line("return out;");
+        } else {
+            let expr = match (method_name, arg_types.len()) {
+                ("+", 2) => "a0 + a1".to_owned(),
+                ("-", 2) => "a0 - a1".to_owned(),
+                ("*", 2) => "a0 * a1".to_owned(),
+                ("/", 2) => "a0 / a1".to_owned(),
+                ("==", 2) => "a0 == a1".to_owned(),
+                ("!=", 2) => "a0 != a1".to_owned(),
+                ("<", 2) => "a0 < a1".to_owned(),
+                ("<=", 2) => "a0 <= a1".to_owned(),
+                (">", 2) => "a0 > a1".to_owned(),
+                (">=", 2) => "a0 >= a1".to_owned(),
+                ("-", 1) => "-a0".to_owned(),
+                ("!", 1) => "!a0".to_owned(),
+                _ => panic!("unsupported trait dispatch operator {} / {} args", method_name, arg_types.len()),
+            };
+            self.push_line(&format!("return {};", expr));
+        }
+        self.indent -= 1;
+        self.push_line("}");
+        self.push_line("");
+    }
+
+    fn emit_trait_shims_for_program<'ast>(&mut self, program: &Program<'ast, TypedAst>) {
+        for fundef in program.functions.values() {
+            for stmt in &fundef.body {
+                self.emit_trait_shims_for_stmt(stmt, &fundef.args);
+            }
+        }
+    }
+
+    fn emit_trait_shims_for_stmt<'ast>(&mut self, stmt: &Stmt<'ast, TypedAst>, args: &[&'ast Farg]) {
+        match stmt {
+            Stmt::Assign(a) => self.emit_trait_shims_for_expr(a.expr, args),
+            Stmt::Return(r) => self.emit_trait_shims_for_id(&r.id, args),
+        }
+    }
+
+    fn emit_trait_shims_for_expr<'ast>(&mut self, expr: &Expr<'ast, TypedAst>, args: &[&'ast Farg]) {
+        match expr {
+            Expr::Call(call) => {
+                for id in &call.args {
+                    self.emit_trait_shims_for_id(id, args);
+                }
+                if let CallTarget::TraitMethod { trait_name, method_name } = &call.id {
+                    let arg_types = call.args.iter().map(|id| type_of_id_in_context(id, args)).collect::<Vec<_>>();
+                    self.emit_trait_shim(trait_name, method_name, &arg_types);
+                }
+            }
+            Expr::PrfCall(prf) => {
+                for id in &prf.args {
+                    self.emit_trait_shims_for_id(id, args);
+                }
+            }
+            Expr::Tensor(t) => {
+                self.emit_trait_shims_for_id(&t.lb, args);
+                self.emit_trait_shims_for_id(&t.ub, args);
+                for stmt in &t.body {
+                    self.emit_trait_shims_for_stmt(stmt, args);
+                }
+                self.emit_trait_shims_for_id(&t.ret, args);
+            }
+            Expr::Array(a) => {
+                for id in &a.values {
+                    self.emit_trait_shims_for_id(id, args);
+                }
+            }
+            Expr::Id(id) => self.emit_trait_shims_for_id(id, args),
+            Expr::Bool(_) | Expr::U32(_) => {}
+        }
+    }
+
+    fn emit_trait_shims_for_id<'ast>(&mut self, _id: &Id<'ast, TypedAst>, _args: &[&'ast Farg]) {}
 }
 
 impl<'ast> Visit<'ast> for CompileC {
     type Ast = TypedAst;
 
     fn visit_program(&mut self, program: &Program<'ast, TypedAst>) {
+        self.impls = program.impls.clone();
+        self.emitted_trait_shims.clear();
         self.output.push_str(&format!("#include \"{}.h\"\n\n", self.stem));
         self.output.push_str("__attribute__((unused)) static size_t imp_flat_index_u32(ImpArrayRaw arr, ImpArrayRaw idx) {\n");
         self.output.push_str("    size_t flat = 0;\n");
@@ -82,6 +227,8 @@ impl<'ast> Visit<'ast> for CompileC {
         self.output.push_str("    }\n");
         self.output.push_str("    return flat;\n");
         self.output.push_str("}\n\n");
+
+        self.emit_trait_shims_for_program(program);
 
         for fundef in program.functions.values() {
             self.visit_fundef(fundef);
@@ -283,26 +430,13 @@ impl<'ast> Visit<'ast> for CompileC {
     }
 
     fn visit_call(&mut self, call: &Call<'ast, TypedAst>) {
-        // Temporary: the user (or stdlib) should define the necessary traits and we should use those
-        if let CallTarget::TraitMethod { method_name, .. } = &call.id {
+        if let CallTarget::TraitMethod { trait_name, method_name } = &call.id {
             let args: Vec<String> = call.args.iter()
                 .map(|arg| self.render_expr(&Expr::Id(*arg)))
                 .collect();
-            let rendered = match (method_name.as_str(), args.as_slice()) {
-                ("+", [l, r]) => format!("{l} + {r}"),
-                ("-", [l, r]) => format!("{l} - {r}"),
-                ("*", [l, r]) => format!("{l} * {r}"),
-                ("/", [l, r]) => format!("{l} / {r}"),
-                ("==", [l, r]) => format!("{l} == {r}"),
-                ("!=", [l, r]) => format!("{l} != {r}"),
-                ("<", [l, r]) => format!("{l} < {r}"),
-                ("<=", [l, r]) => format!("{l} <= {r}"),
-                (">", [l, r]) => format!("{l} > {r}"),
-                (">=", [l, r]) => format!("{l} >= {r}"),
-                ("-", [r]) => format!("-{r}"),
-                ("!", [r]) => format!("!{r}"),
-                _ => panic!("unsupported trait-method operator call: {} with {} args", method_name, args.len()),
-            };
+            let arg_types: Vec<Type> = call.args.iter().map(|id| self.id_type(id)).collect();
+            let shim_name = self.trait_shim_name(trait_name, method_name, &arg_types);
+            let rendered = format!("IMP_{}({})", shim_name, args.join(", "));
             self.expr_stack.push(rendered);
             return;
         }
@@ -451,3 +585,17 @@ fn id_base_type(id: &Id<'_, TypedAst>) -> BaseType {
         Id::Dim(_) | Id::Shp(_) | Id::DimAt(_, _) => BaseType::Usize,
     }
 }
+
+fn type_of_id_in_context(id: &Id<'_, TypedAst>, args: &[&Farg]) -> Type {
+    match id {
+        Id::Arg(i) => args[*i].ty.clone(),
+        Id::Var(v) => v.ty.clone(),
+        Id::Dim(_) | Id::DimAt(_, _) => Type::scalar(BaseType::Usize),
+        Id::Shp(_) => Type {
+            ty: BaseType::Usize,
+            shape: ShapePattern::Axes(vec![AxisPattern::Dim(DimPattern::Any)]),
+            knowledge: TypeKnowledge::AKD,
+        },
+    }
+}
+

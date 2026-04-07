@@ -1,74 +1,71 @@
-// Internally, a trait exists for all operators
-// (E.g. Add, Sub, Eq, Gt, Sel)
-// trait Add<T, [shp1], [shp2], [shp3]> {
-//     fn +(T[shp1] a, T[shp2] b) -> T[shp3];
-// }
+// Sketch file showing trait/type-set surface syntax.
 
-// The StdLib implements this trait for all Num
+// Numeric marker set.
+type Num :: T;
+member Num :: u32;
+member Num :: usize;
+member Num :: f32;
 
-impl Num<u32> {}
-impl Num<f32> {}
-impl Num<usize> {}
+// Callable trait declaration.
+trait Add :: (T, T) -> T;
 
-impl Add<T: Num, [], [], []> {
+impl Add :: (T, T) -> T
+    where Num(T)
+{
     fn +(T a, T b) -> T {
         return @addSxS(a, b);
     }
 }
 
-impl Add<T: Num, [], [d>0:shp], [d>0:shp]> {
-    fn +(T a, T[d>0:shp] b) -> T[d>0:shp] {
+impl Add :: (T, T[d:shp]) -> T[d:shp]
+    where Num(T)
+{
+    fn +(T a, T[d:shp] b) -> T[d:shp] {
         return { @addSxS(a, @selAxV(b, iv)) | iv < shp };
     }
 }
 
-impl Add<T: Num, [d>0:shp], [], [d>0:shp]> {
-    fn +(T[d>0:shp] a, T b) -> T[d>0:shp] {
+impl Add :: (T[d:shp], T) -> T[d:shp]
+    where Num(T)
+{
+    fn +(T[d:shp] a, T b) -> T[d:shp] {
         return { @addSxS(@selAxV(a, iv), b) | iv < shp };
     }
 }
 
-impl Add<T: Num, [d>0:shp], [d>0:shp], [d>0:shp]> {
-    fn +(T[d>0:shp] a, T[d>0:shp] b) -> T[d>0:shp] {
+impl Add :: (T[d:shp], T[d:shp]) -> T[d:shp]
+    where Num(T)
+{
+    fn +(T[d:shp] a, T[d:shp] b) -> T[d:shp] {
         return { @addSxS(@selAxV(a, iv), @selAxV(b, iv)) | iv < shp };
     }
 }
 
-// The user can also define their own traits
+trait Iota :: (usize) -> T[n];
 
-trait Iota<T> {
-    fn iota(usize n) -> T[n];
-}
-
-impl Iota<T: Num> {
+impl Iota :: (usize) -> T[n]
+    where Num(T)
+{
     fn iota(usize n) -> T[n] {
-        return { i | [i] < [n] }
+        return { i | [i] < [n] };
     }
 }
 
-trait Transpose<T> {
-    fn transpose(T[d:shp] arr) -> T[d:shpt];
-}
+trait Transpose :: (T[d:shp]) -> T[d:shpt];
 
 fn reverse(usize[n] vec) -> usize[n] {
     return { vec[n-i-1] | [i] < [n] };
 }
 
-impl Transpose<T> {
+impl Transpose :: (T[d:shp]) -> T[d:shpt] {
     fn transpose(T[d:shp] arr) -> T[d:shpt] {
-        return { arr[reverse(iv)] | iv < shp }
+        return { arr[reverse(iv)] | iv < shp };
     }
 }
-
-// It is not yet clear how folding should be implemented
 
 fn sum(f32[d:shp] arr) -> f32 {
     return @fold(0f32, +, arr[iv] | iv < shp);
 }
-
-// For now, exported functions should only contain specific types.
-// This way, monomorphisation is only needed for the functions we explicitly use.
-// And we can keep the names of exported/public functions the same, as there is only one.
 
 pub fn matmul(f32[n,k] a, f32[k,m] b) -> v32[n,m] {
     bT = transpose(b);

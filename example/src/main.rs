@@ -27,6 +27,11 @@ fn main() {
     assert_eq!(arr.data, (0..ub).collect::<Vec<usize>>());
     println!("arr.data = {:?}", arr.data);
 
+    let arr1: ImpArray<usize> = expect_array(iota(15));
+    let arr2: ImpArray<usize> = expect_array(iota(15));
+    let res: ImpArray<usize> = expect_array(my_add_after_iota(arr1, arr2));
+    println!("iota + iota = {:?}", res.data);
+
     let shp: ImpArray<usize> = expect_array(shape(arr));
     println!("shape(arr) = {:?}", shp.data);
 

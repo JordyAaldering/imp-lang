@@ -4,6 +4,7 @@ use crate::{ast::*, traverse::Traverse};
 
 pub fn type_infer<'ast>(program: Program<'ast, UntypedAst>) -> Result<Program<'ast, TypedAst>, InferenceError> {
     let mut typed_functions: HashMap<String, Fundef<'ast, TypedAst>> = HashMap::new();
+    let impls = program.impls.clone();
 
     // Collect and sort function names to ensure deterministic ordering
     let mut func_names: Vec<_> = program.functions.keys().cloned().collect();
@@ -27,7 +28,7 @@ pub fn type_infer<'ast>(program: Program<'ast, UntypedAst>) -> Result<Program<'a
     // Second pass: type-check each function with all function signatures available
     for name in func_names {
         let fundef = program.functions.get(&name).unwrap();
-        let mut infer = TypeInfer::new(&functions_by_name);
+        let mut infer = TypeInfer::new(&functions_by_name, &impls);
         let typed = infer.trav_fundef(fundef.clone());
         if let Some(err) = infer.errors.into_iter().next() {
             return Err(err);
@@ -55,6 +56,7 @@ pub struct TypeInfer<'ast> {
     errors: Vec<InferenceError>,
     /// Mapping of function names to typed signatures for direct-call resolution.
     functions: HashMap<String, &'ast Fundef<'ast, TypedAst>>,
+    impls: Vec<ImplDef>,
 }
 
 #[allow(dead_code)]
@@ -105,17 +107,32 @@ pub enum InferenceError {
         expected: &'static str,
         provided: Type,
     },
+    TraitImplNotFound {
+        trait_name: String,
+        method_name: String,
+        arg_types: Vec<Type>,
+    },
 }
 
 impl<'ast> TypeInfer<'ast> {
-    pub fn new(functions: &HashMap<String, &'ast Fundef<'ast, TypedAst>>) -> Self {
+    pub fn new(functions: &HashMap<String, &'ast Fundef<'ast, TypedAst>>, impls: &[ImplDef]) -> Self {
         Self {
             args: Vec::new(),
             idmap: HashMap::new(),
             new_ids: Vec::new(),
             errors: Vec::new(),
             functions: functions.clone(),
+            impls: impls.to_vec(),
         }
+    }
+
+    fn has_trait_impl(&self, trait_name: &str, method_name: &str, arg_types: &[Type]) -> bool {
+        self.impls.iter().any(|impl_def| {
+            impl_def.trait_name == trait_name
+                && impl_def.methods.iter().any(|m| m.name == method_name)
+                && impl_def.args.len() == arg_types.len()
+                && impl_def.args.iter().zip(arg_types.iter()).all(|(poly, ty)| poly_matches_concrete(poly, ty))
+        })
     }
 
     fn alloc_farg(&self, name: String, ty: Type) -> &'ast Farg {
@@ -522,6 +539,14 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
                 arg_types.push(ty);
             }
 
+            if !self.has_trait_impl(trait_name, method_name, &arg_types) {
+                self.errors.push(InferenceError::TraitImplNotFound {
+                    trait_name: trait_name.to_owned(),
+                    method_name: method_name.to_owned(),
+                    arg_types: arg_types.clone(),
+                });
+            }
+
             let ty = Self::operator_fallback_type(func_name, &arg_types)
                 .unwrap_or_else(|| Type::scalar(BaseType::U32));
             let typed_call = Call {
@@ -818,5 +843,43 @@ fn dims_compatible(expected: &DimPattern, provided: &DimPattern) -> bool {
         (DimPattern::Known(e), DimPattern::Known(p)) => e == p,
         (DimPattern::Var(e), DimPattern::Var(p)) => e.name == p.name,
         _ => false,
+    }
+}
+
+fn poly_matches_concrete(poly: &PolyType, ty: &Type) -> bool {
+    let head_ok = match poly.head.as_str() {
+        "u32" => ty.ty == BaseType::U32,
+        "usize" => ty.ty == BaseType::Usize,
+        "bool" => ty.ty == BaseType::Bool,
+        _ => true,
+    };
+
+    if !head_ok {
+        return false;
+    }
+
+    match (&poly.shape, &ty.shape) {
+        (None, ShapePattern::Scalar) => true,
+        (None, _) => false,
+        (Some(ShapePattern::Any), _) => true,
+        (Some(ShapePattern::Scalar), ShapePattern::Scalar) => true,
+        (Some(ShapePattern::Scalar), _) => false,
+        (Some(ShapePattern::Axes(exp_axes)), ShapePattern::Axes(got_axes)) => {
+            if exp_axes.iter().any(|a| matches!(a, AxisPattern::Rank(_))) {
+                return true;
+            }
+            if exp_axes.len() != got_axes.len() {
+                return false;
+            }
+            exp_axes.iter().zip(got_axes.iter()).all(|(e, g)| match (e, g) {
+                (AxisPattern::Dim(DimPattern::Any), AxisPattern::Dim(_)) => true,
+                (AxisPattern::Dim(DimPattern::Known(a)), AxisPattern::Dim(DimPattern::Known(b))) => a == b,
+                (AxisPattern::Dim(DimPattern::Var(_)), AxisPattern::Dim(_)) => true,
+                (AxisPattern::Rank(_), _) => true,
+                _ => false,
+            })
+        }
+        (Some(ShapePattern::Axes(exp_axes)), ShapePattern::Scalar) => exp_axes.is_empty(),
+        (Some(ShapePattern::Axes(_)), ShapePattern::Any) => true,
     }
 }

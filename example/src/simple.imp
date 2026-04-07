@@ -26,10 +26,11 @@ impl Add :: (usize, usize) -> usize
 }
 
 // Meaning: implement addition for the array-array case,
-//          where addition is implemented for the scalar-scalar case.
+//          where T is a member of type Num
+//          and addition is implemented for the scalar-scalar case.
 impl Add :: (T[d:shp], T[d:shp]) -> T[d:shp]
 where
-    Num(T[n]),
+    Num(T),
     Add :: (T, T) -> T
 {
     fn +(T[d:shp] a, T[d:shp] b) -> T[d:shp] {
@@ -58,6 +59,10 @@ where
 
 fn iota(usize n) -> usize[n] {
     return { @selAxV(iv, [0]) | [0] <= iv < [n] };
+}
+
+fn my_add_after_iota(usize[d:shp] a, usize[d:shp] b) -> usize[d:shp] {
+    return a + b;
 }
 
 fn arrays() -> u32[n] {

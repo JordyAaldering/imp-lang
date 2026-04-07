@@ -1,135 +1,89 @@
 // stdlib2.imp
 //
-// Updated sketch based on current design decisions:
-// 1) `+`, `-`, `*`, `/` are NOT built-in language semantics anymore.
-//    They are trait methods resolved by the compiler.
-// 2) The compiler only provides scalar primitives (e.g. @addSxS).
-// 3) Stdlib defines scalar trait impls using primitives, and array impls via lifting.
-// 4) No `d>0` predicate yet; overlap is resolved by specificity (`T` beats `T[d:shp]`).
+// Updated sketch for the current callable-trait syntax.
 
 // -----------------------------------------------------------------------------
 // Trait prelude
 // -----------------------------------------------------------------------------
 
-trait Eq<T> {
-    fn ==(T a, T b) -> bool;
-    fn !=(T a, T b) -> bool;
-}
+trait Eq :: (T, T) -> bool;
+trait Ord :: (T, T) -> bool;
+trait Add :: (T, T) -> T;
+trait Sub :: (T, T) -> T;
+trait Mul :: (T, T) -> T;
+trait Div :: (T, T) -> T;
+trait Zero :: () -> T;
+trait One :: () -> T;
 
-trait Ord<T>
-    where T: Eq
-{
-    fn <(T a, T b) -> bool;
-    fn <=(T a, T b) -> bool;
-    fn >(T a, T b) -> bool;
-    fn >=(T a, T b) -> bool;
-}
-
-trait Add<T> {
-    fn +(T a, T b) -> T;
-}
-
-trait Sub<T> {
-    fn -(T a, T b) -> T;
-}
-
-trait Mul<T> {
-    fn *(T a, T b) -> T;
-}
-
-trait Div<T> {
-    fn /(T a, T b) -> T;
-}
-
-trait Zero<T> {
-    fn zero() -> T;
-}
-
-trait One<T> {
-    fn one() -> T;
-}
-
-trait Num<T>
-    where T: Eq,
-          T: Add,
-          T: Sub,
-          T: Mul,
-          T: Div,
-          T: Zero,
-          T: One
-{}
+// Marker set for numeric types.
+type Num :: T;
 
 // -----------------------------------------------------------------------------
 // Scalar impls (built from compiler primitives)
 // -----------------------------------------------------------------------------
-//
-// The following primitive names are placeholders for compiler-provided intrinsics.
-// They are not user-visible operators; stdlib owns operator meaning.
 
-impl Eq<u32> {
+impl Eq :: (u32, u32) -> bool {
     fn ==(u32 a, u32 b) -> bool { return @eqSxS(a, b); }
     fn !=(u32 a, u32 b) -> bool { return !@eqSxS(a, b); }
 }
+impl Add :: (u32, u32) -> u32 { fn +(u32 a, u32 b) -> u32 { return @addSxS(a, b); } }
+impl Sub :: (u32, u32) -> u32 { fn -(u32 a, u32 b) -> u32 { return @subSxS(a, b); } }
+impl Mul :: (u32, u32) -> u32 { fn *(u32 a, u32 b) -> u32 { return @mulSxS(a, b); } }
+impl Div :: (u32, u32) -> u32 { fn /(u32 a, u32 b) -> u32 { return @divSxS(a, b); } }
+impl Zero :: () -> u32 { fn zero() -> u32 { return 0; } }
+impl One :: () -> u32 { fn one() -> u32 { return 1; } }
+member Num :: u32;
 
-impl Add<u32> { fn +(u32 a, u32 b) -> u32 { return @addSxS(a, b); } }
-impl Sub<u32> { fn -(u32 a, u32 b) -> u32 { return @subSxS(a, b); } }
-impl Mul<u32> { fn *(u32 a, u32 b) -> u32 { return @mulSxS(a, b); } }
-impl Div<u32> { fn /(u32 a, u32 b) -> u32 { return @divSxS(a, b); } }
-impl Zero<u32> { fn zero() -> u32 { return 0; } }
-impl One<u32> { fn one() -> u32 { return 1; } }
-impl Num<u32> {}
-
-impl Eq<usize> {
+impl Eq :: (usize, usize) -> bool {
     fn ==(usize a, usize b) -> bool { return @eqSxS(a, b); }
     fn !=(usize a, usize b) -> bool { return !@eqSxS(a, b); }
 }
-
-impl Add<usize> { fn +(usize a, usize b) -> usize { return @addSxS(a, b); } }
-impl Sub<usize> { fn -(usize a, usize b) -> usize { return @subSxS(a, b); } }
-impl Mul<usize> { fn *(usize a, usize b) -> usize { return @mulSxS(a, b); } }
-impl Div<usize> { fn /(usize a, usize b) -> usize { return @divSxS(a, b); } }
-impl Zero<usize> { fn zero() -> usize { return 0; } }
-impl One<usize> { fn one() -> usize { return 1; } }
-impl Num<usize> {}
+impl Add :: (usize, usize) -> usize { fn +(usize a, usize b) -> usize { return @addSxS(a, b); } }
+impl Sub :: (usize, usize) -> usize { fn -(usize a, usize b) -> usize { return @subSxS(a, b); } }
+impl Mul :: (usize, usize) -> usize { fn *(usize a, usize b) -> usize { return @mulSxS(a, b); } }
+impl Div :: (usize, usize) -> usize { fn /(usize a, usize b) -> usize { return @divSxS(a, b); } }
+impl Zero :: () -> usize { fn zero() -> usize { return 0; } }
+impl One :: () -> usize { fn one() -> usize { return 1; } }
+member Num :: usize;
 
 // -----------------------------------------------------------------------------
 // Array lifting impls (generic over shape)
 // -----------------------------------------------------------------------------
 
-impl Add<U[d:shp]>
-    where U: Add
+impl Add :: (U[d:shp], U[d:shp]) -> U[d:shp]
+    where Add :: (U, U) -> U
 {
     fn +(U[d:shp] a, U[d:shp] b) -> U[d:shp] {
         return { a[iv] + b[iv] | iv < shp };
     }
 }
 
-impl Sub<U[d:shp]>
-    where U: Sub
+impl Sub :: (U[d:shp], U[d:shp]) -> U[d:shp]
+    where Sub :: (U, U) -> U
 {
     fn -(U[d:shp] a, U[d:shp] b) -> U[d:shp] {
         return { a[iv] - b[iv] | iv < shp };
     }
 }
 
-impl Mul<U[d:shp]>
-    where U: Mul
+impl Mul :: (U[d:shp], U[d:shp]) -> U[d:shp]
+    where Mul :: (U, U) -> U
 {
     fn *(U[d:shp] a, U[d:shp] b) -> U[d:shp] {
         return { a[iv] * b[iv] | iv < shp };
     }
 }
 
-impl Div<U[d:shp]>
-    where U: Div
+impl Div :: (U[d:shp], U[d:shp]) -> U[d:shp]
+    where Div :: (U, U) -> U
 {
     fn /(U[d:shp] a, U[d:shp] b) -> U[d:shp] {
         return { a[iv] / b[iv] | iv < shp };
     }
 }
 
-impl Eq<U[d:shp]>
-    where U: Eq
+impl Eq :: (U[d:shp], U[d:shp]) -> bool
+    where Eq :: (U, U) -> bool
 {
     fn ==(U[d:shp] a, U[d:shp] b) -> bool {
         return all({ a[iv] == b[iv] | iv < shp });
@@ -144,41 +98,44 @@ impl Eq<U[d:shp]>
 // Generic helpers users call directly
 // -----------------------------------------------------------------------------
 
-fn scale<T: Num>(T alpha, T[d:shp] xs) -> T[d:shp] {
+fn scale<T>(T alpha, T[d:shp] xs) -> T[d:shp]
+where
+    Num(T)
+{
     return { alpha * xs[iv] | iv < shp };
 }
 
-fn hadamard<T: Num>(T[d:shp] xs, T[d:shp] ys) -> T[d:shp] {
+fn hadamard<T>(T[d:shp] xs, T[d:shp] ys) -> T[d:shp]
+where
+    Num(T)
+{
     return { xs[iv] * ys[iv] | iv < shp };
 }
 
-trait Genarray<T> {
-    fn genarray(usize n, T[i:ishp] seed) -> T[n,i:ishp];
-    fn genarray(usize[d:shp] out_shp, T[i:ishp] seed) -> T[d:shp,i:ishp];
-}
+trait Genarray :: (usize, T[i:ishp]) -> T[n,i:ishp];
 
-impl Genarray<Any> {
+impl Genarray :: (usize, T[i:ishp]) -> T[n,i:ishp] {
     fn genarray(usize n, T[i:ishp] seed) -> T[n,i:ishp] {
         return { seed | [0] <= iv < [n] };
     }
+}
 
+impl Genarray :: (usize[d:shp], T[i:ishp]) -> T[d:shp,i:ishp] {
     fn genarray(usize[d:shp] out_shp, T[i:ishp] seed) -> T[d:shp,i:ishp] {
         return { seed | (0 * out_shp) <= iv < out_shp };
     }
 }
 
-fn zeros<T: Zero>(usize[d:shp] out_shp) -> T[d:shp] {
+fn zeros<T>(usize[d:shp] out_shp) -> T[d:shp]
+where
+    Zero :: () -> T
+{
     return { zero<T>() | (0 * out_shp) <= iv < out_shp };
 }
 
-fn ones<T: One>(usize[d:shp] out_shp) -> T[d:shp] {
+fn ones<T>(usize[d:shp] out_shp) -> T[d:shp]
+where
+    One :: () -> T
+{
     return { one<T>() | (0 * out_shp) <= iv < out_shp };
 }
-
-// -----------------------------------------------------------------------------
-// Compiler contract for operator resolution (informal)
-// -----------------------------------------------------------------------------
-// - On parsing `a + b`, compiler resolves trait method `Add::+` for the inferred `T`.
-// - If no `Add<T>` impl exists: type error.
-// - If multiple impls match: pick most specific; ambiguous => coherence error.
-// - Scalar semantics come only from scalar impls calling primitive `@opSxS` intrinsics.
