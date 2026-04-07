@@ -1,18 +1,45 @@
 # Plan: Traits, Type Patterns, and Mixed-Shape Overloading
 
+## Chosen Notation
+
+Use callable traits for operations and a dedicated concept notation for marker constraints.
+
 ```imp
+type Num :: T;
+
 trait Add :: (A, B) -> R;
-trait Num :: ();
 ```
 
 Meaning:
-1. `Add` represents one callable signature.
-2. `A`, `B`, `R` are signature slots.
-3. Impl heads bind these slots to concrete or pattern-generic types.
+1. `Num(T)` is a membership predicate, not a callable trait.
+2. `Add` is a callable contract.
+3. `A`, `B`, and `R` are signature slots.
+
+Membership declarations:
+
+```imp
+member Num :: u32;
+member Num :: usize;
+member Num :: f32;
+```
+
+### User-defined types
+
+Far in the future, we want to support user-defined types.
+We don't do this yet, but should keep the notation in mind so that we can remain consistent across notations.
+
+```imp
+typedef complex32 :: (f32, f32);
+typedef complex64 :: (f64, f64);
+
+type Complex;
+member Complex :: complex32;
+member Complex :: complex64;
+```
 
 ## Basic Examples
 
-Scalar impls:
+Scalar addition:
 
 ```imp
 impl Add :: (u32, u32) -> u32 {
@@ -29,6 +56,7 @@ Array lifting:
 ```imp
 impl<T> Add :: (T[d:shp,n], T[d:shp,n]) -> T[d:shp,n]
 where
+	Num(T[n]),
 	Add :: (T[n], T[n]) -> T[n]
 {
 	fn +(T[d:shp,n] a, T[d:shp,n] b) -> T[d:shp,n] {
@@ -55,14 +83,12 @@ impl Add :: (f32[d:shp], f32) -> f32[d:shp] {
 
 ## Coherence Rules
 
-1. Single best impl: for any call, resolution must produce exactly one impl.
+1. Single best impl: for any call, exactly one impl may apply.
 2. Orphan ownership: an impl is allowed only if the module owns the trait or at least one concrete base type in the impl head.
-   (For example, it must be the module that defined `trait Add`, or it must be a module that defines a new trait `complex` and uses that type in an `impl`)
 3. Overlap is an error unless one impl is strictly more specific.
 4. Specificity order:
    - concrete dim (`[4]`) > named dim (`[n]`) > wildcard (`[.]`)
    - fixed-rank axes > rank-capture (`d:shp`)
-   - But not concrete base type > type variable: one or the other should be implemented, never both.
-     (E.g., it `Add :: (T, T) -> T` is defined for all `Num`, one may not add an explicit `f32` case.)
+5. Avoid mixing fully generic and concrete base impls for the same signature space unless a strict specialization rule exists.
 
-This prevents silent cross-module behaviour changes.
+These rules prevent silent cross-module behavior changes.
