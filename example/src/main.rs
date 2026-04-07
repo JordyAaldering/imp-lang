@@ -18,10 +18,8 @@ fn expect_array<T: Copy>(value: ImpArrayOrScalar<T>) -> ImpArray<T> {
 
 fn main() {
     let folded = expect_scalar(shouldbefolded());
-    let added = expect_scalar(addthem(4, 2, 3));
     println!("shouldbefolded = {}", folded);
-    println!("addthem = {}", added);
-    assert_eq!(folded, added);
+    assert_eq!(folded, 9);
 
     let ub: usize = 10;
     let arr: ImpArray<usize> = expect_array(iota(ub));

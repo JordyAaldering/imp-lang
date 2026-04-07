@@ -30,6 +30,29 @@ impl<'ast, Ast: AstConfig> Show<'ast, Ast> {
     fn indent(&mut self) {
         self.output.push_str(&" ".repeat(4 * self.depth));
     }
+
+    fn write_where_bound(&mut self, bound: &WhereBound) {
+        match bound {
+            WhereBound::TraitCall(b) => {
+                self.write(&b.trait_name);
+                self.write(" :: (");
+                for (i, arg) in b.args.iter().enumerate() {
+                    if i > 0 {
+                        self.write(", ");
+                    }
+                    self.write_poly_type(arg);
+                }
+                self.write(") -> ");
+                self.write_poly_type(&b.ret);
+            }
+            WhereBound::TypePredicate(b) => {
+                self.write(&b.type_name);
+                self.write("(");
+                self.write_poly_type(&b.arg);
+                self.write(")");
+            }
+        }
+    }
 }
 
 impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
@@ -53,9 +76,7 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
                 self.write("\nwhere\n");
                 for bound in &fundef.where_bounds {
                     self.write("    ");
-                    self.write(&bound.ty_name);
-                    self.write(": ");
-                    self.write(&bound.trait_name);
+                    self.write_where_bound(bound);
                     self.write("\n");
                 }
             }
@@ -68,39 +89,61 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
             self.write("}\n");
         }
 
+        for typeset in program.typesets.values() {
+            self.write(&format!("type {} :: {};\n", typeset.name, typeset.param));
+        }
+
+        for member in &program.members {
+            self.write("member ");
+            self.write(&member.type_name);
+            self.write(" :: ");
+            self.write_poly_type(&member.member);
+            self.write(";\n");
+        }
+
         for trait_def in program.traits.values() {
-            self.write(&format!("trait {}<{}> {{\n", trait_def.name, trait_def.param));
-            self.depth += 1;
-            for method in &trait_def.methods {
-                self.indent();
-                self.write("fn ");
-                self.write(&method.name);
-                self.write("(");
-                for arg in &method.args {
-                    self.write_poly_type(&arg.ty);
-                    self.write(&format!(" {}, ", arg.name));
+            self.write(&format!("trait {} :: (", trait_def.name));
+            for (i, arg) in trait_def.args.iter().enumerate() {
+                if i > 0 {
+                    self.write(", ");
                 }
-                self.write(") -> ");
-                self.write_poly_type(&method.ret_type);
-                self.write(";\n");
+                self.write(arg);
             }
-            self.depth -= 1;
-            self.write("}\n");
+            self.write(") -> ");
+            self.write(&trait_def.ret);
+            self.write(";\n");
         }
 
         for impl_def in &program.impls {
-            self.write(&format!("impl {}<", impl_def.trait_name));
-            self.write_poly_type(&impl_def.for_type);
-            self.write(">\n");
+            self.write("impl ");
+            if !impl_def.type_params.is_empty() {
+                self.write("<");
+                for (i, param) in impl_def.type_params.iter().enumerate() {
+                    if i > 0 {
+                        self.write(", ");
+                    }
+                    self.write(param);
+                }
+                self.write("> ");
+            }
+            self.write(&impl_def.trait_name);
+            self.write(" :: (");
+            for (i, arg) in impl_def.args.iter().enumerate() {
+                if i > 0 {
+                    self.write(", ");
+                }
+                self.write_poly_type(arg);
+            }
+            self.write(") -> ");
+            self.write_poly_type(&impl_def.ret_type);
+            self.write("\n");
             if !impl_def.where_bounds.is_empty() {
                 self.write("    where ");
                 for (i, bound) in impl_def.where_bounds.iter().enumerate() {
                     if i > 0 {
                         self.write(", ");
                     }
-                    self.write(&bound.ty_name);
-                    self.write(": ");
-                    self.write(&bound.trait_name);
+                    self.write_where_bound(bound);
                 }
                 self.write("\n");
             }
@@ -117,7 +160,7 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
                 }
                 self.write(") -> ");
                 self.write_poly_type(&method.ret_type);
-                self.write(" { /* body omitted during early trait refactor */ }\n");
+                self.write(" { /* body omitted in surface AST */ }\n");
             }
             self.depth -= 1;
             self.write("}\n");

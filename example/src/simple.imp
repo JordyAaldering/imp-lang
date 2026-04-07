@@ -1,27 +1,41 @@
-trait Add<T> {
-    fn +(T a, T b) -> T;
-}
+type Num :: T;
 
-impl Add<u32> {
-    fn +(u32 a, u32 b) -> u32 {
-        return @addSxS(a, b);
-    }
-}
+member Num :: u32;
+member Num :: usize;
 
-impl Add<usize> {
+trait Add :: (T, T) -> T;
+
+// impl Add :: (u32, u32) -> u32 {
+//     fn +(u32 a, u32 b) -> u32 {
+//         return @addSxS(a, b);
+//     }
+// }
+
+// impl Add :: (usize, usize) -> usize {
+//     fn +(usize a, usize b) -> usize {
+//         return @addSxS(a, b);
+//     }
+// }
+
+impl Add :: (usize, usize) -> usize
+    where Num(T[n])
+{
     fn +(usize a, usize b) -> usize {
         return @addSxS(a, b);
     }
 }
 
-impl Add<U[d:shp]>
-    where U: Add
+// Meaning: implement addition for the array-array case,
+//          where addition is implemented for the scalar-scalar case.
+impl Add :: (T[d:shp], T[d:shp]) -> T[d:shp]
+where
+    Num(T[n]),
+    Add :: (T, T) -> T
 {
-    fn +(U[d:shp] a, U[d:shp] b) -> U[d:shp] {
+    fn +(T[d:shp] a, T[d:shp] b) -> T[d:shp] {
         return { a[iv] + b[iv] | iv < shp };
     }
 }
-
 
 fn dim(usize[d:shp] arr) -> usize {
     return d;
@@ -37,18 +51,13 @@ fn shouldbefolded() -> u32 {
 
 fn addthem<T>(T a, T b, T c) -> T
 where
-    T: Add
+    Add :: (T, T) -> T
 {
     return a + b + c;
 }
 
 fn iota(usize n) -> usize[n] {
     return { @selAxV(iv, [0]) | [0] <= iv < [n] };
-}
-
-fn iota_should_be_overloaded(usize[d] shp) -> usize[d:shp,d] {
-    zeros = { 0 | [0] <= iv < [d] };
-    return { iv | zeros <= iv < shp };
 }
 
 fn arrays() -> u32[n] {

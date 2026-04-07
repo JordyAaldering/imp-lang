@@ -18,12 +18,15 @@ pub enum Token {
     Bar,
     Comma,
     Colon,
+    ColonColon,
     Semicolon,
     DotDot,
     // Keywords
     Fn,
     Return,
     Trait,
+    Type,
+    Member,
     Impl,
     Where,
     // Arithmetic operators
@@ -159,6 +162,10 @@ impl<'source> Iterator for Lexer<'source> {
             Return
         } else if self.match_str("trait") {
             Trait
+        } else if self.match_str("type") {
+            Type
+        } else if self.match_str("member") {
+            Member
         } else if self.match_str("impl") {
             Impl
         } else if self.match_str("where") {
@@ -174,6 +181,7 @@ impl<'source> Iterator for Lexer<'source> {
                 ']' => RSquare,
                 '|' => Bar,
                 ',' => Comma,
+                ':' if self.match_char(':') => ColonColon,
                 ':' => Colon,
                 ';' => Semicolon,
                 '-' if self.match_char('>') => Arrow,

@@ -22,21 +22,48 @@ pub struct TraitMethodSig {
 #[derive(Clone, Debug)]
 pub struct TraitDef {
     pub name: String,
-    pub param: String,
-    pub methods: Vec<TraitMethodSig>,
+    pub args: Vec<String>,
+    pub ret: String,
 }
 
 #[derive(Clone, Debug)]
-pub struct TraitBound {
-    pub ty_name: String,
+pub struct TraitCallBound {
     pub trait_name: String,
+    pub args: Vec<PolyType>,
+    pub ret: PolyType,
+}
+
+#[derive(Clone, Debug)]
+pub struct TypePredicateBound {
+    pub type_name: String,
+    pub arg: PolyType,
+}
+
+#[derive(Clone, Debug)]
+pub enum WhereBound {
+    TraitCall(TraitCallBound),
+    TypePredicate(TypePredicateBound),
+}
+
+#[derive(Clone, Debug)]
+pub struct TypeSetDef {
+    pub name: String,
+    pub param: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct MemberDef {
+    pub type_name: String,
+    pub member: PolyType,
 }
 
 #[derive(Clone, Debug)]
 pub struct ImplDef {
     pub trait_name: String,
-    pub for_type: PolyType,
-    pub where_bounds: Vec<TraitBound>,
+    pub args: Vec<PolyType>,
+    pub ret_type: PolyType,
+    pub type_params: Vec<String>,
+    pub where_bounds: Vec<WhereBound>,
     pub methods: Vec<TraitMethodSig>,
 }
 

@@ -18,8 +18,6 @@ use crate::{ast::*, traverse::*};
 pub fn compile(src: &str) -> Program<'static, TypedAst> {
     let ast = scp::scanparse(src).unwrap();
     println!("{}", show::show(&ast));
-    let ast = cg::mono::monomorphise_generics(ast);
-    println!("{}", show::show(&ast));
     let ast = tp::analyse_tp(ast);
     println!("{}", show::show(&ast));
     let ast = pre::flatten(ast);

@@ -12,6 +12,8 @@ pub fn to_ssa<'ast>(program: Program<'ast, FlattenedAst>) -> Program<'ast, Untyp
     Program {
         functions,
         generic_functions: HashMap::new(),
+        typesets: program.typesets,
+        members: program.members,
         traits: program.traits,
         impls: program.impls,
     }

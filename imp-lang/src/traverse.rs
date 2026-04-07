@@ -236,6 +236,8 @@ pub trait Traverse<'ast> {
         Program {
             functions,
             generic_functions: std::collections::HashMap::new(),
+            typesets: program.typesets,
+            members: program.members,
             traits: program.traits,
             impls: program.impls,
         }

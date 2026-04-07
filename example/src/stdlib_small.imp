@@ -1,21 +1,19 @@
-trait Add<T> {
-    fn +(T a, T b) -> T;
-}
+trait Add :: (T, T) -> T;
 
-impl Add<u32> {
+impl Add :: (u32, u32) -> u32 {
     fn +(u32 a, u32 b) -> u32 {
         return @addSxS(a, b);
     }
 }
 
-impl Add<usize> {
+impl Add :: (usize, usize) -> usize {
     fn +(usize a, usize b) -> usize {
         return @addSxS(a, b);
     }
 }
 
-impl Add<U[d:shp]>
-    where U: Add
+impl Add :: (U[d:shp], U[d:shp]) -> U[d:shp]
+    where Add :: (U, U) -> U
 {
     fn +(U[d:shp] a, U[d:shp] b) -> U[d:shp] {
         return { a[iv] + b[iv] | iv < shp };

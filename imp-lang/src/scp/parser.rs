@@ -83,6 +83,8 @@ impl<'src> Parser<'src> {
     pub fn parse_program(&mut self) -> ParseResult<Program<'static, ParsedAst>> {
         let mut functions = std::collections::HashMap::new();
         let mut generic_functions = std::collections::HashMap::new();
+        let mut typesets = std::collections::HashMap::new();
+        let mut members = Vec::new();
         let mut traits = std::collections::HashMap::new();
         let mut impls = Vec::new();
 
@@ -108,6 +110,13 @@ impl<'src> Parser<'src> {
                     let trait_def = self.parse_trait_def()?;
                     traits.insert(trait_def.name.clone(), trait_def);
                 }
+                Token::Type => {
+                    let typeset = self.parse_typeset_def()?;
+                    typesets.insert(typeset.name.clone(), typeset);
+                }
+                Token::Member => {
+                    members.push(self.parse_member_def()?);
+                }
                 Token::Impl => {
                     impls.push(self.parse_impl_def()?);
                 }
@@ -118,7 +127,7 @@ impl<'src> Parser<'src> {
             }
         }
 
-        Ok(Program { functions, generic_functions, traits, impls })
+        Ok(Program { functions, generic_functions, typesets, members, traits, impls })
     }
 
     fn parse_fn_item(&mut self) -> ParseResult<ParsedFnItem> {
@@ -135,9 +144,9 @@ impl<'src> Parser<'src> {
 
             let mut where_bounds = Vec::new();
             if self.matches(Token::Where).is_some() {
-                where_bounds.push(self.parse_trait_bound()?);
+                where_bounds.push(self.parse_where_bound()?);
                 while self.matches(Token::Comma).is_some() {
-                    where_bounds.push(self.parse_trait_bound()?);
+                    where_bounds.push(self.parse_where_bound()?);
                 }
             }
 
@@ -386,32 +395,75 @@ impl<'src> Parser<'src> {
     fn parse_trait_def(&mut self) -> ParseResult<TraitDef> {
         self.expect(Token::Trait)?;
         let (name, _) = self.parse_id()?;
-        self.expect(Token::Lt)?;
-        let (param, _) = self.parse_id()?;
-        self.expect(Token::Gt)?;
-        self.expect(Token::LBrace)?;
-
-        let mut methods = Vec::new();
-        while self.peek()?.0 != Token::RBrace {
-            methods.push(self.parse_trait_method_sig()?);
+        self.expect(Token::ColonColon)?;
+        self.expect(Token::LParen)?;
+        let mut args = Vec::new();
+        if self.matches(Token::RParen).is_none() {
+            let (arg, _) = self.parse_id()?;
+            args.push(arg);
+            while self.matches(Token::Comma).is_some() {
+                let (arg, _) = self.parse_id()?;
+                args.push(arg);
+            }
+            self.expect(Token::RParen)?;
         }
+        self.expect(Token::Arrow)?;
+        let (ret, _) = self.parse_id()?;
+        self.expect(Token::Semicolon)?;
+        Ok(TraitDef { name, args, ret })
+    }
 
-        self.expect(Token::RBrace)?;
-        Ok(TraitDef { name, param, methods })
+    fn parse_typeset_def(&mut self) -> ParseResult<TypeSetDef> {
+        self.expect(Token::Type)?;
+        let (name, _) = self.parse_id()?;
+        self.expect(Token::ColonColon)?;
+        let (param, _) = self.parse_id()?;
+        self.expect(Token::Semicolon)?;
+        Ok(TypeSetDef { name, param })
+    }
+
+    fn parse_member_def(&mut self) -> ParseResult<MemberDef> {
+        self.expect(Token::Member)?;
+        let (type_name, _) = self.parse_id()?;
+        self.expect(Token::ColonColon)?;
+        let member = self.parse_poly_type()?;
+        self.expect(Token::Semicolon)?;
+        Ok(MemberDef { type_name, member })
     }
 
     fn parse_impl_def(&mut self) -> ParseResult<ImplDef> {
         self.expect(Token::Impl)?;
+
+        let mut type_params = Vec::new();
+        if self.matches(Token::Lt).is_some() {
+            let (param, _) = self.parse_id()?;
+            type_params.push(param);
+            while self.matches(Token::Comma).is_some() {
+                let (param, _) = self.parse_id()?;
+                type_params.push(param);
+            }
+            self.expect(Token::Gt)?;
+        }
+
         let (trait_name, _) = self.parse_id()?;
-        self.expect(Token::Lt)?;
-        let for_type = self.parse_poly_type()?;
-        self.expect(Token::Gt)?;
+        self.expect(Token::ColonColon)?;
+        self.expect(Token::LParen)?;
+        let mut args = Vec::new();
+        if self.matches(Token::RParen).is_none() {
+            args.push(self.parse_poly_type()?);
+            while self.matches(Token::Comma).is_some() {
+                args.push(self.parse_poly_type()?);
+            }
+            self.expect(Token::RParen)?;
+        }
+        self.expect(Token::Arrow)?;
+        let ret_type = self.parse_poly_type()?;
 
         let mut where_bounds = Vec::new();
         if self.matches(Token::Where).is_some() {
-            where_bounds.push(self.parse_trait_bound()?);
+            where_bounds.push(self.parse_where_bound()?);
             while self.matches(Token::Comma).is_some() {
-                where_bounds.push(self.parse_trait_bound()?);
+                where_bounds.push(self.parse_where_bound()?);
             }
         }
 
@@ -424,20 +476,12 @@ impl<'src> Parser<'src> {
 
         Ok(ImplDef {
             trait_name,
-            for_type,
+            args,
+            ret_type,
+            type_params,
             where_bounds,
             methods,
         })
-    }
-
-    fn parse_trait_method_sig(&mut self) -> ParseResult<TraitMethodSig> {
-        self.expect(Token::Fn)?;
-        let name = self.parse_method_name()?;
-        let args = self.parse_poly_args()?;
-        self.expect(Token::Arrow)?;
-        let ret_type = self.parse_poly_type()?;
-        self.expect(Token::Semicolon)?;
-        Ok(TraitMethodSig { name, args, ret_type })
     }
 
     fn parse_impl_method_sig(&mut self) -> ParseResult<TraitMethodSig> {
@@ -495,11 +539,39 @@ impl<'src> Parser<'src> {
         Ok(PolyType { head, shape })
     }
 
-    fn parse_trait_bound(&mut self) -> ParseResult<TraitBound> {
-        let (ty_name, _) = self.parse_id()?;
-        self.expect(Token::Colon)?;
-        let (trait_name, _) = self.parse_id()?;
-        Ok(TraitBound { ty_name, trait_name })
+    fn parse_where_bound(&mut self) -> ParseResult<WhereBound> {
+        let (name, _) = self.parse_id()?;
+        match self.peek()?.0.clone() {
+            Token::ColonColon => {
+                self.expect(Token::ColonColon)?;
+                self.expect(Token::LParen)?;
+                let mut args = Vec::new();
+                if self.matches(Token::RParen).is_none() {
+                    args.push(self.parse_poly_type()?);
+                    while self.matches(Token::Comma).is_some() {
+                        args.push(self.parse_poly_type()?);
+                    }
+                    self.expect(Token::RParen)?;
+                }
+                self.expect(Token::Arrow)?;
+                let ret = self.parse_poly_type()?;
+                Ok(WhereBound::TraitCall(TraitCallBound {
+                    trait_name: name,
+                    args,
+                    ret,
+                }))
+            }
+            Token::LParen => {
+                self.expect(Token::LParen)?;
+                let arg = self.parse_poly_type()?;
+                self.expect(Token::RParen)?;
+                Ok(WhereBound::TypePredicate(TypePredicateBound {
+                    type_name: name,
+                    arg,
+                }))
+            }
+            token => Err(ParseError::UnexpectedToken("where-bound".to_owned(), token, self.peek()?.1)),
+        }
     }
 
     fn parse_method_name(&mut self) -> ParseResult<String> {
