@@ -15,12 +15,6 @@ trait Sel :: (usize[n] idx, T[n:shp]) -> T;
 //     return @addSxS(a, b);
 // }
 
-impl Add :: (usize, usize) -> usize
-    where Num(T[n])
-{
-    return @addSxS(a, b);
-}
-
 impl Sel :: (usize[n] idx, T[n:shp] arr) -> T {
     return @selVxA(idx, arr);
 }
@@ -29,9 +23,7 @@ impl Sel :: (usize[n] idx, T[n:shp] arr) -> T {
 //          where T is a member of type Num
 //          and addition is implemented for the scalar-scalar case.
 impl Add :: (T[d:shp], T[d:shp]) -> T[d:shp]
-where
-    Num(T),
-    Add :: (T, T) -> T
+    where T: Num
 {
     return { a[iv] + b[iv] | iv < shp };
 }
@@ -49,8 +41,7 @@ fn shouldbefolded() -> u32 {
 }
 
 fn addthem<T>(T a, T b, T c) -> T
-where
-    Add :: (T, T) -> T
+    where T: Num
 {
     return a + b + c;
 }

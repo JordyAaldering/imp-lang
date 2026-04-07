@@ -80,6 +80,7 @@ impl CompileC {
 
     fn operator_ret_type(&self, method_name: &str, arg_types: &[Type]) -> Type {
         match method_name {
+            "sel" => Type::scalar(arg_types.get(1).map(|ty| ty.ty).unwrap_or(BaseType::I32)),
             "==" | "!=" | "<" | "<=" | ">" | ">=" | "!" => Type::scalar(BaseType::Bool),
             "+" | "-" | "*" | "/" => arg_types.first().cloned().unwrap_or_else(|| Type::scalar(BaseType::U32)),
             _ => arg_types.first().cloned().unwrap_or_else(|| Type::scalar(BaseType::U32)),
@@ -113,7 +114,17 @@ impl CompileC {
         self.push_line(&format!("static {} IMP_{}({}) {{", full_ctype(&ret_type), shim_name, args_decl));
         self.indent += 1;
         let binary_array = arg_types.len() == 2 && arg_types[0].is_array() && arg_types[1].is_array();
-        if binary_array {
+        if method_name == "sel" && arg_types.len() == 2 {
+            if !arg_types[1].is_array() {
+                panic!("Sel::sel expects second argument to be an array");
+            }
+            let elem = base_ctype(&arg_types[1]);
+            let flat_fn = match arg_types[0].ty {
+                BaseType::Usize => "imp_flat_index",
+                _ => panic!("Sel::sel expects usize index vector in C lowering"),
+            };
+            self.push_line(&format!("return (({elem} *)a1.data)[{flat_fn}(a1, a0)];"));
+        } else if binary_array {
             let op = match method_name {
                 "+" => "+",
                 "-" => "-",

@@ -27,22 +27,14 @@ pub struct TraitDef {
 }
 
 #[derive(Clone, Debug)]
-pub struct TraitCallBound {
-    pub trait_name: String,
-    pub args: Vec<PolyType>,
-    pub ret: PolyType,
-}
-
-#[derive(Clone, Debug)]
-pub struct TypePredicateBound {
-    pub type_name: String,
-    pub arg: PolyType,
+pub struct MemberBound {
+    pub type_var: String,
+    pub type_set: String,
 }
 
 #[derive(Clone, Debug)]
 pub enum WhereBound {
-    TraitCall(TraitCallBound),
-    TypePredicate(TypePredicateBound),
+    Member(MemberBound),
 }
 
 #[derive(Clone, Debug)]

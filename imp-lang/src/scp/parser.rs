@@ -561,38 +561,10 @@ impl<'src> Parser<'src> {
     }
 
     fn parse_where_bound(&mut self) -> ParseResult<WhereBound> {
-        let (name, _) = self.parse_id()?;
-        match self.peek()?.0.clone() {
-            Token::ColonColon => {
-                self.expect(Token::ColonColon)?;
-                self.expect(Token::LParen)?;
-                let mut args = Vec::new();
-                if self.matches(Token::RParen).is_none() {
-                    args.push(self.parse_poly_type()?);
-                    while self.matches(Token::Comma).is_some() {
-                        args.push(self.parse_poly_type()?);
-                    }
-                    self.expect(Token::RParen)?;
-                }
-                self.expect(Token::Arrow)?;
-                let ret = self.parse_poly_type()?;
-                Ok(WhereBound::TraitCall(TraitCallBound {
-                    trait_name: name,
-                    args,
-                    ret,
-                }))
-            }
-            Token::LParen => {
-                self.expect(Token::LParen)?;
-                let arg = self.parse_poly_type()?;
-                self.expect(Token::RParen)?;
-                Ok(WhereBound::TypePredicate(TypePredicateBound {
-                    type_name: name,
-                    arg,
-                }))
-            }
-            token => Err(ParseError::UnexpectedToken("where-bound".to_owned(), token, self.peek()?.1)),
-        }
+        let (type_var, _) = self.parse_id()?;
+        self.expect(Token::Colon)?;
+        let (type_set, _) = self.parse_id()?;
+        Ok(WhereBound::Member(MemberBound { type_var, type_set }))
     }
 
     fn parse_method_name(&mut self) -> ParseResult<String> {

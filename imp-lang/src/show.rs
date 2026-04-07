@@ -33,23 +33,10 @@ impl<'ast, Ast: AstConfig> Show<'ast, Ast> {
 
     fn write_where_bound(&mut self, bound: &WhereBound) {
         match bound {
-            WhereBound::TraitCall(b) => {
-                self.write(&b.trait_name);
-                self.write(" :: (");
-                for (i, arg) in b.args.iter().enumerate() {
-                    if i > 0 {
-                        self.write(", ");
-                    }
-                    self.write_poly_type(arg);
-                }
-                self.write(") -> ");
-                self.write_poly_type(&b.ret);
-            }
-            WhereBound::TypePredicate(b) => {
-                self.write(&b.type_name);
-                self.write("(");
-                self.write_poly_type(&b.arg);
-                self.write(")");
+            WhereBound::Member(b) => {
+                self.write(&b.type_var);
+                self.write(": ");
+                self.write(&b.type_set);
             }
         }
     }

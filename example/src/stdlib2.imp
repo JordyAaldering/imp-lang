@@ -51,7 +51,6 @@ member Num :: usize;
 // -----------------------------------------------------------------------------
 
 impl Add :: (U[d:shp], U[d:shp]) -> U[d:shp]
-    where Add :: (U, U) -> U
 {
     fn +(U[d:shp] a, U[d:shp] b) -> U[d:shp] {
         return { a[iv] + b[iv] | iv < shp };
@@ -59,7 +58,6 @@ impl Add :: (U[d:shp], U[d:shp]) -> U[d:shp]
 }
 
 impl Sub :: (U[d:shp], U[d:shp]) -> U[d:shp]
-    where Sub :: (U, U) -> U
 {
     fn -(U[d:shp] a, U[d:shp] b) -> U[d:shp] {
         return { a[iv] - b[iv] | iv < shp };
@@ -67,7 +65,6 @@ impl Sub :: (U[d:shp], U[d:shp]) -> U[d:shp]
 }
 
 impl Mul :: (U[d:shp], U[d:shp]) -> U[d:shp]
-    where Mul :: (U, U) -> U
 {
     fn *(U[d:shp] a, U[d:shp] b) -> U[d:shp] {
         return { a[iv] * b[iv] | iv < shp };
@@ -75,7 +72,6 @@ impl Mul :: (U[d:shp], U[d:shp]) -> U[d:shp]
 }
 
 impl Div :: (U[d:shp], U[d:shp]) -> U[d:shp]
-    where Div :: (U, U) -> U
 {
     fn /(U[d:shp] a, U[d:shp] b) -> U[d:shp] {
         return { a[iv] / b[iv] | iv < shp };
@@ -83,7 +79,6 @@ impl Div :: (U[d:shp], U[d:shp]) -> U[d:shp]
 }
 
 impl Eq :: (U[d:shp], U[d:shp]) -> bool
-    where Eq :: (U, U) -> bool
 {
     fn ==(U[d:shp] a, U[d:shp] b) -> bool {
         return all({ a[iv] == b[iv] | iv < shp });
@@ -100,14 +95,14 @@ impl Eq :: (U[d:shp], U[d:shp]) -> bool
 
 fn scale<T>(T alpha, T[d:shp] xs) -> T[d:shp]
 where
-    Num(T)
+    T: Num
 {
     return { alpha * xs[iv] | iv < shp };
 }
 
 fn hadamard<T>(T[d:shp] xs, T[d:shp] ys) -> T[d:shp]
 where
-    Num(T)
+    T: Num
 {
     return { xs[iv] * ys[iv] | iv < shp };
 }

@@ -13,7 +13,6 @@ impl Add :: (usize, usize) -> usize {
 }
 
 impl Add :: (U[d:shp], U[d:shp]) -> U[d:shp]
-    where Add :: (U, U) -> U
 {
     fn +(U[d:shp] a, U[d:shp] b) -> U[d:shp] {
         return { a[iv] + b[iv] | iv < shp };
