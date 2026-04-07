@@ -47,7 +47,7 @@ fn shape(usize[d:shp] arr) -> usize[d] {
 }
 
 fn shouldbefolded() -> u32 {
-    return @addSxS(4, @addSxS(2, 3));
+    return @addSxS(4u32, @addSxS(2u32, 3u32));
 }
 
 fn addthem<T>(T a, T b, T c) -> T
@@ -58,7 +58,7 @@ where
 }
 
 fn iota(usize n) -> usize[n] {
-    return { @selAxV(iv, [0]) | [0] <= iv < [n] };
+    return { @selAxV(iv, [0usize]) | [0usize] <= iv < [n] };
 }
 
 fn my_add_after_iota(usize[d:shp] a, usize[d:shp] b) -> usize[d:shp] {
@@ -66,13 +66,13 @@ fn my_add_after_iota(usize[d:shp] a, usize[d:shp] b) -> usize[d:shp] {
 }
 
 fn arrays() -> u32[n] {
-    a = [1,3,1,4,1];
+    a = [1u32,3u32,1u32,4u32,1u32];
     return a;
 }
 
 fn sel() -> u32 {
-    arr = [1,2,3,4,5];
-    x = @selAxV(arr, [2]);
+    arr = [1u32,2u32,3u32,4u32,5u32];
+    x = @selAxV(arr, [2usize]);
     return x;
 }
 

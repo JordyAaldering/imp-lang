@@ -227,8 +227,14 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
             Tensor(n) => self.visit_tensor(n),
             Array(n) => self.visit_array(n),
             Id(n) => self.visit_id(n),
-            Bool(n) => self.visit_bool(n),
-            U32(n) => self.visit_u32(n),
+            Bool(v) => self.write(&v.to_string()),
+            I32(v) => self.write(&v.to_string()),
+            I64(v) => self.write(&v.to_string()),
+            U32(v) => self.write(&v.to_string()),
+            U64(v) => self.write(&v.to_string()),
+            Usize(v) => self.write(&v.to_string()),
+            F32(v) => self.write(&v.to_string()),
+            F64(v) => self.write(&v.to_string()),
         }
     }
 
@@ -297,19 +303,17 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
         }
     }
 
-    fn visit_bool(&mut self, value: &bool) {
-        self.write(&value.to_string());
-    }
-
-    fn visit_u32(&mut self, value: &u32) {
-        self.write(&value.to_string());
-    }
-
     fn visit_type(&mut self, ty: &Type) {
+        use BaseType::*;
         let ty_str = match ty.ty {
-            BaseType::U32 => "u32",
-            BaseType::Usize => "usize",
-            BaseType::Bool => "bool",
+            I32 => "i32",
+            I64 => "i64",
+            U32 => "u32",
+            U64 => "u64",
+            Usize => "usize",
+            F32 => "f32",
+            F64 => "f64",
+            Bool => "bool",
         };
         self.write(ty_str);
 

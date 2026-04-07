@@ -78,19 +78,31 @@ impl<'ast> Visit<'ast> for CompileH {
 }
 
 fn base_ctype(ty: &Type) -> &'static str {
+    use BaseType::*;
     match ty.ty {
-        BaseType::U32 => "uint32_t",
-        BaseType::Usize => "size_t",
-        BaseType::Bool => "bool",
+        I32 => "int32_t",
+        I64 => "int64_t",
+        U32 => "uint32_t",
+        U64 => "uint64_t",
+        Usize => "size_t",
+        F32 => "float",
+        F64 => "double",
+        Bool => "bool",
     }
 }
 
 fn full_ctype(ty: &Type) -> String {
     if matches!(ty.shape, ShapePattern::Any) {
+        use BaseType::*;
         return match ty.ty {
-            BaseType::U32 => "ImpDynU32".to_owned(),
-            BaseType::Usize => "ImpDynUsize".to_owned(),
-            BaseType::Bool => "ImpDynBool".to_owned(),
+            I32 => "ImpDynI32".to_owned(),
+            I64 => "ImpDynI64".to_owned(),
+            U32 => "ImpDynU32".to_owned(),
+            U64 => "ImpDynU64".to_owned(),
+            Usize => "ImpDynUsize".to_owned(),
+            F32 => "ImpDynF32".to_owned(),
+            F64 => "ImpDynF64".to_owned(),
+            Bool => "ImpDynBool".to_owned(),
         };
     }
 

@@ -71,8 +71,14 @@ pub trait Visit<'ast> {
             Tensor(n) => self.visit_tensor(n),
             Array(n) => self.visit_array(n),
             Id(n) => self.visit_id(n),
-            Bool(n) => self.visit_bool(n),
-            U32(n) => self.visit_u32(n),
+            I32(_) => {},
+            I64(_) => {},
+            U32(_) => {},
+            U64(_) => {},
+            Usize(_) => {},
+            F32(_) => {},
+            F64(_) => {},
+            Bool(_) => {},
         }
     }
 
@@ -109,10 +115,6 @@ pub trait Visit<'ast> {
     // Terminals
 
     fn visit_id(&mut self, _id: &Id<'ast, Self::Ast>) { }
-
-    fn visit_bool(&mut self, _v: &bool) { }
-
-    fn visit_u32(&mut self, _v: &u32) { }
 
     fn visit_type(&mut self, _ty: &Type) { }
 }
@@ -176,8 +178,14 @@ pub trait Rewrite<'ast> {
             Array(n) => self.rewrite_array(n),
             // Terminals
             Id(n) => Id(self.rewrite_id(n)),
-            Bool(v) => Bool(self.rewrite_bool(v)),
-            U32(v) => U32(self.rewrite_u32(v)),
+            I32(v) => I32(v),
+            I64(v) => I64(v),
+            U32(v) => U32(v),
+            U64(v) => U64(v),
+            Usize(v) => Usize(v),
+            F32(v) => F32(v),
+            F64(v) => F64(v),
+            Bool(v) => Bool(v),
         }
     }
 
@@ -205,14 +213,6 @@ pub trait Rewrite<'ast> {
 
     fn rewrite_id(&mut self, id: Id<'ast, Self::Ast>) -> Id<'ast, Self::Ast> {
         id
-    }
-
-    fn rewrite_bool(&mut self, v: bool) -> bool {
-        v
-    }
-
-    fn rewrite_u32(&mut self, v: u32) -> u32 {
-        v
     }
 
     fn rewrite_type(&mut self, ty: Type) -> Type {
@@ -322,18 +322,6 @@ pub trait Traverse<'ast> {
     type IdOut = Id<'ast, Self::OutAst>;
 
     fn trav_id(&mut self, _id: Id<'ast, Self::InAst>) -> Self::IdOut {
-        unimplemented!()
-    }
-
-    type BoolOut = bool;
-
-    fn trav_bool(&mut self, _v: bool) -> Self::BoolOut {
-        unimplemented!()
-    }
-
-    type U32Out = u32;
-
-    fn trav_u32(&mut self, _v: u32) -> Self::U32Out {
         unimplemented!()
     }
 

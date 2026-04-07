@@ -315,7 +315,15 @@ impl<'src> Parser<'src> {
                 }
             },
             Token::BoolValue(v) => self.alloc_expr(Expr::Bool(v)),
+            Token::NatValue(v) => self.alloc_expr(Expr::I32(v)),
+            Token::I32Value(v) => self.alloc_expr(Expr::I32(v)),
+            Token::I64Value(v) => self.alloc_expr(Expr::I64(v)),
             Token::U32Value(v) => self.alloc_expr(Expr::U32(v)),
+            Token::U64Value(v) => self.alloc_expr(Expr::U64(v)),
+            Token::UsizeValue(v) => self.alloc_expr(Expr::Usize(v)),
+            Token::RealValue(v) => self.alloc_expr(Expr::F32(v)),
+            Token::F32Value(v) => self.alloc_expr(Expr::F32(v)),
+            Token::F64Value(v) => self.alloc_expr(Expr::F64(v)),
             Token::LParen => {
                 let expr = self.parse_expr(None::<Bop>)?;
 
@@ -717,7 +725,7 @@ impl<'src> Parser<'src> {
     fn parse_axis(&mut self) -> ParseResult<AxisPattern> {
         let (token, span) = self.next()?;
         match token {
-            Token::U32Value(n) => Ok(AxisPattern::Dim(DimPattern::Known(n as u64))),
+            Token::NatValue(n) => Ok(AxisPattern::Dim(DimPattern::Known(n as u64))),
             Token::Identifier(name) => {
                 if name == "_" {
                     Ok(AxisPattern::Dim(DimPattern::Any))

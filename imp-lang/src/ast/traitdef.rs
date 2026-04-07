@@ -70,8 +70,13 @@ pub struct ImplDef {
 impl PolyType {
     pub fn from_concrete(ty: &Type) -> Self {
         let head = match ty.ty {
+            BaseType::I32 => "i32",
+            BaseType::I64 => "i64",
             BaseType::U32 => "u32",
+            BaseType::U64 => "u64",
             BaseType::Usize => "usize",
+            BaseType::F32 => "f32",
+            BaseType::F64 => "f64",
             BaseType::Bool => "bool",
         };
         let shape = match &ty.shape {

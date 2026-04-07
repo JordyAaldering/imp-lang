@@ -151,8 +151,14 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
             Tensor(n) => Tensor(self.trav_tensor(n)),
             Array(n) => Array(self.trav_array(n)),
             Id(n) => Id(self.trav_id(n)),
-            Bool(v) => Bool(v),
+            I32(v) => I32(v),
+            I64(v) => I64(v),
             U32(v) => U32(v),
+            U64(v) => U64(v),
+            Usize(v) => Usize(v),
+            F32(v) => F32(v),
+            F64(v) => F64(v),
+            Bool(v) => Bool(v),
         };
         self.emit_expr(expr)
     }

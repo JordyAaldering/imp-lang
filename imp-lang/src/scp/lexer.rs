@@ -34,13 +34,24 @@ pub enum Token {
     // Comparison operators
     Not, Eq, Ne, Lt, Le, Gt, Ge,
     // Literals
+    NatValue(i32), // Unspecified natural number, this is assumed to be i32 by default (in future, we may want to try to derive this from context first)
+    I32Value(i32),
+    I64Value(i64),
     U32Value(u32),
+    U64Value(u64),
+    UsizeValue(usize),
+    RealValue(f32), // Unspecified real number, this is assumed to be f32 by default (in future, we may want to try to derive this from context first)
+    F32Value(f32),
+    F64Value(f64),
     BoolValue(bool),
     /// `@` is used as a prefix for primitive functions.
     Prf(String),
     Identifier(String),
-    // Error
-    Unexpected(char),
+    /// Error: natural number specifier a real numbered value.
+    /// E.g. `42.0i32` or `3.14usize`.
+    NotANaturalNumber(String),
+    /// Error: unexpected token during lexing
+    UnexpectedCharacter(char),
 }
 
 pub struct Lexer<'src> {
@@ -218,8 +229,59 @@ impl<'source> Iterator for Lexer<'source> {
                         self.col += 1;
                     }
 
+                    let mut is_real = false;
+                    if self.match_char('.') {
+                        while self.peek_char().is_some_and(|c| c.is_ascii_digit()) {
+                            self.current += 1;
+                            self.col += 1;
+                        }
+                        is_real = true
+                    };
+
                     let end_idx = self.current;
-                    U32Value(self.src[start_idx..end_idx].parse().unwrap())
+                    let s = &self.src[start_idx..end_idx];
+
+                    if self.match_str("i32") {
+                        if is_real {
+                            NotANaturalNumber(s.to_string())
+                        } else {
+                            I32Value(s.parse().unwrap())
+                        }
+                    } else if self.match_str("i64") {
+                        if is_real {
+                            NotANaturalNumber(s.to_string())
+                        } else {
+                            I64Value(s.parse().unwrap())
+                        }
+                    } else if self.match_str("u32") {
+                        if is_real {
+                            NotANaturalNumber(s.to_string())
+                        } else {
+                            U32Value(s.parse().unwrap())
+                        }
+                    } else if self.match_str("u64") {
+                        if is_real {
+                            NotANaturalNumber(s.to_string())
+                        } else {
+                            U64Value(s.parse().unwrap())
+                        }
+                    } else if self.match_str("usize") {
+                        if is_real {
+                            NotANaturalNumber(s.to_string())
+                        } else {
+                            UsizeValue(s.parse().unwrap())
+                        }
+                    } else if self.match_str("f32") {
+                        F32Value(s.parse().unwrap())
+                    } else if self.match_str("f64") {
+                        F64Value(s.parse().unwrap())
+                    } else {
+                        if is_real {
+                            RealValue(s.parse().unwrap())
+                        } else {
+                            NatValue(s.parse().unwrap())
+                        }
+                    }
                 }
                 c if c.is_ascii_alphabetic() || c == '_' => {
                     while self.peek_char().is_some_and(|c| c.is_ascii_alphanumeric() || c == '_') {
@@ -231,7 +293,7 @@ impl<'source> Iterator for Lexer<'source> {
                     Identifier(self.src[start_idx..end_idx].to_string())
                 }
                 // Error
-                c => Unexpected(c),
+                c => UnexpectedCharacter(c),
             }
         };
 

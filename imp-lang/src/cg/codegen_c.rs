@@ -197,7 +197,14 @@ impl CompileC {
                 }
             }
             Expr::Id(id) => self.emit_trait_shims_for_id(id, args),
-            Expr::Bool(_) | Expr::U32(_) => {}
+            Expr::I32(_) => {},
+            Expr::I64(_) => {},
+            Expr::U32(_) => {}
+            Expr::U64(_) => {},
+            Expr::Usize(_) => {},
+            Expr::F32(_) => {},
+            Expr::F64(_) => {},
+            Expr::Bool(_) => {},
         }
     }
 
@@ -211,15 +218,7 @@ impl<'ast> Visit<'ast> for CompileC {
         self.impls = program.impls.clone();
         self.emitted_trait_shims.clear();
         self.output.push_str(&format!("#include \"{}.h\"\n\n", self.stem));
-        self.output.push_str("__attribute__((unused)) static size_t imp_flat_index_u32(ImpArrayRaw arr, ImpArrayRaw idx) {\n");
-        self.output.push_str("    size_t flat = 0;\n");
-        self.output.push_str("    uint32_t *idx_data = (uint32_t *)idx.data;\n");
-        self.output.push_str("    for (size_t d = 0; d < idx.len; d += 1) {\n");
-        self.output.push_str("        flat = flat * arr.shp[d] + (size_t)idx_data[d];\n");
-        self.output.push_str("    }\n");
-        self.output.push_str("    return flat;\n");
-        self.output.push_str("}\n\n");
-        self.output.push_str("__attribute__((unused)) static size_t imp_flat_index_usize(ImpArrayRaw arr, ImpArrayRaw idx) {\n");
+        self.output.push_str("static size_t imp_flat_index(ImpArrayRaw arr, ImpArrayRaw idx) {\n");
         self.output.push_str("    size_t flat = 0;\n");
         self.output.push_str("    size_t *idx_data = (size_t *)idx.data;\n");
         self.output.push_str("    for (size_t d = 0; d < idx.len; d += 1) {\n");
@@ -279,6 +278,24 @@ impl<'ast> Visit<'ast> for CompileC {
     fn visit_return(&mut self, ret: &Return<'ast, Self::Ast>) {
         let name = self.render_expr(&Expr::Id(ret.id));
         self.push_line(&format!("return {};", name));
+    }
+
+    fn visit_expr(&mut self, expr: &Expr<'ast, Self::Ast>) {
+        match expr {
+            Expr::Call(call) => self.visit_call(call),
+            Expr::PrfCall(prf) => self.visit_prf_call(prf),
+            Expr::Tensor(tensor) => self.visit_tensor(tensor),
+            Expr::Array(array) => self.visit_array(array),
+            Expr::Id(id) => self.visit_id(id),
+            Expr::I32(v) => self.expr_stack.push(v.to_string()),
+            Expr::I64(v) => self.expr_stack.push(v.to_string()),
+            Expr::U32(v) => self.expr_stack.push(v.to_string()),
+            Expr::U64(v) => self.expr_stack.push(v.to_string()),
+            Expr::Usize(v) => self.expr_stack.push(v.to_string()),
+            Expr::F32(v) => self.expr_stack.push(format!("{}f", v)),
+            Expr::F64(v) => self.expr_stack.push(v.to_string()),
+            Expr::Bool(v) => self.expr_stack.push(if *v { "true".to_owned() } else { "false".to_owned() }),
+        }
     }
 
     fn visit_tensor(&mut self, tensor: &Tensor<'ast, Self::Ast>) {
@@ -527,30 +544,34 @@ impl<'ast> Visit<'ast> for CompileC {
             }
         }
     }
-
-    fn visit_bool(&mut self, v: &bool) {
-        self.expr_stack.push(if *v { "true".to_owned() } else { "false".to_owned() });
-    }
-
-    fn visit_u32(&mut self, v: &u32) {
-        self.expr_stack.push(v.to_string());
-    }
 }
 
 fn base_ctype(ty: &Type) -> &'static str {
+    use BaseType::*;
     match ty.ty {
-        BaseType::U32 => "uint32_t",
-        BaseType::Usize => "size_t",
-        BaseType::Bool => "bool",
+        I32 => "int32_t",
+        I64 => "int64_t",
+        U32 => "uint32_t",
+        U64 => "uint64_t",
+        Usize => "size_t",
+        F32 => "float",
+        F64 => "double",
+        Bool => "bool",
     }
 }
 
 fn full_ctype(ty: &Type) -> String {
     if matches!(ty.shape, ShapePattern::Any) {
+        use BaseType::*;
         return match ty.ty {
-            BaseType::U32 => "ImpDynU32".to_owned(),
-            BaseType::Usize => "ImpDynUsize".to_owned(),
-            BaseType::Bool => "ImpDynBool".to_owned(),
+            I32 => "ImpDynI32".to_owned(),
+            I64 => "ImpDynI64".to_owned(),
+            U32 => "ImpDynU32".to_owned(),
+            U64 => "ImpDynU64".to_owned(),
+            Usize => "ImpDynUsize".to_owned(),
+            F32 => "ImpDynF32".to_owned(),
+            F64 => "ImpDynF64".to_owned(),
+            Bool => "ImpDynBool".to_owned(),
         };
     }
 
@@ -571,10 +592,10 @@ fn elem_ctype_of_id(id: &Id<'_, TypedAst>) -> &'static str {
 }
 
 fn flat_index_fn_of_id(id: &Id<'_, TypedAst>) -> &'static str {
+    use BaseType::*;
     match id_base_type(id) {
-        BaseType::U32 => "imp_flat_index_u32",
-        BaseType::Usize => "imp_flat_index_usize",
-        BaseType::Bool => panic!("bool cannot be used as an array index vector"),
+        Usize => "imp_flat_index",
+        _ => panic!("arrays can only be indexed by usize"),
     }
 }
 

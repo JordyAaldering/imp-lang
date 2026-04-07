@@ -514,14 +514,14 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
                 let (id, ty) = self.trav_id(n);
                 (Id(id), ty)
             }
-            Bool(n) => {
-                let (expr, ty) = self.trav_bool(n);
-                (Bool(expr), ty)
-            }
-            U32(n) => {
-                let (expr, ty) = self.trav_u32(n);
-                (U32(expr), ty)
-            }
+            I32(v) => (I32(v), Type::scalar(BaseType::I32)),
+            I64(v) => (I64(v), Type::scalar(BaseType::I64)),
+            U32(v) => (U32(v), Type::scalar(BaseType::U32)),
+            U64(v) => (U64(v), Type::scalar(BaseType::U64)),
+            Usize(v) => (Usize(v), Type::scalar(BaseType::Usize)),
+            F32(v) => (F32(v), Type::scalar(BaseType::F32)),
+            F64(v) => todo!(),
+            Bool(v) => (Bool(v), Type::scalar(BaseType::Bool)),
         }
     }
 
@@ -779,18 +779,6 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
                 (Id::DimAt(i, k), Type::scalar(BaseType::Usize))
             }
         }
-    }
-
-    type BoolOut = (bool, Type);
-
-    fn trav_bool(&mut self, value: bool) -> Self::BoolOut {
-        (value, Type::scalar(BaseType::Bool))
-    }
-
-    type U32Out = (u32, Type);
-
-    fn trav_u32(&mut self, value: u32) -> Self::U32Out {
-        (value, Type::scalar(BaseType::U32))
     }
 }
 

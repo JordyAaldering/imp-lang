@@ -1,8 +1,13 @@
 /// The base scalar element type.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BaseType {
+    I32,
+    I64,
     U32,
+    U64,
     Usize,
+    F32,
+    F64,
     Bool,
 }
 
