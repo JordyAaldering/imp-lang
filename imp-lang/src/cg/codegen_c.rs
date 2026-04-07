@@ -497,9 +497,9 @@ impl<'ast> Visit<'ast> for CompileC {
             NeSxS => format!("{} != {}", args[0], args[1]),
             NegS => format!("-{}", args[0]),
             NotS => format!("!{}", args[0]),
-            SelAxV => {
-                let arr_id = prf_call.args[0];
-                let idx_id = prf_call.args[1];
+            SelVxA => {
+                let idx_id = prf_call.args[0];
+                let arr_id = prf_call.args[1];
                 if self.id_is_any(&arr_id) || self.id_is_any(&idx_id) {
                     panic!("dynamic union values are not yet supported in primitive selection during C codegen");
                 }

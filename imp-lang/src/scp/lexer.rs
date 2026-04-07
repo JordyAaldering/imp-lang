@@ -3,8 +3,13 @@ use super::span::Span;
 #[derive(Clone, Debug, PartialEq)]
 pub enum Token {
     // Type names
+    I32Type,
+    I64Type,
     U32Type,
+    U64Type,
     UsizeType,
+    F32Type,
+    F64Type,
     BoolType,
     // Symbols
     Arrow,
@@ -157,10 +162,20 @@ impl<'source> Iterator for Lexer<'source> {
         let start_col = self.col;
 
         // Keywords
-        let token = if self.match_str("u32") {
+        let token = if self.match_str("i32") {
+            I32Type
+        } else if self.match_str("i64") {
+            I64Type
+        } else if self.match_str("u32") {
             U32Type
+        } else if self.match_str("u64") {
+            U64Type
         } else if self.match_str("usize") {
             UsizeType
+        } else if self.match_str("f32") {
+            F32Type
+        } else if self.match_str("f64") {
+            F64Type
         } else if self.match_str("bool") {
             BoolType
         } else if self.match_str("true") {

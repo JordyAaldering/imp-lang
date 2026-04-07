@@ -404,21 +404,33 @@ impl<'src> Parser<'src> {
         self.expect(Token::Trait)?;
         let (name, _) = self.parse_id()?;
         self.expect(Token::ColonColon)?;
+        let args = self.parse_poly_sig_types()?;
+        self.expect(Token::Arrow)?;
+        let ret = self.parse_poly_type()?;
+        self.expect(Token::Semicolon)?;
+        Ok(TraitDef { name, args, ret })
+    }
+
+    fn parse_poly_sig_types(&mut self) -> ParseResult<Vec<PolyType>> {
         self.expect(Token::LParen)?;
         let mut args = Vec::new();
         if self.matches(Token::RParen).is_none() {
-            let (arg, _) = self.parse_id()?;
-            args.push(arg);
-            while self.matches(Token::Comma).is_some() {
-                let (arg, _) = self.parse_id()?;
-                args.push(arg);
+            loop {
+                let ty = self.parse_poly_type()?;
+                // Optional argument name in signatures, e.g. `(usize[n] idx, T[n] arr)`.
+                if matches!(self.peek()?.0, Token::Identifier(_)) {
+                    let _ = self.parse_id()?;
+                }
+                args.push(ty);
+
+                if self.matches(Token::Comma).is_some() {
+                    continue;
+                }
+                self.expect(Token::RParen)?;
+                break;
             }
-            self.expect(Token::RParen)?;
         }
-        self.expect(Token::Arrow)?;
-        let (ret, _) = self.parse_id()?;
-        self.expect(Token::Semicolon)?;
-        Ok(TraitDef { name, args, ret })
+        Ok(args)
     }
 
     fn parse_typeset_def(&mut self) -> ParseResult<TypeSetDef> {
@@ -455,15 +467,7 @@ impl<'src> Parser<'src> {
 
         let (trait_name, _) = self.parse_id()?;
         self.expect(Token::ColonColon)?;
-        self.expect(Token::LParen)?;
-        let mut args = Vec::new();
-        if self.matches(Token::RParen).is_none() {
-            args.push(self.parse_poly_type()?);
-            while self.matches(Token::Comma).is_some() {
-                args.push(self.parse_poly_type()?);
-            }
-            self.expect(Token::RParen)?;
-        }
+        let args = self.parse_poly_sig_types()?;
         self.expect(Token::Arrow)?;
         let ret_type = self.parse_poly_type()?;
 
@@ -477,10 +481,14 @@ impl<'src> Parser<'src> {
 
         self.expect(Token::LBrace)?;
         let mut methods = Vec::new();
-        while self.peek()?.0 != Token::RBrace {
-            methods.push(self.parse_impl_method_sig()?);
+        if matches!(self.peek()?.0, Token::Fn) {
+            while self.peek()?.0 != Token::RBrace {
+                methods.push(self.parse_impl_method_sig()?);
+            }
+            self.expect(Token::RBrace)?;
+        } else {
+            self.skip_block_contents()?;
         }
-        self.expect(Token::RBrace)?;
 
         Ok(ImplDef {
             trait_name,
@@ -524,8 +532,13 @@ impl<'src> Parser<'src> {
     fn parse_poly_type(&mut self) -> ParseResult<PolyType> {
         let (token, span) = self.next()?;
         let head = match token {
+            Token::I32Type => "i32".to_owned(),
+            Token::I64Type => "i64".to_owned(),
             Token::U32Type => "u32".to_owned(),
+            Token::U64Type => "u64".to_owned(),
             Token::UsizeType => "usize".to_owned(),
+            Token::F32Type => "f32".to_owned(),
+            Token::F64Type => "f64".to_owned(),
             Token::BoolType => "bool".to_owned(),
             Token::Identifier(name) => name,
             _ => return Err(ParseError::UnexpectedToken("type".to_owned(), token, span)),
@@ -615,6 +628,19 @@ impl<'src> Parser<'src> {
         Ok(())
     }
 
+    fn skip_block_contents(&mut self) -> ParseResult<()> {
+        let mut depth = 1usize;
+        while depth > 0 {
+            let (token, _) = self.next()?;
+            match token {
+                Token::LBrace => depth += 1,
+                Token::RBrace => depth -= 1,
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+
     fn parse_prf_call(&mut self, id: String, at_span: Span) -> ParseResult<&'static Expr<'static, ParsedAst>> {
         let prf = Prf::try_from(id.as_str())
             .map_err(|_| ParseError::UnknownPrimitive(id.clone(), at_span))?;
@@ -656,14 +682,17 @@ impl<'src> Parser<'src> {
     }
 
     // TODO: as with binary operators, this should assume that a trait Sel is defined.
-    // Currently, we just map this to @selAxV, but that should change.
+    // Currently, we just map this to @selVxA, but that should change.
     fn parse_sel(&mut self, arr: &'static Expr<'static, ParsedAst>) -> ParseResult<&'static Expr<'static, ParsedAst>> {
         self.expect(Token::LSquare)?;
 
         let idx = self.parse_expr(None::<Bop>)?;
         self.expect(Token::RSquare)?;
 
-        Ok(self.alloc_expr(Expr::PrfCall(PrfCall { id: Prf::SelAxV, args: vec![arr, idx] })))
+        Ok(self.alloc_expr(Expr::Call(Call {
+            id: "sel".to_owned(),
+            args: vec![idx, arr],
+        })))
     }
 
 
@@ -681,8 +710,13 @@ impl<'src> Parser<'src> {
     fn parse_type(&mut self) -> ParseResult<(Type, Span)> {
         let (token, span) = self.next()?;
         let base = match token {
+            Token::I32Type => BaseType::I32,
+            Token::I64Type => BaseType::I64,
             Token::U32Type => BaseType::U32,
+            Token::U64Type => BaseType::U64,
             Token::UsizeType => BaseType::Usize,
+            Token::F32Type => BaseType::F32,
+            Token::F64Type => BaseType::F64,
             Token::BoolType => BaseType::Bool,
             _ => return Err(ParseError::UnexpectedToken("type".to_owned(), token, span)),
         };

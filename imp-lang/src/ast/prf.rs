@@ -9,14 +9,14 @@ pub struct PrfCall<'ast, Ast: AstConfig> {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Prf {
-    /// @selAxV
+    /// @selVxA
     ///
     /// Selection of a vector in an array, where the
     /// length of the vector must match the array's rank.
     /// I.e., the result is a scalar.
     ///
     /// `A[V]`
-    SelAxV,
+    SelVxA,
     /// @addSxS
     ///
     /// `S + S`
@@ -75,7 +75,7 @@ impl fmt::Display for Prf {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use Prf::*;
         match self {
-            SelAxV => write!(f, "@selAxV"),
+            SelVxA => write!(f, "@selVxA"),
             AddSxS => write!(f, "@addSxS"),
             SubSxS => write!(f, "@subSxS"),
             MulSxS => write!(f, "@mulSxS"),
@@ -98,7 +98,7 @@ impl TryFrom<&str> for Prf {
     fn try_from(value: &str) -> Result<Self, Self::Error> {
         use Prf::*;
         match value {
-            "selAxV" => Ok(SelAxV),
+            "selVxA" => Ok(SelVxA),
             "addSxS" => Ok(AddSxS),
             "subSxS" => Ok(SubSxS),
             "mulSxS" => Ok(MulSxS),

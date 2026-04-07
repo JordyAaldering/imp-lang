@@ -13,7 +13,7 @@ impl Add<T: Num, [], [], []> {
 
 impl Add<T: Num, [d>0:shp], [d>0:shp], [d>0:shp]> {
     fn +(T[d>0:shp] a, T[d>0:shp] b) -> T[d>0:shp] {
-        return { @addSxS(@selAxV(a, iv), @selAxV(b, iv)) | iv < shp };
+        return { @addSxS(@selVxA(iv, a), @selVxA(iv, b)) | iv < shp };
     }
 }
 
@@ -28,7 +28,7 @@ But what if now in module B, we overload the function for the vector-vector case
 ```
 impl Add<T: Num, [n], [n], [n]> {
     fn +(T[n] a, T[n] b) -> T[n] {
-        return { @addSxS(@selAxV(a, iv), @selAxV(b, iv)) | iv < shp };
+        return { @addSxS(@selVxA(iv, a), @selVxA(iv, b)) | iv < shp };
     }
 }
 ```

@@ -107,10 +107,10 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
                 if i > 0 {
                     self.write(", ");
                 }
-                self.write(arg);
+                self.write_poly_type(arg);
             }
             self.write(") -> ");
-            self.write(&trait_def.ret);
+            self.write_poly_type(&trait_def.ret);
             self.write(";\n");
         }
 

@@ -22,8 +22,8 @@ pub struct TraitMethodSig {
 #[derive(Clone, Debug)]
 pub struct TraitDef {
     pub name: String,
-    pub args: Vec<String>,
-    pub ret: String,
+    pub args: Vec<PolyType>,
+    pub ret: PolyType,
 }
 
 #[derive(Clone, Debug)]

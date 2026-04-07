@@ -5,24 +5,24 @@ member Num :: usize;
 
 trait Add :: (T, T) -> T;
 
+trait Sel :: (usize[n] idx, T[n:shp]) -> T;
+
 // impl Add :: (u32, u32) -> u32 {
-//     fn +(u32 a, u32 b) -> u32 {
-//         return @addSxS(a, b);
-//     }
+//     return @addSxS(a, b);
 // }
 
 // impl Add :: (usize, usize) -> usize {
-//     fn +(usize a, usize b) -> usize {
-//         return @addSxS(a, b);
-//     }
+//     return @addSxS(a, b);
 // }
 
 impl Add :: (usize, usize) -> usize
     where Num(T[n])
 {
-    fn +(usize a, usize b) -> usize {
-        return @addSxS(a, b);
-    }
+    return @addSxS(a, b);
+}
+
+impl Sel :: (usize[n] idx, T[n:shp] arr) -> T {
+    return @selVxA(idx, arr);
 }
 
 // Meaning: implement addition for the array-array case,
@@ -33,9 +33,7 @@ where
     Num(T),
     Add :: (T, T) -> T
 {
-    fn +(T[d:shp] a, T[d:shp] b) -> T[d:shp] {
-        return { a[iv] + b[iv] | iv < shp };
-    }
+    return { a[iv] + b[iv] | iv < shp };
 }
 
 fn dim(usize[d:shp] arr) -> usize {
@@ -58,7 +56,7 @@ where
 }
 
 fn iota(usize n) -> usize[n] {
-    return { @selAxV(iv, [0usize]) | [0usize] <= iv < [n] };
+    return { iv[[0usize]] | [0usize] <= iv < [n] };
 }
 
 fn my_add_after_iota(usize[d:shp] a, usize[d:shp] b) -> usize[d:shp] {
@@ -72,7 +70,7 @@ fn arrays() -> u32[n] {
 
 fn sel() -> u32 {
     arr = [1u32,2u32,3u32,4u32,5u32];
-    x = @selAxV(arr, [2usize]);
+    x = arr[[2usize]];
     return x;
 }
 

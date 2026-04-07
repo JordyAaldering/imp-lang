@@ -127,9 +127,9 @@ impl<'ast> TypeInfer<'ast> {
     }
 
     fn has_trait_impl(&self, trait_name: &str, method_name: &str, arg_types: &[Type]) -> bool {
+        let _ = method_name;
         self.impls.iter().any(|impl_def| {
             impl_def.trait_name == trait_name
-                && impl_def.methods.iter().any(|m| m.name == method_name)
                 && impl_def.args.len() == arg_types.len()
                 && impl_def.args.iter().zip(arg_types.iter()).all(|(poly, ty)| poly_matches_concrete(poly, ty))
         })
@@ -397,12 +397,12 @@ impl<'ast> TypeInfer<'ast> {
             Prf::LtSxS | Prf::LeSxS | Prf::GtSxS | Prf::GeSxS | Prf::EqSxS | Prf::NeSxS | Prf::NotS => {
                 Type::scalar(BaseType::Bool)
             }
-            Prf::SelAxV => {
-                let base = arg_types.first().map(|ty| ty.ty).unwrap_or(BaseType::I32);
+            Prf::SelVxA => {
+                let base = arg_types[1].ty;
                 Type::scalar(base)
             }
-            _ => {
-                let base = arg_types.first().map(|ty| ty.ty).unwrap_or(BaseType::I32);
+            Prf::AddSxS |  Prf::SubSxS | Prf::MulSxS | Prf::DivSxS | Prf::NegS => {
+                let base = arg_types[0].ty;
                 Type::scalar(base)
             }
         }
@@ -414,6 +414,7 @@ impl<'ast> TypeInfer<'ast> {
             ("-", 2) => Some(("Sub", "-")),
             ("*", 2) => Some(("Mul", "*")),
             ("/", 2) => Some(("Div", "/")),
+            ("sel", 2) => Some(("Sel", "sel")),
             ("==", 2) => Some(("Eq", "==")),
             ("!=", 2) => Some(("Ne", "!=")),
             ("<", 2) => Some(("Lt", "<")),
@@ -429,6 +430,9 @@ impl<'ast> TypeInfer<'ast> {
     fn operator_fallback_type(call_name: &str, arg_types: &[Type]) -> Option<Type> {
         match call_name {
             "==" | "!=" | "<" | "<=" | ">" | ">=" | "!" => Some(Type::scalar(BaseType::Bool)),
+            "sel" => Some(Type::scalar(
+                arg_types.get(1).map(|ty| ty.ty).unwrap_or(BaseType::I32)
+            )),
             "+" | "-" | "*" | "/" => {
                 Some(arg_types.first().cloned().unwrap_or_else(|| Type::scalar(BaseType::I32)))
             }
@@ -678,13 +682,9 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
                     self.expect_bool_scalar_prf_arg(primitive, 0, arg);
                 }
             }
-            Prf::SelAxV => {
-                if let Some(arr_ty) = arg_types.first() {
-                    self.expect_array_prf_arg(primitive, 0, arr_ty);
-                }
-                if let Some(idx_ty) = arg_types.get(1) {
-                    self.expect_usize_vector_prf_arg(primitive, 1, idx_ty);
-                }
+            Prf::SelVxA => {
+                self.expect_usize_vector_prf_arg(primitive, 0, &arg_types[0]);
+                self.expect_array_prf_arg(primitive, 1, &arg_types[1]);
             }
         }
 

@@ -12,9 +12,9 @@ pub fn trait_shim_name(trait_name: &str, method_name: &str, arg_types: &[Type]) 
 }
 
 pub fn has_impl_for_call(impls: &[ImplDef], trait_name: &str, method_name: &str, arg_types: &[Type]) -> bool {
+    let _ = method_name;
     impls.iter().any(|impl_def| {
         impl_def.trait_name == trait_name
-            && impl_def.methods.iter().any(|m| m.name == method_name)
             && impl_def.args.len() == arg_types.len()
             && impl_def.args.iter().zip(arg_types.iter()).all(|(poly, ty)| poly_matches_concrete(poly, ty))
     })
@@ -41,8 +41,13 @@ fn sanitize_method(method_name: &str) -> String {
 
 fn poly_matches_concrete(poly: &PolyType, ty: &Type) -> bool {
     let head_ok = match poly.head.as_str() {
+        "i32" => ty.ty == BaseType::I32,
+        "i64" => ty.ty == BaseType::I64,
         "u32" => ty.ty == BaseType::U32,
+        "u64" => ty.ty == BaseType::U64,
         "usize" => ty.ty == BaseType::Usize,
+        "f32" => ty.ty == BaseType::F32,
+        "f64" => ty.ty == BaseType::F64,
         "bool" => ty.ty == BaseType::Bool,
         _ => true,
     };

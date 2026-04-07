@@ -6,7 +6,7 @@ fn mean_example(usize u, u32[u,u,x,x] a, u32[u,x,v,..rest,w] b) -> u32[p,u,..res
 fn meaner_example(usize u, u32[u,u,x,x] a, u32[u,x,v,..rest,w] b) -> bool {
     a2 = a;
     subarr = a2[[0]];
-    scalar = @selAxV(a2, [0,1,2,3]);
-    or_scalar = @selAxV(subarr, [1,2,3]);
+    scalar = @selVxA([0,1,2,3], a2);
+    or_scalar = @selVxA([1,2,3], subarr);
     return @eqSxS(scalar, or_scalar);
 }
