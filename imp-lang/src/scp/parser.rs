@@ -21,11 +21,6 @@ pub enum ParseError {
     UnexpectedEof,
 }
 
-enum ParsedFnItem {
-    Concrete(Fundef<'static, ParsedAst>),
-    Generic(GenericFundef<'static, ParsedAst>),
-}
-
 type ParseResult<T> = Result<T, ParseError>;
 
 impl<'src> Parser<'src> {
@@ -82,7 +77,7 @@ impl<'src> Parser<'src> {
 impl<'src> Parser<'src> {
     pub fn parse_program(&mut self) -> ParseResult<Program<'static, ParsedAst>> {
         let mut functions = std::collections::HashMap::new();
-        let mut generic_functions = std::collections::HashMap::new();
+        let generic_functions = std::collections::HashMap::new();
         let mut typesets = std::collections::HashMap::new();
         let mut members = Vec::new();
         let mut traits = std::collections::HashMap::new();
@@ -91,19 +86,10 @@ impl<'src> Parser<'src> {
         while self.lexer.peek().is_some() {
             match self.peek()?.0.clone() {
                 Token::Fn => {
-                    match self.parse_fn_item()? {
-                        ParsedFnItem::Concrete(fundef) => {
-                            let name = fundef.name.clone();
-                            if functions.insert(name.clone(), fundef).is_some() {
-                                return Err(ParseError::DuplicateFunction(name));
-                            }
-                        }
-                        ParsedFnItem::Generic(fundef) => {
-                            let name = fundef.name.clone();
-                            if generic_functions.insert(name.clone(), fundef).is_some() {
-                                return Err(ParseError::DuplicateGenericFunction(name));
-                            }
-                        }
+                    let fundef = self.parse_fn_item()?;
+                    let name = fundef.name.clone();
+                    if functions.insert(name.clone(), fundef).is_some() {
+                        return Err(ParseError::DuplicateFunction(name));
                     }
                 }
                 Token::Trait => {
@@ -130,49 +116,20 @@ impl<'src> Parser<'src> {
         Ok(Program { functions, generic_functions, typesets, members, traits, impls })
     }
 
-    fn parse_fn_item(&mut self) -> ParseResult<ParsedFnItem> {
+    fn parse_fn_item(&mut self) -> ParseResult<Fundef<'static, ParsedAst>> {
         let (_, _span_start) = self.expect(Token::Fn)?;
         let (name, _) = self.parse_id()?;
 
-        if self.matches(Token::Lt).is_some() {
-            let (type_param, _) = self.parse_id()?;
-            self.expect(Token::Gt)?;
-
-            let args = self.parse_poly_args()?;
-            self.expect(Token::Arrow)?;
-            let ret_type = self.parse_poly_type()?;
-
-            let mut where_bounds = Vec::new();
-            if self.matches(Token::Where).is_some() {
-                where_bounds.push(self.parse_where_bound()?);
-                while self.matches(Token::Comma).is_some() {
-                    where_bounds.push(self.parse_where_bound()?);
-                }
-            }
-
-            self.expect(Token::LBrace)?;
-            let mut body = Vec::new();
-            while self.peek()?.0 != Token::RBrace {
-                body.extend(self.parse_stmt()?);
-            }
-            self.expect(Token::RBrace)?;
-
-            if !matches!(body.last(), Some(Stmt::Return(_))) {
-                return Err(ParseError::MissingReturn);
-            }
-
-            Ok(ParsedFnItem::Generic(GenericFundef {
-                name,
-                type_param,
-                where_bounds,
-                ret_type,
-                args,
-                decs: Vec::new(),
-                body,
-            }))
-        } else {
-            Ok(ParsedFnItem::Concrete(self.parse_fundef_after_name(name)?))
+        if matches!(self.peek()?.0, Token::Lt) {
+            let (token, span) = self.next()?;
+            return Err(ParseError::UnexpectedToken(
+                "generic functions are not supported; use `impl` blocks instead".to_owned(),
+                token,
+                span,
+            ));
         }
+
+        Ok(self.parse_fundef_after_name(name)?)
     }
 
     fn parse_fundef_after_name(&mut self, name: String) -> ParseResult<Fundef<'static, ParsedAst>> {
@@ -403,12 +360,25 @@ impl<'src> Parser<'src> {
     fn parse_trait_def(&mut self) -> ParseResult<TraitDef> {
         self.expect(Token::Trait)?;
         let (name, _) = self.parse_id()?;
+
+        // Parse optional <T, U, ...> type parameters
+        let mut type_params = Vec::new();
+        if self.matches(Token::Lt).is_some() {
+            let (param, _) = self.parse_id()?;
+            type_params.push(param);
+            while self.matches(Token::Comma).is_some() {
+                let (param, _) = self.parse_id()?;
+                type_params.push(param);
+            }
+            self.expect(Token::Gt)?;
+        }
+
         self.expect(Token::ColonColon)?;
         let args = self.parse_poly_sig_types()?;
         self.expect(Token::Arrow)?;
         let ret = self.parse_poly_type()?;
         self.expect(Token::Semicolon)?;
-        Ok(TraitDef { name, args, ret })
+        Ok(TraitDef { name, type_params, args, ret })
     }
 
     fn parse_poly_sig_types(&mut self) -> ParseResult<Vec<PolyType>> {
@@ -454,30 +424,32 @@ impl<'src> Parser<'src> {
     fn parse_impl_def(&mut self) -> ParseResult<ImplDef> {
         self.expect(Token::Impl)?;
 
+        // Parse optional <T: Constraint, U: Other, ...> — inline type params + bounds
         let mut type_params = Vec::new();
+        let mut where_bounds = Vec::new();
         if self.matches(Token::Lt).is_some() {
             let (param, _) = self.parse_id()?;
+            if self.matches(Token::Colon).is_some() {
+                let (type_set, _) = self.parse_id()?;
+                where_bounds.push(WhereBound::Member(MemberBound { type_var: param.clone(), type_set }));
+            }
             type_params.push(param);
             while self.matches(Token::Comma).is_some() {
                 let (param, _) = self.parse_id()?;
+                if self.matches(Token::Colon).is_some() {
+                    let (type_set, _) = self.parse_id()?;
+                    where_bounds.push(WhereBound::Member(MemberBound { type_var: param.clone(), type_set }));
+                }
                 type_params.push(param);
             }
             self.expect(Token::Gt)?;
         }
 
         let (trait_name, _) = self.parse_id()?;
-        self.expect(Token::ColonColon)?;
+        // New syntax: TraitName(args) -> ret  (no `::` before args)
         let args = self.parse_poly_sig_types()?;
         self.expect(Token::Arrow)?;
         let ret_type = self.parse_poly_type()?;
-
-        let mut where_bounds = Vec::new();
-        if self.matches(Token::Where).is_some() {
-            where_bounds.push(self.parse_where_bound()?);
-            while self.matches(Token::Comma).is_some() {
-                where_bounds.push(self.parse_where_bound()?);
-            }
-        }
 
         self.expect(Token::LBrace)?;
         let mut methods = Vec::new();
@@ -558,13 +530,6 @@ impl<'src> Parser<'src> {
         };
 
         Ok(PolyType { head, shape })
-    }
-
-    fn parse_where_bound(&mut self) -> ParseResult<WhereBound> {
-        let (type_var, _) = self.parse_id()?;
-        self.expect(Token::Colon)?;
-        let (type_set, _) = self.parse_id()?;
-        Ok(WhereBound::Member(MemberBound { type_var, type_set }))
     }
 
     fn parse_method_name(&mut self) -> ParseResult<String> {
@@ -735,6 +700,26 @@ impl<'src> Parser<'src> {
             Token::Identifier(name) => {
                 if name == "_" {
                     Ok(AxisPattern::Dim(DimPattern::Any))
+                } else if self.matches(Token::Gt).is_some() || self.matches(Token::Ge).is_some() {
+                    // Constrained rank-and-shape capture like `m>0:ishp`.
+                    // The lower-bound is currently syntax-only and not stored in the AST.
+                    match self.next()? {
+                        (Token::NatValue(_), _) => {}
+                        (token, span) => {
+                            return Err(ParseError::UnexpectedToken(
+                                "natural number bound".to_owned(),
+                                token,
+                                span,
+                            ))
+                        }
+                    }
+                    self.expect(Token::Colon)?;
+                    let (shp_name, _) = self.parse_id()?;
+                    Ok(AxisPattern::Rank(RankCapture {
+                        dim_name: name,
+                        shp_name,
+                        dim_role: SymbolRole::Define,
+                    }))
                 } else if self.matches(Token::Colon).is_some() {
                     // `d:shp` rank-and-shape capture.
                     // Roles will be resolved by tp::analyse_tp.
@@ -750,6 +735,7 @@ impl<'src> Parser<'src> {
                     Ok(AxisPattern::Dim(DimPattern::Var(ExtentVar { name, role: SymbolRole::Define })))
                 }
             }
+            Token::Dot => Ok(AxisPattern::Dim(DimPattern::Any)),
             _ => Err(ParseError::UnexpectedToken("axis pattern".to_owned(), token, span)),
         }
     }

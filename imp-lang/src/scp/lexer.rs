@@ -25,6 +25,7 @@ pub enum Token {
     Colon,
     ColonColon,
     Semicolon,
+    Dot,
     DotDot,
     // Keywords
     Fn,
@@ -227,6 +228,7 @@ impl<'source> Iterator for Lexer<'source> {
                 // Assignment
                 '=' => Assign,
                 '.' if self.match_char('.') => DotDot,
+                '.' => Dot,
                 // Primitive function calls
                 '@' => {
                     while self.peek_char().is_some_and(|c| c.is_ascii_alphanumeric() || c == '_') {

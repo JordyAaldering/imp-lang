@@ -1,32 +1,23 @@
+// Any built-in base type
+type Any :: T;
+member Any :: i32;
+member Any :: i64;
+member Any :: u32;
+member Any :: u64;
+member Any :: usize;
+member Any :: f32;
+member Any :: f64;
+member Any :: bool;
+
+// Built-in numerical types
 type Num :: T;
-
+member Num :: i32;
+member Num :: i64;
 member Num :: u32;
+member Num :: u64;
 member Num :: usize;
-
-trait Add :: (T, T) -> T;
-
-trait Sel :: (usize[n] idx, T[n:shp]) -> T;
-
-// impl Add :: (u32, u32) -> u32 {
-//     return @addSxS(a, b);
-// }
-
-// impl Add :: (usize, usize) -> usize {
-//     return @addSxS(a, b);
-// }
-
-impl Sel :: (usize[n] idx, T[n:shp] arr) -> T {
-    return @selVxA(idx, arr);
-}
-
-// Meaning: implement addition for the array-array case,
-//          where T is a member of type Num
-//          and addition is implemented for the scalar-scalar case.
-impl Add :: (T[d:shp], T[d:shp]) -> T[d:shp]
-    where T: Num
-{
-    return { a[iv] + b[iv] | iv < shp };
-}
+member Num :: f32;
+member Num :: f64;
 
 fn dim(usize[d:shp] arr) -> usize {
     return d;
@@ -36,15 +27,57 @@ fn shape(usize[d:shp] arr) -> usize[d] {
     return shp;
 }
 
+// If `a + b` is encountered, it is assumed that the trait `Add`
+// is implemented for the types and shapes of `a` and `b`.
+trait Add<T> :: (T[*], T[*]) -> T[*];
+
+impl<T: Num> Add(T a, T b) -> T
+{
+    return @addSxS(a, b);
+}
+
+impl<T: Num> Add(T[d:shp] a, T b) -> T[d:shp]
+{
+    return { @addSxS(a[iv], b) | iv < shp };
+}
+
+impl<T: Num> Add(T a, T[d:shp] b) -> T[d:shp]
+{
+    return { @addSxS(a, b[iv]) | iv < shp };
+}
+
+impl<T: Num> Add(T[d:shp] a, T[d:shp] b) -> T[d:shp]
+{
+    return { @addSxS(a[iv], b[iv]) | iv < shp };
+}
+
+
+// If `arr[idx]` is encountered, it is assumed that the trait `Sel`
+// is implemented for the types and shapes of `arr` and `idx`.
+trait Sel<T> :: (usize[.] idx, T[*]) -> T[*];
+
+// Planar selection
+impl<T: Any> Sel(usize[n] idx, T[n:oshp,m>0:ishp] arr) -> T[m>0:ishp] {
+    return { @selVxA(@catVxV(idx, iv), arr) | iv < ishp };
+}
+
+// Scalar selection
+impl<T: Any> Sel(usize[n] idx, T[n:shp] arr) -> T {
+    return @selVxA(idx, arr);
+}
+
+
+
+
+
 fn shouldbefolded() -> u32 {
     return @addSxS(4u32, @addSxS(2u32, 3u32));
 }
 
-fn addthem<T>(T a, T b, T c) -> T
-    where T: Num
-{
-    return a + b + c;
-}
+// fn addthem<T: Num>(T a, T b, T c) -> T
+// {
+//     return a + b + c;
+// }
 
 fn iota(usize n) -> usize[n] {
     return { iv[[0usize]] | [0usize] <= iv < [n] };

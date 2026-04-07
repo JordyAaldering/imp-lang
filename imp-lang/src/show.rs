@@ -89,7 +89,16 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
         }
 
         for trait_def in program.traits.values() {
-            self.write(&format!("trait {} :: (", trait_def.name));
+            self.write(&format!("trait {}", trait_def.name));
+            if !trait_def.type_params.is_empty() {
+                self.write("<");
+                for (i, param) in trait_def.type_params.iter().enumerate() {
+                    if i > 0 { self.write(", "); }
+                    self.write(param);
+                }
+                self.write(">");
+            }
+            self.write(" :: (");
             for (i, arg) in trait_def.args.iter().enumerate() {
                 if i > 0 {
                     self.write(", ");
@@ -102,19 +111,24 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
         }
 
         for impl_def in &program.impls {
-            self.write("impl ");
+            self.write("impl");
             if !impl_def.type_params.is_empty() {
                 self.write("<");
                 for (i, param) in impl_def.type_params.iter().enumerate() {
-                    if i > 0 {
-                        self.write(", ");
+                    if i > 0 { self.write(", "); }
+                    if let Some(bound) = impl_def.where_bounds.iter().find(|b| {
+                        matches!(b, WhereBound::Member(m) if m.type_var == *param)
+                    }) {
+                        self.write_where_bound(bound);
+                    } else {
+                        self.write(param);
                     }
-                    self.write(param);
                 }
-                self.write("> ");
+                self.write(">");
             }
+            self.write(" ");
             self.write(&impl_def.trait_name);
-            self.write(" :: (");
+            self.write("(");
             for (i, arg) in impl_def.args.iter().enumerate() {
                 if i > 0 {
                     self.write(", ");
@@ -124,16 +138,6 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
             self.write(") -> ");
             self.write_poly_type(&impl_def.ret_type);
             self.write("\n");
-            if !impl_def.where_bounds.is_empty() {
-                self.write("    where ");
-                for (i, bound) in impl_def.where_bounds.iter().enumerate() {
-                    if i > 0 {
-                        self.write(", ");
-                    }
-                    self.write_where_bound(bound);
-                }
-                self.write("\n");
-            }
             self.write("{\n");
             self.depth += 1;
             for method in &impl_def.methods {
