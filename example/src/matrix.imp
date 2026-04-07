@@ -1,12 +1,12 @@
 fn makevector(u32 ub) -> u32[ub] {
-    lb = [0];
-    zero = [0];
-    res = { @addSxS(@addSxS(1, @selAxV(iv, zero)), ub) | lb <= iv < [ub] };
+    lb = [0usize];
+    zero = [0usize];
+    res = { @addSxS(@addSxS(1u32, @selAxV(iv, zero)), ub) | lb <= iv < [ub] };
     return res;
 }
 
 fn makematrix(u32 cols, u32 rows) -> u32[cols,rows] {
-    res = { { @addSxS(@selAxV(iv, [0]), @selAxV(jv, [0])) | [0] <= jv < [cols] }
-          | [0] <= iv < [rows] };
+    res = { { @addSxS(@selAxV(iv, [0usize]), @selAxV(jv, [0usize])) | [0usize] <= jv < [cols] }
+          | [0usize] <= iv < [rows] };
     return res;
 }

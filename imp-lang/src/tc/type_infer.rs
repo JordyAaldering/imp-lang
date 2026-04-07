@@ -171,8 +171,8 @@ impl<'ast> TypeInfer<'ast> {
         let count = elem_types.len();
 
         let Some(first) = elem_types.first() else {
-            // Empty literal: return u32[0] as a conservative scalar-element vector.
-            return Type::vector_dim(BaseType::U32, DimPattern::Known(0));
+            // Empty literal: default to i32[0].
+            return Type::vector_dim(BaseType::I32, DimPattern::Known(0));
         };
 
         let base_ty = first.ty;
@@ -364,18 +364,18 @@ impl<'ast> TypeInfer<'ast> {
         }
     }
 
-    fn expect_integer_vector_prf_arg(&mut self, primitive: Prf, arg_index: usize, ty: &Type) {
+    fn expect_usize_vector_prf_arg(&mut self, primitive: Prf, arg_index: usize, ty: &Type) {
         let is_vector = matches!(
             ty.shape,
             ShapePattern::Axes(ref axes)
                 if axes.len() == 1 && matches!(axes[0], AxisPattern::Dim(_))
         );
 
-        if !(is_vector && matches!(ty.ty, BaseType::U32 | BaseType::Usize)) {
+        if !(is_vector && matches!(ty.ty, BaseType::Usize)) {
             self.errors.push(InferenceError::PrimitiveArgumentKindMismatch {
                 primitive,
                 arg_index,
-                expected: "integer vector",
+                expected: "usize vector",
                 provided: ty.clone(),
             });
         }
@@ -398,11 +398,11 @@ impl<'ast> TypeInfer<'ast> {
                 Type::scalar(BaseType::Bool)
             }
             Prf::SelAxV => {
-                let base = arg_types.first().map(|ty| ty.ty).unwrap_or(BaseType::U32);
+                let base = arg_types.first().map(|ty| ty.ty).unwrap_or(BaseType::I32);
                 Type::scalar(base)
             }
             _ => {
-                let base = arg_types.first().map(|ty| ty.ty).unwrap_or(BaseType::U32);
+                let base = arg_types.first().map(|ty| ty.ty).unwrap_or(BaseType::I32);
                 Type::scalar(base)
             }
         }
@@ -430,7 +430,7 @@ impl<'ast> TypeInfer<'ast> {
         match call_name {
             "==" | "!=" | "<" | "<=" | ">" | ">=" | "!" => Some(Type::scalar(BaseType::Bool)),
             "+" | "-" | "*" | "/" => {
-                Some(arg_types.first().cloned().unwrap_or_else(|| Type::scalar(BaseType::U32)))
+                Some(arg_types.first().cloned().unwrap_or_else(|| Type::scalar(BaseType::I32)))
             }
             _ => None,
         }
@@ -520,7 +520,7 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
             U64(v) => (U64(v), Type::scalar(BaseType::U64)),
             Usize(v) => (Usize(v), Type::scalar(BaseType::Usize)),
             F32(v) => (F32(v), Type::scalar(BaseType::F32)),
-            F64(v) => todo!(),
+            F64(v) => (F64(v), Type::scalar(BaseType::F64)),
             Bool(v) => (Bool(v), Type::scalar(BaseType::Bool)),
         }
     }
@@ -548,7 +548,7 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
             }
 
             let ty = Self::operator_fallback_type(func_name, &arg_types)
-                .unwrap_or_else(|| Type::scalar(BaseType::U32));
+                .unwrap_or_else(|| Type::scalar(BaseType::I32));
             let typed_call = Call {
                 id: CallTarget::TraitMethod {
                     trait_name: trait_name.to_owned(),
@@ -569,7 +569,7 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
             let stub_target = self.functions.values().next().copied().expect("at least one function must be defined");
             let stub_call = Call { id: CallTarget::Function(stub_target), args: vec![] };
             return (stub_call, Type {
-                ty: BaseType::U32,
+                ty: BaseType::I32,
                 shape: ShapePattern::Any,
                 knowledge: TypeKnowledge::AUD,
             });
@@ -683,7 +683,7 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
                     self.expect_array_prf_arg(primitive, 0, arr_ty);
                 }
                 if let Some(idx_ty) = arg_types.get(1) {
-                    self.expect_integer_vector_prf_arg(primitive, 1, idx_ty);
+                    self.expect_usize_vector_prf_arg(primitive, 1, idx_ty);
                 }
             }
         }
@@ -836,8 +836,13 @@ fn dims_compatible(expected: &DimPattern, provided: &DimPattern) -> bool {
 
 fn poly_matches_concrete(poly: &PolyType, ty: &Type) -> bool {
     let head_ok = match poly.head.as_str() {
+        "i32" => ty.ty == BaseType::I32,
+        "i64" => ty.ty == BaseType::I64,
         "u32" => ty.ty == BaseType::U32,
+        "u64" => ty.ty == BaseType::U64,
         "usize" => ty.ty == BaseType::Usize,
+        "f32" => ty.ty == BaseType::F32,
+        "f64" => ty.ty == BaseType::F64,
         "bool" => ty.ty == BaseType::Bool,
         _ => true,
     };
