@@ -208,9 +208,9 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
     }
 
     fn visit_prf_call(&mut self, prf_call: &PrfCall<'ast, Self::Ast>) {
-        self.write(&prf_call.id.to_string());
+        self.write(prf_call.nameof());
         self.write("(");
-        for arg in &prf_call.args {
+        for arg in prf_call.args() {
             Self::Ast::visit_operand(self, arg);
             self.write(", ");
         }

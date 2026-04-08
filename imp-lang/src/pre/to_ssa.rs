@@ -141,11 +141,72 @@ impl<'ast> Traverse<'ast> for ToSsa<'ast> {
         }
     }
 
-    fn trav_prf_call(&mut self, prf_call: PrfCall<'ast, Self::InAst>) -> Self::PrfCallOut {
-        let args = prf_call.args.into_iter().map(|arg| self.trav_id(arg)).collect();
-        PrfCall {
-            id: prf_call.id,
-            args,
+    fn trav_prf_call(&mut self, prf: PrfCall<'ast, Self::InAst>) -> Self::PrfCallOut {
+        use PrfCall::*;
+        match prf {
+            AddSxS(l, r) => {
+                let l = self.trav_id(l.clone());
+                let r = self.trav_id(r.clone());
+                AddSxS(l, r)
+            }
+            SubSxS(l, r) => {
+                let l = self.trav_id(l.clone());
+                let r = self.trav_id(r.clone());
+                SubSxS(l, r)
+            }
+            MulSxS(l, r) => {
+                let l = self.trav_id(l.clone());
+                let r = self.trav_id(r.clone());
+                MulSxS(l, r)
+            }
+            DivSxS(l, r) => {
+                let l = self.trav_id(l.clone());
+                let r = self.trav_id(r.clone());
+                DivSxS(l, r)
+            }
+            SelVxA(a, b) => {
+                let a = self.trav_id(a.clone());
+                let b = self.trav_id(b.clone());
+                SelVxA(a, b)
+            }
+            LtSxS(a, b) => {
+                let a = self.trav_id(a.clone());
+                let b = self.trav_id(b.clone());
+                LtSxS(a, b)
+            }
+            LeSxS(a, b) => {
+                let a = self.trav_id(a.clone());
+                let b = self.trav_id(b.clone());
+                LeSxS(a, b)
+            }
+            GtSxS(a, b) => {
+                let a = self.trav_id(a.clone());
+                let b = self.trav_id(b.clone());
+                GtSxS(a, b)
+            }
+            GeSxS(a, b) => {
+                let a = self.trav_id(a.clone());
+                let b = self.trav_id(b.clone());
+                GeSxS(a, b)
+            }
+            EqSxS(a, b) => {
+                let a = self.trav_id(a.clone());
+                let b = self.trav_id(b.clone());
+                EqSxS(a, b)
+            }
+            NeSxS(a, b) => {
+                let a = self.trav_id(a.clone());
+                let b = self.trav_id(b.clone());
+                NeSxS(a, b)
+            }
+            NegS(a) => {
+                let a = self.trav_id(a.clone());
+                NegS(a)
+            }
+            NotS(a) => {
+                let a = self.trav_id(a.clone());
+                NotS(a)
+            }
         }
     }
 

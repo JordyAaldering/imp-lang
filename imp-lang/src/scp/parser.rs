@@ -575,25 +575,93 @@ impl<'src> Parser<'src> {
         Ok(())
     }
 
-    fn parse_prf_call(&mut self, id: String, at_span: Span) -> ParseResult<&'static Expr<'static, ParsedAst>> {
-        let prf = Prf::try_from(id.as_str())
-            .map_err(|_| ParseError::UnknownPrimitive(id.clone(), at_span))?;
-
+    fn parse_prf_call(&mut self, id: String, span: Span) -> ParseResult<&'static Expr<'static, ParsedAst>> {
         self.expect(Token::LParen)?;
 
-        let mut args = Vec::new();
-
-        if self.matches(Token::RParen).is_none() {
-            args.push(self.parse_expr(None::<Bop>)?);
-
-            while self.matches(Token::Comma).is_some() {
-                args.push(self.parse_expr(None::<Bop>)?);
+        use PrfCall::*;
+        let prf = match id.as_str() {
+            "selVxA" => {
+                let a = self.parse_expr(None::<Bop>)?;
+                self.expect(Token::Comma)?;
+                let b = self.parse_expr(None::<Bop>)?;
+                SelVxA(a, b)
+            },
+            "addSxS" => {
+                let a = self.parse_expr(None::<Bop>)?;
+                self.expect(Token::Comma)?;
+                let b = self.parse_expr(None::<Bop>)?;
+                AddSxS(a, b)
+            },
+            "subSxS" => {
+                let a = self.parse_expr(None::<Bop>)?;
+                self.expect(Token::Comma)?;
+                let b = self.parse_expr(None::<Bop>)?;
+                SubSxS(a, b)
+            },
+            "mulSxS" => {
+                let a = self.parse_expr(None::<Bop>)?;
+                self.expect(Token::Comma)?;
+                let b = self.parse_expr(None::<Bop>)?;
+                MulSxS(a, b)
+            },
+            "divSxS" => {
+                let a = self.parse_expr(None::<Bop>)?;
+                self.expect(Token::Comma)?;
+                let b = self.parse_expr(None::<Bop>)?;
+                DivSxS(a, b)
+            },
+            "ltSxS" => {
+                let a = self.parse_expr(None::<Bop>)?;
+                self.expect(Token::Comma)?;
+                let b = self.parse_expr(None::<Bop>)?;
+                LtSxS(a, b)
+            },
+            "leSxS" => {
+                let a = self.parse_expr(None::<Bop>)?;
+                self.expect(Token::Comma)?;
+                let b = self.parse_expr(None::<Bop>)?;
+                LeSxS(a, b)
+            },
+            "gtSxS" => {
+                let a = self.parse_expr(None::<Bop>)?;
+                self.expect(Token::Comma)?;
+                let b = self.parse_expr(None::<Bop>)?;
+                GtSxS(a, b)
+            },
+            "geSxS" => {
+                let a = self.parse_expr(None::<Bop>)?;
+                self.expect(Token::Comma)?;
+                let b = self.parse_expr(None::<Bop>)?;
+                GeSxS(a, b)
+            },
+            "eqSxS" => {
+                let a = self.parse_expr(None::<Bop>)?;
+                self.expect(Token::Comma)?;
+                let b = self.parse_expr(None::<Bop>)?;
+                EqSxS(a, b)
+            },
+            "neSxS" => {
+                let a = self.parse_expr(None::<Bop>)?;
+                self.expect(Token::Comma)?;
+                let b = self.parse_expr(None::<Bop>)?;
+                NeSxS(a, b)
+            },
+            "negS" => {
+                let a = self.parse_expr(None::<Bop>)?;
+                NegS(a)
+            },
+            "notS" => {
+                let a = self.parse_expr(None::<Bop>)?;
+                NotS(a)
+            },
+            _ => {
+                return Err(ParseError::UnknownPrimitive(id.clone(), span));
             }
+        };
 
-            self.expect(Token::RParen)?;
-        }
+        self.expect(Token::RParen)?;
 
-        Ok(self.alloc_expr(Expr::PrfCall(PrfCall { id: prf, args })))
+        Ok(self.alloc_expr(Expr::PrfCall(prf)))
     }
 
     fn parse_array(&mut self) -> ParseResult<&'static Expr<'static, ParsedAst>> {

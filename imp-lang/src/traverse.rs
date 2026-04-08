@@ -68,7 +68,6 @@ pub trait Visit<'ast> {
         }
     }
 
-
     fn visit_call(&mut self, call: &Call<'ast, Self::Ast>) {
         for arg in &call.args {
             Self::Ast::visit_operand(self, arg);
@@ -76,7 +75,7 @@ pub trait Visit<'ast> {
     }
 
     fn visit_prf_call(&mut self, prf_call: &PrfCall<'ast, Self::Ast>) {
-        for arg in &prf_call.args {
+        for arg in prf_call.args() {
             Self::Ast::visit_operand(self, arg);
         }
     }

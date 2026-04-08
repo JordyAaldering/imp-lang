@@ -96,13 +96,8 @@ pub enum InferenceError {
         expected: Type,
         provided: Type,
     },
-    PrimitiveArgumentCountMismatch {
-        primitive: Prf,
-        expected: usize,
-        provided: usize,
-    },
     PrimitiveArgumentKindMismatch {
-        primitive: Prf,
+        primitive: String,
         arg_index: usize,
         expected: &'static str,
         provided: Type,
@@ -340,10 +335,10 @@ impl<'ast> TypeInfer<'ast> {
         Some(axes)
     }
 
-    fn expect_scalar_prf_arg(&mut self, primitive: Prf, arg_index: usize, ty: &Type) {
+    fn expect_scalar_prf_arg(&mut self, prf_name: &str, arg_index: usize, ty: &Type) {
         if !ty.is_scalar() {
             self.errors.push(InferenceError::PrimitiveArgumentKindMismatch {
-                primitive,
+                primitive: prf_name.to_owned(),
                 arg_index,
                 expected: "scalar",
                 provided: ty.clone(),
@@ -351,10 +346,10 @@ impl<'ast> TypeInfer<'ast> {
         }
     }
 
-    fn expect_bool_scalar_prf_arg(&mut self, primitive: Prf, arg_index: usize, ty: &Type) {
+    fn expect_bool_scalar_prf_arg(&mut self, prf_name: &str, arg_index: usize, ty: &Type) {
         if !(ty.is_scalar() && ty.ty == BaseType::Bool) {
             self.errors.push(InferenceError::PrimitiveArgumentKindMismatch {
-                primitive,
+                primitive: prf_name.to_owned(),
                 arg_index,
                 expected: "bool scalar",
                 provided: ty.clone(),
@@ -362,7 +357,7 @@ impl<'ast> TypeInfer<'ast> {
         }
     }
 
-    fn expect_usize_vector_prf_arg(&mut self, primitive: Prf, arg_index: usize, ty: &Type) {
+    fn expect_usize_vector_prf_arg(&mut self, prf_name: &str, arg_index: usize, ty: &Type) {
         let is_vector = matches!(
             ty.shape,
             ShapePattern::Axes(ref axes)
@@ -371,7 +366,7 @@ impl<'ast> TypeInfer<'ast> {
 
         if !(is_vector && matches!(ty.ty, BaseType::Usize)) {
             self.errors.push(InferenceError::PrimitiveArgumentKindMismatch {
-                primitive,
+                primitive: prf_name.to_owned(),
                 arg_index,
                 expected: "usize vector",
                 provided: ty.clone(),
@@ -379,30 +374,14 @@ impl<'ast> TypeInfer<'ast> {
         }
     }
 
-    fn expect_array_prf_arg(&mut self, primitive: Prf, arg_index: usize, ty: &Type) {
+    fn expect_array_prf_arg(&mut self, prf_name: &str, arg_index: usize, ty: &Type) {
         if !ty.is_array() {
             self.errors.push(InferenceError::PrimitiveArgumentKindMismatch {
-                primitive,
+                primitive: prf_name.to_owned(),
                 arg_index,
                 expected: "array",
                 provided: ty.clone(),
             });
-        }
-    }
-
-    fn prf_fallback_type(prf: Prf, arg_types: &[Type]) -> Type {
-        match prf {
-            Prf::LtSxS | Prf::LeSxS | Prf::GtSxS | Prf::GeSxS | Prf::EqSxS | Prf::NeSxS | Prf::NotS => {
-                Type::scalar(BaseType::Bool)
-            }
-            Prf::SelVxA => {
-                let base = arg_types[1].ty.clone();
-                Type::scalar(base)
-            }
-            Prf::AddSxS |  Prf::SubSxS | Prf::MulSxS | Prf::DivSxS | Prf::NegS => {
-                let base = arg_types[0].ty.clone();
-                Type::scalar(base)
-            }
         }
     }
 
@@ -605,82 +584,199 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
 
     type PrfCallOut = (PrfCall<'ast, Self::OutAst>, Type);
 
-    fn trav_prf_call(&mut self, prf_call: PrfCall<'ast, Self::InAst>) -> Self::PrfCallOut {
-        let primitive = prf_call.id;
-        let expected_arity = match primitive {
-            Prf::NegS | Prf::NotS => 1,
-            _ => 2,
-        };
+    fn trav_prf_call(&mut self, prf: PrfCall<'ast, Self::InAst>) -> Self::PrfCallOut {
+        let prf_name = prf.nameof();
 
-        if prf_call.args.len() != expected_arity {
-            self.errors.push(InferenceError::PrimitiveArgumentCountMismatch {
-                primitive,
-                expected: expected_arity,
-                provided: prf_call.args.len(),
-            });
-        }
+        use PrfCall::*;
+        match prf {
+            SelVxA(idx, arr) => {
+                let (idx, idx_ty) = self.trav_id(idx);
+                self.expect_usize_vector_prf_arg(prf_name, 0, &idx_ty);
+                let (arr, arr_ty) = self.trav_id(arr);
+                self.expect_array_prf_arg(prf_name, 1, &arr_ty);
+                (SelVxA(idx, arr), Type::scalar(arr_ty.ty))
+            }
+            AddSxS(l, r) => {
+                let (l, l_ty) = self.trav_id(l);
+                self.expect_scalar_prf_arg(prf_name, 0, &l_ty);
+                let (r, r_ty) = self.trav_id(r);
+                self.expect_scalar_prf_arg(prf_name, 1, &r_ty);
 
-        let mut args = Vec::with_capacity(prf_call.args.len());
-        let mut arg_types = Vec::with_capacity(prf_call.args.len());
-        for arg in prf_call.args {
-            let (typed_arg, ty) = self.trav_id(arg);
-            args.push(typed_arg);
-            arg_types.push(ty);
-        }
-
-        match primitive {
-            Prf::AddSxS | Prf::SubSxS | Prf::MulSxS | Prf::DivSxS => {
-                if let Some(lhs) = arg_types.first() {
-                    self.expect_scalar_prf_arg(primitive, 0, lhs);
-                }
-                if let Some(rhs) = arg_types.get(1) {
-                    self.expect_scalar_prf_arg(primitive, 1, rhs);
-                }
-                if let [lhs, rhs, ..] = arg_types.as_slice()
-                    && lhs.ty != rhs.ty {
+                if l_ty.ty != r_ty.ty {
                     self.errors.push(InferenceError::PrimitiveArgumentKindMismatch {
-                        primitive,
+                        primitive: prf_name.to_owned(),
                         arg_index: 1,
                         expected: "same scalar type as lhs",
-                        provided: rhs.clone(),
+                        provided: r_ty.clone(),
                     });
                 }
+
+                (AddSxS(l, r), Type::scalar(l_ty.ty))
             }
-            Prf::LtSxS | Prf::LeSxS | Prf::GtSxS | Prf::GeSxS | Prf::EqSxS | Prf::NeSxS => {
-                if let Some(lhs) = arg_types.first() {
-                    self.expect_scalar_prf_arg(primitive, 0, lhs);
-                }
-                if let Some(rhs) = arg_types.get(1) {
-                    self.expect_scalar_prf_arg(primitive, 1, rhs);
-                }
-                if let [lhs, rhs, ..] = arg_types.as_slice()
-                    && lhs.ty != rhs.ty {
+            SubSxS(l, r) => {
+                let (l, l_ty) = self.trav_id(l);
+                self.expect_scalar_prf_arg(prf_name, 0, &l_ty);
+                let (r, r_ty) = self.trav_id(r);
+                self.expect_scalar_prf_arg(prf_name, 1, &r_ty);
+
+                if l_ty.ty != r_ty.ty {
                     self.errors.push(InferenceError::PrimitiveArgumentKindMismatch {
-                        primitive,
+                        primitive: prf_name.to_owned(),
                         arg_index: 1,
                         expected: "same scalar type as lhs",
-                        provided: rhs.clone(),
+                        provided: r_ty.clone(),
                     });
                 }
+
+                (SubSxS(l, r), Type::scalar(l_ty.ty))
             }
-            Prf::NegS => {
-                if let Some(arg) = arg_types.first() {
-                    self.expect_scalar_prf_arg(primitive, 0, arg);
+            MulSxS(l, r) => {
+                let (l, l_ty) = self.trav_id(l);
+                self.expect_scalar_prf_arg(prf_name, 0, &l_ty);
+                let (r, r_ty) = self.trav_id(r);
+                self.expect_scalar_prf_arg(prf_name, 1, &r_ty);
+
+                if l_ty.ty != r_ty.ty {
+                    self.errors.push(InferenceError::PrimitiveArgumentKindMismatch {
+                        primitive: prf_name.to_owned(),
+                        arg_index: 1,
+                        expected: "same scalar type as lhs",
+                        provided: r_ty.clone(),
+                    });
                 }
+
+                (MulSxS(l, r), Type::scalar(l_ty.ty))
             }
-            Prf::NotS => {
-                if let Some(arg) = arg_types.first() {
-                    self.expect_bool_scalar_prf_arg(primitive, 0, arg);
+            DivSxS(l, r) => {
+                let (l, l_ty) = self.trav_id(l);
+                self.expect_scalar_prf_arg(prf_name, 0, &l_ty);
+                let (r, r_ty) = self.trav_id(r);
+                self.expect_scalar_prf_arg(prf_name, 1, &r_ty);
+
+                if l_ty.ty != r_ty.ty {
+                    self.errors.push(InferenceError::PrimitiveArgumentKindMismatch {
+                        primitive: prf_name.to_owned(),
+                        arg_index: 1,
+                        expected: "same scalar type as lhs",
+                        provided: r_ty.clone(),
+                    });
                 }
+
+                (DivSxS(l, r), Type::scalar(l_ty.ty))
             }
-            Prf::SelVxA => {
-                self.expect_usize_vector_prf_arg(primitive, 0, &arg_types[0]);
-                self.expect_array_prf_arg(primitive, 1, &arg_types[1]);
+            LtSxS(l, r) => {
+                let (l, l_ty) = self.trav_id(l);
+                self.expect_scalar_prf_arg(prf_name, 0, &l_ty);
+                let (r, r_ty) = self.trav_id(r);
+                self.expect_scalar_prf_arg(prf_name, 1, &r_ty);
+
+                if l_ty.ty != r_ty.ty {
+                    self.errors.push(InferenceError::PrimitiveArgumentKindMismatch {
+                        primitive: prf_name.to_owned(),
+                        arg_index: 1,
+                        expected: "same scalar type as lhs",
+                        provided: r_ty.clone(),
+                    });
+                }
+
+                (LtSxS(l, r), Type::scalar(BaseType::Bool))
+            }
+            LeSxS(l, r) => {
+                let (l, l_ty) = self.trav_id(l);
+                self.expect_scalar_prf_arg(prf_name, 0, &l_ty);
+                let (r, r_ty) = self.trav_id(r);
+                self.expect_scalar_prf_arg(prf_name, 1, &r_ty);
+
+                if l_ty.ty != r_ty.ty {
+                    self.errors.push(InferenceError::PrimitiveArgumentKindMismatch {
+                        primitive: prf_name.to_owned(),
+                        arg_index: 1,
+                        expected: "same scalar type as lhs",
+                        provided: r_ty.clone(),
+                    });
+                }
+
+                (LtSxS(l, r), Type::scalar(BaseType::Bool))
+            }
+            GtSxS(l, r) => {
+                let (l, l_ty) = self.trav_id(l);
+                self.expect_scalar_prf_arg(prf_name, 0, &l_ty);
+                let (r, r_ty) = self.trav_id(r);
+                self.expect_scalar_prf_arg(prf_name, 1, &r_ty);
+
+                if l_ty.ty != r_ty.ty {
+                    self.errors.push(InferenceError::PrimitiveArgumentKindMismatch {
+                        primitive: prf_name.to_owned(),
+                        arg_index: 1,
+                        expected: "same scalar type as lhs",
+                        provided: r_ty.clone(),
+                    });
+                }
+
+                (LtSxS(l, r), Type::scalar(BaseType::Bool))
+            }
+            GeSxS(l, r) => {
+                let (l, l_ty) = self.trav_id(l);
+                self.expect_scalar_prf_arg(prf_name, 0, &l_ty);
+                let (r, r_ty) = self.trav_id(r);
+                self.expect_scalar_prf_arg(prf_name, 1, &r_ty);
+
+                if l_ty.ty != r_ty.ty {
+                    self.errors.push(InferenceError::PrimitiveArgumentKindMismatch {
+                        primitive: prf_name.to_owned(),
+                        arg_index: 1,
+                        expected: "same scalar type as lhs",
+                        provided: r_ty.clone(),
+                    });
+                }
+
+                (LtSxS(l, r), Type::scalar(BaseType::Bool))
+            }
+            EqSxS(l, r) => {
+                let (l, l_ty) = self.trav_id(l);
+                self.expect_scalar_prf_arg(prf_name, 0, &l_ty);
+                let (r, r_ty) = self.trav_id(r);
+                self.expect_scalar_prf_arg(prf_name, 1, &r_ty);
+
+                if l_ty.ty != r_ty.ty {
+                    self.errors.push(InferenceError::PrimitiveArgumentKindMismatch {
+                        primitive: prf_name.to_owned(),
+                        arg_index: 1,
+                        expected: "same scalar type as lhs",
+                        provided: r_ty.clone(),
+                    });
+                }
+
+                (LtSxS(l, r), Type::scalar(BaseType::Bool))
+            }
+            NeSxS(l, r) => {
+                let (l, l_ty) = self.trav_id(l);
+                self.expect_scalar_prf_arg(prf_name, 0, &l_ty);
+                let (r, r_ty) = self.trav_id(r);
+                self.expect_scalar_prf_arg(prf_name, 1, &r_ty);
+
+                if l_ty.ty != r_ty.ty {
+                    self.errors.push(InferenceError::PrimitiveArgumentKindMismatch {
+                        primitive: prf_name.to_owned(),
+                        arg_index: 1,
+                        expected: "same scalar type as lhs",
+                        provided: r_ty.clone(),
+                    });
+                }
+
+                (LtSxS(l, r), Type::scalar(BaseType::Bool))
+            }
+            NegS(r) => {
+                let (r, r_ty) = self.trav_id(r);
+                self.expect_scalar_prf_arg(prf_name, 0, &r_ty);
+                (NegS(r), r_ty)
+            }
+            NotS(r) => {
+                let (r, r_ty) = self.trav_id(r);
+                self.expect_bool_scalar_prf_arg(prf_name, 0, &r_ty);
+                (NotS(r), r_ty)
             }
         }
-
-        let ty = Self::prf_fallback_type(primitive, &arg_types);
-        (PrfCall { id: primitive, args }, ty)
     }
 
     fn trav_tensor(&mut self, tensor: Tensor<'ast, Self::InAst>) -> Self::TensorOut {

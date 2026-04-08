@@ -165,13 +165,73 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
         Call { id: call.id, args }
     }
 
-    fn trav_prf_call(&mut self, prf_call: PrfCall<'ast, Self::InAst>) -> Self::PrfCallOut {
-        let mut args = Vec::with_capacity(prf_call.args.len());
-        for arg in prf_call.args {
-            args.push(self.trav_expr(arg.clone()));
+    fn trav_prf_call(&mut self, prf: PrfCall<'ast, Self::InAst>) -> Self::PrfCallOut {
+        use PrfCall::*;
+        match prf {
+            AddSxS(l, r) => {
+                let l = self.trav_expr(l.clone());
+                let r = self.trav_expr(r.clone());
+                AddSxS(l, r)
+            }
+            SubSxS(l, r) => {
+                let l = self.trav_expr(l.clone());
+                let r = self.trav_expr(r.clone());
+                SubSxS(l, r)
+            }
+            MulSxS(l, r) => {
+                let l = self.trav_expr(l.clone());
+                let r = self.trav_expr(r.clone());
+                MulSxS(l, r)
+            }
+            DivSxS(l, r) => {
+                let l = self.trav_expr(l.clone());
+                let r = self.trav_expr(r.clone());
+                DivSxS(l, r)
+            }
+            SelVxA(a, b) => {
+                let a = self.trav_expr(a.clone());
+                let b = self.trav_expr(b.clone());
+                SelVxA(a, b)
+            }
+            LtSxS(a, b) => {
+                let a = self.trav_expr(a.clone());
+                let b = self.trav_expr(b.clone());
+                LtSxS(a, b)
+            }
+            LeSxS(a, b) => {
+                let a = self.trav_expr(a.clone());
+                let b = self.trav_expr(b.clone());
+                LeSxS(a, b)
+            }
+            GtSxS(a, b) => {
+                let a = self.trav_expr(a.clone());
+                let b = self.trav_expr(b.clone());
+                GtSxS(a, b)
+            }
+            GeSxS(a, b) => {
+                let a = self.trav_expr(a.clone());
+                let b = self.trav_expr(b.clone());
+                GeSxS(a, b)
+            }
+            EqSxS(a, b) => {
+                let a = self.trav_expr(a.clone());
+                let b = self.trav_expr(b.clone());
+                EqSxS(a, b)
+            }
+            NeSxS(a, b) => {
+                let a = self.trav_expr(a.clone());
+                let b = self.trav_expr(b.clone());
+                NeSxS(a, b)
+            }
+            NegS(a) => {
+                let a = self.trav_expr(a.clone());
+                NegS(a)
+            }
+            NotS(a) => {
+                let a = self.trav_expr(a.clone());
+                NotS(a)
+            }
         }
-
-        PrfCall { id: prf_call.id, args }
     }
 
     fn trav_tensor(&mut self, tensor: Tensor<'ast, Self::InAst>) -> Self::TensorOut {

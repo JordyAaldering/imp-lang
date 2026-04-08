@@ -1,16 +1,8 @@
 use super::*;
 
 /// Primitive function call
-///
-/// TODO: make this an enum, with the args as enum fields
 #[derive(Clone, Debug)]
-pub struct PrfCall<'ast, Ast: AstConfig> {
-    pub id: Prf,
-    pub args: Vec<Ast::Operand<'ast>>,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum Prf {
+pub enum PrfCall<'ast, Ast: AstConfig> {
     /// @selVxA
     ///
     /// Selection of a vector in an array, where the
@@ -18,102 +10,135 @@ pub enum Prf {
     /// I.e., the result is a scalar.
     ///
     /// `A[V]`
-    SelVxA,
+    SelVxA(Ast::Operand<'ast>, Ast::Operand<'ast>),
     /// @addSxS
     ///
     /// `S + S`
-    AddSxS,
+    AddSxS(Ast::Operand<'ast>, Ast::Operand<'ast>),
     /// @subSxS
     ///
     /// `S - S`
-    SubSxS,
+    SubSxS(Ast::Operand<'ast>, Ast::Operand<'ast>),
     /// @mulSxS
     ///
     /// `S * S`
-    MulSxS,
+    MulSxS(Ast::Operand<'ast>, Ast::Operand<'ast>),
     /// @divSxS
     ///
     /// `S / S`
-    DivSxS,
+    DivSxS(Ast::Operand<'ast>, Ast::Operand<'ast>),
     /// @ltSxS
     ///
     /// `S < S`
-    LtSxS,
+    LtSxS(Ast::Operand<'ast>, Ast::Operand<'ast>),
     /// @leSxS
     ///
     /// `S <= S`
-    LeSxS,
+    LeSxS(Ast::Operand<'ast>, Ast::Operand<'ast>),
     /// @gtSxS
     ///
     /// `S > S`
-    GtSxS,
+    GtSxS(Ast::Operand<'ast>, Ast::Operand<'ast>),
     /// @geSxS
     ///
     /// `S >= S`
-    GeSxS,
+    GeSxS(Ast::Operand<'ast>, Ast::Operand<'ast>),
     /// @eqSxS
     ///
     /// `S == S`
-    EqSxS,
+    EqSxS(Ast::Operand<'ast>, Ast::Operand<'ast>),
     /// @neSxS
     ///
     /// `S != S`
-    NeSxS,
+    NeSxS(Ast::Operand<'ast>, Ast::Operand<'ast>),
     /// @negS
     ///
     /// Unary negation
     ///
     /// `-S`
-    NegS,
+    NegS(Ast::Operand<'ast>),
     /// @notS
     ///
     /// Logical negation
     ///
     /// `!S`
-    NotS,
+    NotS(Ast::Operand<'ast>),
 }
 
-impl fmt::Display for Prf {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        use Prf::*;
+impl<'ast, Ast: AstConfig> PrfCall<'ast, Ast> {
+    pub fn nameof(&self) -> &'static str {
+        use PrfCall::*;
         match self {
-            SelVxA => write!(f, "@selVxA"),
-            AddSxS => write!(f, "@addSxS"),
-            SubSxS => write!(f, "@subSxS"),
-            MulSxS => write!(f, "@mulSxS"),
-            DivSxS => write!(f, "@divSxS"),
-            LtSxS => write!(f, "@ltSxS"),
-            LeSxS => write!(f, "@leSxS"),
-            GtSxS => write!(f, "@gtSxS"),
-            GeSxS => write!(f, "@geSxS"),
-            EqSxS => write!(f, "@eqSxS"),
-            NeSxS => write!(f, "@neSxS"),
-            NegS => write!(f, "@negS"),
-            NotS => write!(f, "@notS"),
+            SelVxA(_, _) => "@selVxA",
+            AddSxS(_, _) => "@addSxS",
+            SubSxS(_, _) => "@subSxS",
+            MulSxS(_, _) => "@mulSxS",
+            DivSxS(_, _) => "@divSxS",
+            LtSxS(_, _) => "@ltSxS",
+            LeSxS(_, _) => "@leSxS",
+            GtSxS(_, _) => "@gtSxS",
+            GeSxS(_, _) => "@geSxS",
+            EqSxS(_, _) => "@eqSxS",
+            NeSxS(_, _) => "@neSxS",
+            NegS(_) => "@negS",
+            NotS(_) => "@notS",
         }
     }
-}
 
-impl TryFrom<&str> for Prf {
-    type Error = ();
+    pub fn arity(&self) -> usize {
+        use PrfCall::*;
+        match self {
+            SelVxA(_, _) |
+            AddSxS(_, _) |
+            SubSxS(_, _) |
+            MulSxS(_, _) |
+            DivSxS(_, _) |
+            LtSxS(_, _) |
+            LeSxS(_, _) |
+            GtSxS(_, _) |
+            GeSxS(_, _) |
+            EqSxS(_, _) |
+            NeSxS(_, _) => 2,
+            NegS(_) |
+            NotS(_) => 1,
+        }
+    }
 
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        use Prf::*;
-        match value {
-            "selVxA" => Ok(SelVxA),
-            "addSxS" => Ok(AddSxS),
-            "subSxS" => Ok(SubSxS),
-            "mulSxS" => Ok(MulSxS),
-            "divSxS" => Ok(DivSxS),
-            "ltSxS" => Ok(LtSxS),
-            "leSxS" => Ok(LeSxS),
-            "gtSxS" => Ok(GtSxS),
-            "geSxS" => Ok(GeSxS),
-            "eqSxS" => Ok(EqSxS),
-            "neSxS" => Ok(NeSxS),
-            "negS" => Ok(NegS),
-            "notS" => Ok(NotS),
-            _ => Err(()),
+    pub fn args(&self) -> Vec<&Ast::Operand<'ast>> {
+        use PrfCall::*;
+        match self {
+            SelVxA(a, b) => vec![a, b],
+            AddSxS(a, b) => vec![a, b],
+            SubSxS(a, b) => vec![a, b],
+            MulSxS(a, b) => vec![a, b],
+            DivSxS(a, b) => vec![a, b],
+            LtSxS(a, b) => vec![a, b],
+            LeSxS(a, b) => vec![a, b],
+            GtSxS(a, b) => vec![a, b],
+            GeSxS(a, b) => vec![a, b],
+            EqSxS(a, b) => vec![a, b],
+            NeSxS(a, b) => vec![a, b],
+            NegS(a) => vec![a],
+            NotS(a) => vec![a],
+        }
+    }
+
+    pub fn args_mut(&mut self) -> Vec<&mut Ast::Operand<'ast>> {
+        use PrfCall::*;
+        match self {
+            SelVxA(a, b) => vec![a, b],
+            AddSxS(a, b) => vec![a, b],
+            SubSxS(a, b) => vec![a, b],
+            MulSxS(a, b) => vec![a, b],
+            DivSxS(a, b) => vec![a, b],
+            LtSxS(a, b) => vec![a, b],
+            LeSxS(a, b) => vec![a, b],
+            GtSxS(a, b) => vec![a, b],
+            GeSxS(a, b) => vec![a, b],
+            EqSxS(a, b) => vec![a, b],
+            NeSxS(a, b) => vec![a, b],
+            NegS(a) => vec![a],
+            NotS(a) => vec![a],
         }
     }
 }

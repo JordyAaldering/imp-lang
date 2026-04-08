@@ -57,14 +57,6 @@ impl CompileC {
         }
     }
 
-    fn id_is_any(&self, id: &Id<'_, TypedAst>) -> bool {
-        match id {
-            Id::Arg(i) => matches!(self.arg_types[*i].shape, ShapePattern::Any),
-            Id::Var(v) => matches!(v.ty.shape, ShapePattern::Any),
-            Id::Dim(_) | Id::Shp(_) | Id::DimAt(_, _) => false,
-        }
-    }
-
     fn id_type(&self, id: &Id<'_, TypedAst>) -> Type {
         match id {
             Id::Arg(i) => self.arg_types[*i].clone(),
@@ -173,46 +165,27 @@ impl CompileC {
 
     fn emit_trait_shims_for_stmt<'ast>(&mut self, stmt: &Stmt<'ast, TypedAst>, args: &[&'ast Farg]) {
         match stmt {
-            Stmt::Assign(a) => self.emit_trait_shims_for_expr(a.expr, args),
-            Stmt::Return(r) => self.emit_trait_shims_for_id(&r.id, args),
+            Stmt::Assign(n) => self.emit_trait_shims_for_expr(n.expr, args),
+            Stmt::Return(_) => { },
         }
     }
 
     fn emit_trait_shims_for_expr<'ast>(&mut self, expr: &Expr<'ast, TypedAst>, args: &[&'ast Farg]) {
         match expr {
             Expr::Call(call) => {
-                for id in &call.args {
-                    self.emit_trait_shims_for_id(id, args);
-                }
                 if let CallTarget::TraitMethod { trait_name, method_name } = &call.id {
                     let arg_types = call.args.iter().map(|id| type_of_id_in_context(id, args)).collect::<Vec<_>>();
                     self.emit_trait_shim(&trait_name, &method_name, &arg_types);
                 }
             }
-            Expr::PrfCall(prf) => {
-                for id in &prf.args {
-                    self.emit_trait_shims_for_id(id, args);
-                }
-            }
             Expr::Tensor(t) => {
-                self.emit_trait_shims_for_id(&t.lb, args);
-                self.emit_trait_shims_for_id(&t.ub, args);
                 for stmt in &t.body {
                     self.emit_trait_shims_for_stmt(stmt, args);
                 }
-                self.emit_trait_shims_for_id(&t.ret, args);
             }
-            Expr::Array(a) => {
-                for id in &a.elems {
-                    self.emit_trait_shims_for_id(id, args);
-                }
-            }
-            Expr::Id(id) => self.emit_trait_shims_for_id(id, args),
-            Expr::Const(_) => {},
+            _ => {}
         }
     }
-
-    fn emit_trait_shims_for_id<'ast>(&mut self, _id: &Id<'ast, TypedAst>, _args: &[&'ast Farg]) {}
 }
 
 impl<'ast> Visit<'ast> for CompileC {
@@ -476,40 +449,74 @@ impl<'ast> Visit<'ast> for CompileC {
     }
 
     fn visit_prf_call(&mut self, prf_call: &PrfCall<'ast, TypedAst>) {
-        use Prf::*;
-
-        let args: Vec<String> = prf_call.args.iter()
-            .map(|arg| self.render_expr(&Expr::Id(*arg)))
-            .collect();
-
-        let rendered = match prf_call.id {
-            AddSxS => format!("{} + {}", args[0], args[1]),
-            SubSxS => format!("{} - {}", args[0], args[1]),
-            MulSxS => format!("{} * {}", args[0], args[1]),
-            DivSxS => format!("{} / {}", args[0], args[1]),
-            LtSxS => format!("{} < {}", args[0], args[1]),
-            LeSxS => format!("{} <= {}", args[0], args[1]),
-            GtSxS => format!("{} > {}", args[0], args[1]),
-            GeSxS => format!("{} >= {}", args[0], args[1]),
-            EqSxS => format!("{} == {}", args[0], args[1]),
-            NeSxS => format!("{} != {}", args[0], args[1]),
-            NegS => format!("-{}", args[0]),
-            NotS => format!("!{}", args[0]),
-            SelVxA => {
-                let idx_id = prf_call.args[0];
-                let arr_id = prf_call.args[1];
-                if self.id_is_any(&arr_id) || self.id_is_any(&idx_id) {
-                    panic!("dynamic union values are not yet supported in primitive selection during C codegen");
-                }
-                let arr = self.nameof(&arr_id);
-                let idx = self.nameof(&idx_id);
-                let elem_base = elem_ctype_of_id(&arr_id);
-                let flat_fn = flat_index_fn_of_id(&idx_id);
-                format!("(({elem_base} *){arr}.data)[{flat_fn}({arr}, {idx})]")
+        use PrfCall::*;
+        match prf_call {
+            AddSxS(a, b) => {
+                self.visit_id(a);
+                self.output.push_str(" + ");
+                self.visit_id(b);
+            },
+            SubSxS(a, b) => {
+                self.visit_id(a);
+                self.output.push_str(" - ");
+                self.visit_id(b);
+            },
+            MulSxS(a, b) => {
+                self.visit_id(a);
+                self.output.push_str(" * ");
+                self.visit_id(b);
+            },
+            DivSxS(a, b) => {
+                self.visit_id(a);
+                self.output.push_str(" / ");
+                self.visit_id(b);
+            },
+            LtSxS(a, b) => {
+                self.visit_id(a);
+                self.output.push_str(" < ");
+                self.visit_id(b);
+            },
+            LeSxS(a, b) => {
+                self.visit_id(a);
+                self.output.push_str(" <= ");
+                self.visit_id(b);
+            },
+            GtSxS(a, b) => {
+                self.visit_id(a);
+                self.output.push_str(" > ");
+                self.visit_id(b);
+            },
+            GeSxS(a, b) => {
+                self.visit_id(a);
+                self.output.push_str(" >= ");
+                self.visit_id(b);
+            },
+            EqSxS(a, b) => {
+                self.visit_id(a);
+                self.output.push_str(" == ");
+                self.visit_id(b);
+            },
+            NeSxS(a, b) => {
+                self.visit_id(a);
+                self.output.push_str(" != ");
+                self.visit_id(b);
+            },
+            NegS(a) => {
+                self.output.push_str("-");
+                self.visit_id(a);
+            },
+            NotS(a) => {
+                self.output.push_str("!");
+                self.visit_id(a);
+            },
+            SelVxA(idx, arr) => {
+                let arr_name = self.nameof(arr);
+                let idx_name = self.nameof(idx);
+                let elem_base = elem_ctype_of_id(arr);
+                let flat_fn = flat_index_fn_of_id(idx);
+                self.output.push_str(&format!("(({elem_base} *){arr_name}.data)[{flat_fn}({arr_name}, {idx_name})]"))
             }
         };
-
-        self.expr_stack.push(rendered);
     }
 
     fn visit_id(&mut self, id: &Id<'ast, Self::Ast>) {

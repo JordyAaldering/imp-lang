@@ -56,23 +56,24 @@ impl<'ast> Rewrite<'ast> for ConstantFold {
     }
 
     fn rewrite_prf_call(&mut self, prf_call: PrfCall<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
-        match (&prf_call.id, &prf_call.args.as_slice()) {
-            (Prf::AddSxS, [l, r]) => {
+        use PrfCall::*;
+        match &prf_call {
+            AddSxS(l, r) => {
                 if let (Some(l), Some(r)) = (self.const_u32(l), self.const_u32(r)) {
                     return Expr::Const(Const::U32(l + r));
                 }
             }
-            (Prf::SubSxS, [l, r]) => {
+            SubSxS(l, r) => {
                 if let (Some(l), Some(r)) = (self.const_u32(l), self.const_u32(r)) {
                     return Expr::Const(Const::U32(l - r));
                 }
             }
-            (Prf::MulSxS, [l, r]) => {
+            MulSxS(l, r) => {
                 if let (Some(l), Some(r)) = (self.const_u32(l), self.const_u32(r)) {
                     return Expr::Const(Const::U32(l * r));
                 }
             }
-            (Prf::DivSxS, [l, r]) => {
+            DivSxS(l, r) => {
                 if let (Some(l), Some(r)) = (self.const_u32(l), self.const_u32(r)) && r != 0 {
                     return Expr::Const(Const::U32(l / r));
                 }

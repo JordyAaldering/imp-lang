@@ -19,7 +19,7 @@ member Num :: usize;
 member Num :: f32;
 member Num :: f64;
 
-pub fn dim(usize[d:shp] arr) -> usize {
+fn dim(usize[d:shp] arr) -> usize {
     return d;
 }
 
