@@ -5,6 +5,7 @@ use super::*;
 pub enum Id<'ast, Ast: AstConfig> {
     /// Formal function argument
     Arg(usize),
+    /// Local variable
     Var(Ast::VarLink<'ast>),
     /// The rank (`arr.dim`) of the argument at the given index — bound by a `d:shp` pattern
     Dim(usize),

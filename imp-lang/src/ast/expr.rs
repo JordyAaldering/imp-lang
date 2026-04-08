@@ -6,8 +6,6 @@ pub enum Expr<'ast, Ast: AstConfig> {
     PrfCall(PrfCall<'ast, Ast>),
     Tensor(Tensor<'ast, Ast>),
     Array(Array<'ast, Ast>),
-    // Terminals
     Id(Id<'ast, Ast>),
-    // TODO: merge constants into a single Const enum/struct
     Const(Const),
 }
