@@ -40,4 +40,11 @@ fn main() {
     println!("arr2.data = {:?}", arr2.data);
 
     println!("sel = {}", expect_scalar(sel()));
+
+    let arr = scalar_or_array(ImpArrayOrScalar::Scalar(37));
+    println!("scalar_or_array = {:?}", arr);
+
+    // double free detected
+    // let arr = scalar_or_array(ImpArrayOrScalar::Array(ImpArray { shp: vec![6], data: vec![1,2,3,4,5,6] }));
+    // println!("scalar_or_array = {:?}", arr);
 }

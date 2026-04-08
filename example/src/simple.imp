@@ -98,6 +98,6 @@ pub fn sel() -> u32 {
     return x;
 }
 
-pub fn scalar_or_array(u32[*] a) -> u32[*] {
+pub fn scalar_or_array(usize[*] a) -> usize[*] {
     return a;
 }

@@ -1,5 +1,6 @@
 use std::{ffi::c_void, slice};
 
+#[derive(Debug)]
 pub enum ImpArrayOrScalar<T>
 where
     T: Copy,
@@ -8,6 +9,7 @@ where
     Scalar(T),
 }
 
+#[derive(Debug)]
 pub struct ImpArray<T>
 where
     T: Copy,
