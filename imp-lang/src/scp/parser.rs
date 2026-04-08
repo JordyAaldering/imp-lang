@@ -419,11 +419,11 @@ impl<'src> Parser<'src> {
         Ok(name)
     }
 
-    fn parse_member_def(&mut self) -> ParseResult<(String, PolyType)> {
+    fn parse_member_def(&mut self) -> ParseResult<(String, BaseType)> {
         self.expect(Token::Member)?;
         let (typeset, _) = self.parse_id()?;
         self.expect(Token::ColonColon)?;
-        let member = self.parse_poly_type()?;
+        let (member, _) = self.parse_basetype()?;
         self.expect(Token::Semicolon)?;
         Ok((typeset, member))
     }
@@ -653,18 +653,7 @@ impl<'src> Parser<'src> {
     }
 
     fn parse_type(&mut self) -> ParseResult<(Type, Span)> {
-        let (token, span) = self.next()?;
-        let base = match token {
-            Token::I32Type => BaseType::I32,
-            Token::I64Type => BaseType::I64,
-            Token::U32Type => BaseType::U32,
-            Token::U64Type => BaseType::U64,
-            Token::UsizeType => BaseType::Usize,
-            Token::F32Type => BaseType::F32,
-            Token::F64Type => BaseType::F64,
-            Token::BoolType => BaseType::Bool,
-            _ => return Err(ParseError::UnexpectedToken("type".to_owned(), token, span)),
-        };
+        let (base, span) = self.parse_basetype()?;
 
         let ty = if self.matches(Token::LSquare).is_some() {
             if self.matches(Token::Mul).is_some() {
@@ -690,6 +679,25 @@ impl<'src> Parser<'src> {
         };
 
         Ok((ty, span))
+    }
+
+    fn parse_basetype(&mut self) -> ParseResult<(BaseType, Span)> {
+        let (token, span) = self.next()?;
+
+        let base = match token {
+            Token::I32Type => BaseType::I32,
+            Token::I64Type => BaseType::I64,
+            Token::U32Type => BaseType::U32,
+            Token::U64Type => BaseType::U64,
+            Token::UsizeType => BaseType::Usize,
+            Token::F32Type => BaseType::F32,
+            Token::F64Type => BaseType::F64,
+            Token::BoolType => BaseType::Bool,
+            Token::Identifier(udf) => BaseType::Udf(udf),
+            _ => return Err(ParseError::UnexpectedToken("base type".to_owned(), token, span)),
+        };
+
+        Ok((base, span))
     }
 
     fn parse_axes(&mut self) -> ParseResult<Vec<AxisPattern>> {

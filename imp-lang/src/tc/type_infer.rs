@@ -174,7 +174,7 @@ impl<'ast> TypeInfer<'ast> {
             return Type::vector_dim(BaseType::I32, DimPattern::Known(0));
         };
 
-        let base_ty = first.ty;
+        let base_ty = first.ty.clone();
         let elem_shape = first.shape.clone();
         let elem_rank = first.rank();
 
@@ -220,7 +220,7 @@ impl<'ast> TypeInfer<'ast> {
         match &ub_ty.shape {
             ShapePattern::Scalar => {
                 // Backward-compatible 1-D: scalar ub, scalar iv of the same base type.
-                (Type::scalar(ub_ty.ty), Some(1))
+                (Type::scalar(ub_ty.ty.clone()), Some(1))
             }
             ShapePattern::Axes(axes)
                 if axes.len() == 1 && matches!(axes[0], AxisPattern::Dim(_)) =>
@@ -230,13 +230,13 @@ impl<'ast> TypeInfer<'ast> {
                     AxisPattern::Dim(DimPattern::Known(k)) => {
                         let k = *k as usize;
                             // iv has the same element type as ub; shape is [k].
-                            let iv_ty = Type::vector_dim(ub_ty.ty, DimPattern::Known(k as u64));
+                            let iv_ty = Type::vector_dim(ub_ty.ty.clone(), DimPattern::Known(k as u64));
                         (iv_ty, Some(k))
                     }
                     AxisPattern::Dim(DimPattern::Any) => {
                         // ub rank-1 but unknown length → k unknown.
                         let iv_ty = Type {
-                                ty: ub_ty.ty,
+                            ty: ub_ty.ty.clone(),
                             shape: ShapePattern::Axes(vec![AxisPattern::Dim(DimPattern::Any)]),
                             knowledge: TypeKnowledge::AKD,
                         };
@@ -245,7 +245,7 @@ impl<'ast> TypeInfer<'ast> {
                     AxisPattern::Dim(DimPattern::Var(_)) => {
                         // Named extent (e.g., `usize[n]`): value unknown at compile time.
                         let iv_ty = Type {
-                                ty: ub_ty.ty,
+                            ty: ub_ty.ty.clone(),
                             shape: ShapePattern::Axes(vec![AxisPattern::Dim(DimPattern::Any)]),
                             knowledge: TypeKnowledge::AKD,
                         };
@@ -257,7 +257,7 @@ impl<'ast> TypeInfer<'ast> {
             _ => {
                 // Multi-rank ub, contains `..rest`, or `Any` shape: fully unknown.
                 let iv_ty = Type {
-                        ty: ub_ty.ty,
+                    ty: ub_ty.ty.clone(),
                     shape: ShapePattern::Any,
                     knowledge: TypeKnowledge::AUD,
                 };
@@ -397,11 +397,11 @@ impl<'ast> TypeInfer<'ast> {
                 Type::scalar(BaseType::Bool)
             }
             Prf::SelVxA => {
-                let base = arg_types[1].ty;
+                let base = arg_types[1].ty.clone();
                 Type::scalar(base)
             }
             Prf::AddSxS |  Prf::SubSxS | Prf::MulSxS | Prf::DivSxS | Prf::NegS => {
-                let base = arg_types[0].ty;
+                let base = arg_types[0].ty.clone();
                 Type::scalar(base)
             }
         }
@@ -429,12 +429,8 @@ impl<'ast> TypeInfer<'ast> {
     fn operator_fallback_type(call_name: &str, arg_types: &[Type]) -> Option<Type> {
         match call_name {
             "==" | "!=" | "<" | "<=" | ">" | ">=" | "!" => Some(Type::scalar(BaseType::Bool)),
-            "sel" => Some(Type::scalar(
-                arg_types.get(1).map(|ty| ty.ty).unwrap_or(BaseType::I32)
-            )),
-            "+" | "-" | "*" | "/" => {
-                Some(arg_types.first().cloned().unwrap_or_else(|| Type::scalar(BaseType::I32)))
-            }
+            "sel" => Some(Type::scalar(arg_types[1].ty.clone())),
+            "+" | "-" | "*" | "/" => Some(arg_types[0].clone()),
             _ => None,
         }
     }

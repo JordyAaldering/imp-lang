@@ -80,10 +80,10 @@ impl CompileC {
 
     fn operator_ret_type(&self, method_name: &str, arg_types: &[Type]) -> Type {
         match method_name {
-            "sel" => Type::scalar(arg_types.get(1).map(|ty| ty.ty).unwrap_or(BaseType::I32)),
+            "sel" => Type::scalar(arg_types[1].ty.clone()),
             "==" | "!=" | "<" | "<=" | ">" | ">=" | "!" => Type::scalar(BaseType::Bool),
-            "+" | "-" | "*" | "/" => arg_types.first().cloned().unwrap_or_else(|| Type::scalar(BaseType::U32)),
-            _ => arg_types.first().cloned().unwrap_or_else(|| Type::scalar(BaseType::U32)),
+            "+" | "-" | "*" | "/" => arg_types[0].clone(),
+            _ => arg_types[0].clone(),
         }
     }
 
@@ -557,24 +557,25 @@ impl<'ast> Visit<'ast> for CompileC {
     }
 }
 
-fn base_ctype(ty: &Type) -> &'static str {
+fn base_ctype(ty: &Type) -> String {
     use BaseType::*;
-    match ty.ty {
-        I32 => "int32_t",
-        I64 => "int64_t",
-        U32 => "uint32_t",
-        U64 => "uint64_t",
-        Usize => "size_t",
-        F32 => "float",
-        F64 => "double",
-        Bool => "bool",
+    match &ty.ty {
+        I32 => "int32_t".to_owned(),
+        I64 => "int64_t".to_owned(),
+        U32 => "uint32_t".to_owned(),
+        U64 => "uint64_t".to_owned(),
+        Usize => "size_t".to_owned(),
+        F32 => "float".to_owned(),
+        F64 => "double".to_owned(),
+        Bool => "bool".to_owned(),
+        Udf(udf) => udf.to_owned(),
     }
 }
 
 fn full_ctype(ty: &Type) -> String {
     if matches!(ty.shape, ShapePattern::Any) {
         use BaseType::*;
-        return match ty.ty {
+        return match &ty.ty {
             I32 => "ImpDynI32".to_owned(),
             I64 => "ImpDynI64".to_owned(),
             U32 => "ImpDynU32".to_owned(),
@@ -583,6 +584,7 @@ fn full_ctype(ty: &Type) -> String {
             F32 => "ImpDynF32".to_owned(),
             F64 => "ImpDynF64".to_owned(),
             Bool => "ImpDynBool".to_owned(),
+            Udf(udf) => format!("ImpDyn{}", udf),
         };
     }
 
@@ -594,25 +596,25 @@ fn full_ctype(ty: &Type) -> String {
 }
 
 /// The C element type for the data pointer stored inside an ImpArrayRaw id.
-fn elem_ctype_of_id(id: &Id<'_, TypedAst>) -> &'static str {
+fn elem_ctype_of_id(id: &Id<'_, TypedAst>) -> String {
     match id {
+        Id::Arg(_) => "uint32_t".to_owned(),  // args used directly as array bounds are uncommon
         Id::Var(v) => base_ctype(&v.ty),
-        Id::Arg(_) => "uint32_t",  // args used directly as array bounds are uncommon
-        Id::Dim(_) | Id::Shp(_) | Id::DimAt(_, _) => "size_t",
+        Id::Dim(_) | Id::Shp(_) | Id::DimAt(_, _) => "size_t".to_owned(),
     }
 }
 
-fn flat_index_fn_of_id(id: &Id<'_, TypedAst>) -> &'static str {
+fn flat_index_fn_of_id(id: &Id<'_, TypedAst>) -> String {
     use BaseType::*;
     match id_base_type(id) {
-        Usize => "imp_flat_index",
+        Usize => "imp_flat_index".to_owned(),
         _ => panic!("arrays can only be indexed by usize"),
     }
 }
 
 fn id_base_type(id: &Id<'_, TypedAst>) -> BaseType {
     match id {
-        Id::Var(v) => v.ty.ty,
+        Id::Var(v) => v.ty.ty.clone(),
         Id::Arg(_) => BaseType::U32,
         Id::Dim(_) | Id::Shp(_) | Id::DimAt(_, _) => BaseType::Usize,
     }

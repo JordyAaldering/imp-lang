@@ -60,7 +60,7 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
                 self.write("member ");
                 self.write(&typeset);
                 self.write(" :: ");
-                self.write_poly_type(&member);
+                self.write_basetype(&member);
                 self.write(";\n");
             }
         }
@@ -272,18 +272,7 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
     }
 
     fn visit_type(&mut self, ty: &Type) {
-        use BaseType::*;
-        let ty_str = match ty.ty {
-            I32 => "i32",
-            I64 => "i64",
-            U32 => "u32",
-            U64 => "u64",
-            Usize => "usize",
-            F32 => "f32",
-            F64 => "f64",
-            Bool => "bool",
-        };
-        self.write(ty_str);
+        self.write_basetype(&ty.ty);
 
         match &ty.shape {
             ShapePattern::Scalar => {}
@@ -310,6 +299,22 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
 }
 
 impl<'ast, Ast: AstConfig> Show<'ast, Ast> {
+    fn write_basetype(&mut self, ty: &BaseType) {
+        use BaseType::*;
+        let ty_str = match ty {
+            I32 => "i32",
+            I64 => "i64",
+            U32 => "u32",
+            U64 => "u64",
+            Usize => "usize",
+            F32 => "f32",
+            F64 => "f64",
+            Bool => "bool",
+            Udf(udf) => udf,
+        };
+        self.write(ty_str);
+    }
+
     fn write_poly_type(&mut self, ty: &PolyType) {
         self.write(&ty.head);
         if let Some(shape) = &ty.shape {

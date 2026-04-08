@@ -1,5 +1,4 @@
-/// The base scalar element type.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum BaseType {
     I32,
     I64,
@@ -9,6 +8,10 @@ pub enum BaseType {
     F32,
     F64,
     Bool,
+    /// User-defined type
+    ///
+    /// (Not actually supported yet by the syntax or the compiler).
+    Udf(String),
 }
 
 /// A fully resolved type: element type, shape pattern, and compile-time knowledge.
