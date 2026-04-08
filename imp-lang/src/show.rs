@@ -7,10 +7,10 @@ pub fn show<'ast, Ast: AstConfig + 'ast>(program: &Program<'ast, Ast>) -> String
 }
 
 struct Show<'ast, Ast: AstConfig> {
-    args: Vec<&'ast Farg>,
+    args: Vec<Farg>,
     depth: usize,
     output: String,
-    _phantom: std::marker::PhantomData<Ast>,
+    _phantom: std::marker::PhantomData<&'ast Ast>,
 }
 
 impl<'ast, Ast: AstConfig> Show<'ast, Ast> {
@@ -157,9 +157,9 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
         self.write("}");
     }
 
-    fn visit_farg(&mut self, arg: &'ast Farg) {
+    fn visit_farg(&mut self, arg: &Farg) {
         self.visit_type(&arg.ty);
-        self.write(&format!(" {}, ", arg.name));
+        self.write(&format!(" {}, ", arg.id));
     }
 
     fn visit_stmt(&mut self, stmt: &Stmt<'ast, Self::Ast>) {
@@ -252,11 +252,11 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
 
     fn visit_id(&mut self, id: &Id<'ast, Self::Ast>) {
         match id {
-            Id::Arg(i) => self.write(&self.args[*i].name),
+            Id::Arg(i) => self.write(&self.args[*i].id.clone()),
             Id::Var(v) => self.write(&<Ast as AstConfig>::var_name(v)),
-            Id::Dim(i) => self.write(&format!("{}.dim", self.args[*i].name)),
-            Id::Shp(i) => self.write(&format!("{}.shp", self.args[*i].name)),
-            Id::DimAt(i, k) => self.write(&format!("{}.shp[{k}]", self.args[*i].name)),
+            Id::Dim(i) => self.write(&format!("{}.dim", self.args[*i].id)),
+            Id::Shp(i) => self.write(&format!("{}.shp", self.args[*i].id)),
+            Id::DimAt(i, k) => self.write(&format!("{}.shp[{k}]", self.args[*i].id)),
         }
     }
 

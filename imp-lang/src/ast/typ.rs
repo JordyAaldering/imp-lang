@@ -14,17 +14,12 @@ pub enum BaseType {
     Udf(String),
 }
 
-/// A fully resolved type: element type, shape pattern, and compile-time knowledge
 #[derive(Clone, Debug)]
 pub struct Type {
     pub ty: BaseType,
-    /// Shape as declared in the source pattern
     pub shape: TypePattern,
-    // Compile-time knowledge about this shape, derived by `tp::analyse_tp`
-    //pub knowledge: TypeKnowledge,
 }
 
-/// The shape component of a type pattern.
 #[derive(Clone, Debug)]
 pub enum TypePattern {
     /// Rank-0; no array dimensions
@@ -33,7 +28,7 @@ pub enum TypePattern {
     Scalar,
     /// Explicit list of dimension and rest patterns.
     ///
-    /// Example: `u32[42]`, `u32[n]`, `u32[m,..rest,n]`
+    /// Example: `u32[42]`, `u32[n]`, `u32[m,d:shp,n]`
     Axes(Vec<AxisPattern>),
     /// Shape fully unconstrained.
     ///

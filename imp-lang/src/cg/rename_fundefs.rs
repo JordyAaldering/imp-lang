@@ -84,7 +84,7 @@ fn make_unique(mut candidate: String, used_names: &mut HashSet<String>) -> Strin
     }
 }
 
-pub fn mangle_fundef_name(base_name: &str, args: &[&Farg]) -> String {
+pub fn mangle_fundef_name(base_name: &str, args: &[Farg]) -> String {
     format!("{}__{}", base_name, mangle_arg_types(args.iter().map(|arg| &arg.ty)))
 }
 

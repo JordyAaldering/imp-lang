@@ -89,7 +89,7 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
         self.push_env();
 
         for (i, arg) in fundef.args.iter().enumerate() {
-            self.bind_env(arg.name.clone(), Id::Arg(i));
+            self.bind_env(arg.id.clone(), Id::Arg(i));
         }
 
         for (i, arg) in fundef.args.iter().enumerate() {

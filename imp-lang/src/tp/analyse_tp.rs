@@ -27,13 +27,13 @@ impl Rewrite<'static> for AnalyseTp {
         self.defined.clear();
 
         for arg in &mut fundef.args {
-            *arg = self.rewrite_farg(*arg);
+            *arg = self.rewrite_farg(arg.clone());
         }
 
         fundef.ret_type = self.rewrite_type(fundef.ret_type.clone());
     }
 
-    fn rewrite_farg(&mut self, arg: &'static Farg) -> &'static Farg {
+    fn rewrite_farg(&mut self, arg: Farg) -> Farg {
         arg
     }
 

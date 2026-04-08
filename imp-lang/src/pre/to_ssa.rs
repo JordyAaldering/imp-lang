@@ -79,7 +79,7 @@ impl<'ast> Traverse<'ast> for ToSsa<'ast> {
         self.push_env();
 
         for (i, arg) in fundef.args.iter().enumerate() {
-            self.bind_env(arg.name.clone(), Id::Arg(i));
+            self.bind_env(arg.id.clone(), Id::Arg(i));
         }
 
         let mut body = Vec::new();

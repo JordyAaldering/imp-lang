@@ -162,14 +162,14 @@ impl CompileC {
         }
     }
 
-    fn emit_trait_shims_for_stmt<'ast>(&mut self, stmt: &Stmt<'ast, TypedAst>, args: &[&'ast Farg]) {
+    fn emit_trait_shims_for_stmt<'ast>(&mut self, stmt: &Stmt<'ast, TypedAst>, args: &[Farg]) {
         match stmt {
             Stmt::Assign(n) => self.emit_trait_shims_for_expr(n.expr, args),
             Stmt::Return(_) => { },
         }
     }
 
-    fn emit_trait_shims_for_expr<'ast>(&mut self, expr: &Expr<'ast, TypedAst>, args: &[&'ast Farg]) {
+    fn emit_trait_shims_for_expr<'ast>(&mut self, expr: &Expr<'ast, TypedAst>, args: &[Farg]) {
         match expr {
             Expr::Call(call) => {
                 if let CallTarget::TraitMethod { trait_name, method_name } = &call.id {
@@ -212,10 +212,10 @@ impl<'ast> Visit<'ast> for CompileC {
     }
 
     fn visit_fundef(&mut self, fundef: &Fundef<'ast, TypedAst>) {
-        self.arg_names = fundef.args.iter().map(|arg| arg.name.clone()).collect();
+        self.arg_names = fundef.args.iter().map(|arg| arg.id.clone()).collect();
         self.arg_types = fundef.args.iter().map(|arg| arg.ty.clone()).collect();
         let args: Vec<String> = fundef.args.iter()
-            .map(|arg| format!("{} {}", full_ctype(&arg.ty), arg.name))
+            .map(|arg| format!("{} {}", full_ctype(&arg.ty), arg.id))
             .collect();
 
         self.push_line(&format!(
@@ -598,7 +598,7 @@ fn id_base_type(id: &Id<'_, TypedAst>) -> BaseType {
     }
 }
 
-fn type_of_id_in_context(id: &Id<'_, TypedAst>, args: &[&Farg]) -> Type {
+fn type_of_id_in_context(id: &Id<'_, TypedAst>, args: &[Farg]) -> Type {
     match id {
         Id::Arg(i) => args[*i].ty.clone(),
         Id::Var(v) => v.ty.clone(),

@@ -23,13 +23,13 @@ pub trait Visit<'ast> {
         }
     }
 
-    fn visit_fargs(&mut self, args: &[&'ast Farg]) {
+    fn visit_fargs(&mut self, args: &[Farg]) {
         for arg in args {
             self.visit_farg(arg);
         }
     }
 
-    fn visit_farg(&mut self, _arg: &'ast Farg) { }
+    fn visit_farg(&mut self, _arg: &Farg) { }
 
     fn visit_farg_poly(&mut self, _arg: &PolyArg) { }
 
@@ -118,15 +118,18 @@ pub trait Rewrite<'ast> {
     }
 
     fn rewrite_fundef(&mut self, fundef: &mut Fundef<'ast, Self::Ast>) {
-        let new_args = fundef.args.iter().map(|&arg| self.rewrite_farg(arg)).collect();
-        fundef.args = new_args;
+        for arg in &mut fundef.args {
+            *arg = self.rewrite_farg(arg.clone());
+        }
+
         fundef.ret_type = self.rewrite_type(fundef.ret_type.clone());
+
         for stmt in &mut fundef.body {
             self.rewrite_stmt(stmt);
         }
     }
 
-    fn rewrite_farg(&mut self, arg: &'ast Farg) -> &'ast Farg {
+    fn rewrite_farg(&mut self, arg: Farg) -> Farg {
         arg
     }
 
@@ -243,7 +246,7 @@ pub trait Traverse<'ast> {
         }
     }
 
-    fn trav_fargs(&mut self, args: Vec<&'ast Farg>) -> Vec<&'ast Farg> {
+    fn trav_fargs(&mut self, args: Vec<Farg>) -> Vec<Farg> {
         let mut new_args = Vec::new();
         for arg in args {
             new_args.push(self.trav_farg(arg));
@@ -251,7 +254,7 @@ pub trait Traverse<'ast> {
         new_args
     }
 
-    fn trav_farg(&mut self, arg: &'ast Farg) -> &'ast Farg {
+    fn trav_farg(&mut self, arg: Farg) -> Farg {
         arg
     }
 

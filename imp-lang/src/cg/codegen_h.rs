@@ -68,7 +68,7 @@ impl<'ast> Visit<'ast> for CompileH {
 
     fn visit_fundef(&mut self, fundef: &Fundef<'ast, TypedAst>) {
         let args: Vec<String> = fundef.args.iter()
-            .map(|arg| format!("{} {}", full_ctype(&arg.ty), arg.name))
+            .map(|arg| format!("{} {}", full_ctype(&arg.ty), arg.id))
             .collect();
         self.output.push_str(&format!(
             "{} IMP_{}({});\n",

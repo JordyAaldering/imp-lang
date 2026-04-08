@@ -50,7 +50,7 @@ pub fn type_infer<'ast>(program: Program<'ast, UntypedAst>) -> Result<Program<'a
 }
 
 pub struct TypeInfer<'ast> {
-    args: Vec<&'ast Farg>,
+    args: Vec<Farg>,
     idmap: HashMap<*const VarInfo<'ast, UntypedAst>, &'ast VarInfo<'ast, TypedAst>>,
     new_ids: Vec<&'ast VarInfo<'ast, TypedAst>>,
     errors: Vec<InferenceError>,
@@ -131,7 +131,7 @@ impl<'ast> TypeInfer<'ast> {
     }
 
     fn alloc_farg(&self, name: String, ty: Type) -> &'ast Farg {
-        Box::leak(Box::new(Farg { name, ty }))
+        Box::leak(Box::new(Farg { id: name, ty }))
     }
 
     fn alloc_lvis(&self, name: String, ty: Type, ssa: Option<&'ast Expr<'ast, TypedAst>>) -> &'ast VarInfo<'ast, TypedAst> {
@@ -273,16 +273,16 @@ impl<'ast> TypeInfer<'ast> {
         for elem in &arr.elems {
             let dp = match elem {
                 Id::Arg(i) => DimPattern::Var(ExtentVar {
-                    name: self.args[*i].name.clone(),
+                    name: self.args[*i].id.clone(),
                     role: SymbolRole::Use,
                 }),
                 Id::Dim(i) => DimPattern::Var(ExtentVar {
-                    name: format!("{}.dim", self.args[*i].name),
+                    name: format!("{}.dim", self.args[*i].id),
                     role: SymbolRole::Use,
                 }),
                 Id::Shp(_) => DimPattern::Any,
                 Id::DimAt(i, k) => DimPattern::Var(ExtentVar {
-                    name: format!("{}.shp[{k}]", self.args[*i].name),
+                    name: format!("{}.shp[{k}]", self.args[*i].id),
                     role: SymbolRole::Use,
                 }),
                 Id::Var(v) => {
@@ -390,10 +390,9 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
         let Fundef { is_public, name, ret_type, args, body, decs: _ } = fundef;
 
         self.args = args.clone();
+
         self.idmap.clear();
         self.new_ids.clear();
-
-        let new_args: Vec<&'ast Farg> = args.into_iter().map(|arg| self.trav_farg(arg)).collect();
 
         let mut new_body = Vec::new();
         for stmt in body {
@@ -404,14 +403,10 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
             is_public,
             name,
             ret_type,
-            args: new_args,
+            args,
             decs: self.new_ids.clone(),
             body: new_body,
         }
-    }
-
-    fn trav_farg(&mut self, arg: &'ast Farg) -> &'ast Farg {
-        self.alloc_farg(arg.name.clone(), arg.ty.clone())
     }
 
     // Statements

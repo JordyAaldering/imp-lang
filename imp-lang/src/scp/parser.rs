@@ -39,7 +39,7 @@ impl<'src> Parser<'src> {
     }
 
     fn alloc_farg(&self, name: String, ty: Type) -> &'static Farg {
-        Box::leak(Box::new(Farg { name, ty }))
+        Box::leak(Box::new(Farg { id: name, ty }))
     }
 
     fn alloc_lvis(&self, name: String, ty: Option<Type>) -> &'static VarInfo<'static, ParsedAst> {
@@ -172,10 +172,10 @@ impl<'src> Parser<'src> {
         })
     }
 
-    fn parse_farg(&mut self) -> ParseResult<&'static Farg> {
+    fn parse_farg(&mut self) -> ParseResult<Farg> {
         let (ty, _) = self.parse_type()?;
         let (id, _) = self.parse_id()?;
-        Ok(self.alloc_farg(id, ty))
+        Ok(Farg { id, ty })
     }
 
     fn parse_stmt(&mut self) -> ParseResult<Vec<Stmt<'static, ParsedAst>>> {

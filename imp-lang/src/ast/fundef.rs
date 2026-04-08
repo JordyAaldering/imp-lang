@@ -5,13 +5,13 @@ pub struct Fundef<'ast, Ast: AstConfig> {
     pub is_public: bool,
     pub name: String,
     pub ret_type: Type,
-    pub args: Vec<&'ast Farg>,
+    pub args: Vec<Farg>,
     pub decs: Vec<&'ast VarInfo<'ast, Ast>>,
     pub body: Vec<Stmt<'ast, Ast>>,
 }
 
 #[derive(Clone, Debug)]
 pub struct Farg {
-    pub name: String,
+    pub id: String,
     pub ty: Type,
 }

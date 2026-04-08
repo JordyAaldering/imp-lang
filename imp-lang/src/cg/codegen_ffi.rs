@@ -44,18 +44,18 @@ impl<'ast> Visit<'ast> for CompileFfi {
             let mut call_args = Vec::with_capacity(fundef.args.len());
             for arg in &fundef.args {
                 if is_static_array(&arg.ty) {
-                    self.push(&format!("    let mut __{}_ffi = {};\n", arg.name, arg.name));
-                    self.push(&format!("    let __{}_raw = __{}_ffi.as_raw();\n", arg.name, arg.name));
-                    call_args.push(format!("__{}_raw", arg.name));
+                    self.push(&format!("    let mut __{}_ffi = {};\n", arg.id, arg.id));
+                    self.push(&format!("    let __{}_raw = __{}_ffi.as_raw();\n", arg.id, arg.id));
+                    call_args.push(format!("__{}_raw", arg.id));
                 } else if matches!(arg.ty.shape, TypePattern::Any) {
-                    self.push(&format!("    let mut __{}_dyn = {};\n", arg.name, arg.name));
-                    self.push(&format!("    let __{}_ffi = match &mut __{}_dyn {{\n", arg.name, arg.name));
+                    self.push(&format!("    let mut __{}_dyn = {};\n", arg.id, arg.id));
+                    self.push(&format!("    let __{}_ffi = match &mut __{}_dyn {{\n", arg.id, arg.id));
                     self.push("        imp_core::ImpArrayOrScalar::Scalar(v) => imp_core::ImpDyn::from_scalar(*v),\n");
                     self.push("        imp_core::ImpArrayOrScalar::Array(a) => imp_core::ImpDyn::from_array_raw(a.as_raw()),\n");
                     self.push("    };\n");
-                    call_args.push(format!("__{}_ffi", arg.name));
+                    call_args.push(format!("__{}_ffi", arg.id));
                 } else {
-                    call_args.push(arg.name.clone());
+                    call_args.push(arg.id.clone());
                 }
             }
 
@@ -93,9 +93,9 @@ fn is_static_array(ty: &Type) -> bool {
     ty.is_array() && !matches!(ty.shape, TypePattern::Any)
 }
 
-fn join_args(args: &Vec<&Farg>, map_ty: fn(&Type) -> String) -> String {
+fn join_args(args: &[Farg], map_ty: fn(&Type) -> String) -> String {
     args.iter()
-        .map(|arg| format!("{}: {}", arg.name, map_ty(&arg.ty)))
+        .map(|arg| format!("{}: {}", arg.id, map_ty(&arg.ty)))
         .collect::<Vec<_>>()
         .join(", ")
 }
