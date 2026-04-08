@@ -243,6 +243,7 @@ pub trait Traverse<'ast> {
         }
 
         Fundef {
+            is_public: fundef.is_public,
             name: fundef.name,
             ret_type: fundef.ret_type,
             args,

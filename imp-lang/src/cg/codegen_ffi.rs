@@ -27,14 +27,16 @@ impl<'ast> Visit<'ast> for CompileFfi {
         self.push("use imp_core::*;\n");
 
         for (base_name, fundef) in &program.functions {
-            self.push("#[allow(dead_code)]\n");
+            if !fundef.is_public {
+                continue;
+            }
+
             self.push("unsafe extern \"C\" {\n");
             self.push(&format!("    fn IMP_{}(", fundef.name));
             self.push(&join_args(&fundef.args, rust_ffi_type));
             self.push(&format!(") -> {};\n", rust_ffi_type(&fundef.ret_type)));
             self.push("}\n");
 
-            self.push("#[allow(dead_code)]\n");
             self.push(&format!("fn {}(", base_name));
             self.push(&join_args(&fundef.args, rust_api_arg_type));
             self.push(&format!(") -> {} {{\n", rust_api_ret_type(&fundef.ret_type)));

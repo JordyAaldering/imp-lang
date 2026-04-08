@@ -28,6 +28,7 @@ pub enum Token {
     Dot,
     DotDot,
     // Keywords
+    Public,
     Fn,
     Return,
     Trait,
@@ -183,6 +184,8 @@ impl<'source> Iterator for Lexer<'source> {
             BoolValue(true)
         } else if self.match_str("false") {
             BoolValue(false)
+        } else if self.match_str("pub") {
+            Public
         } else if self.match_str("fn") {
             Fn
         } else if self.match_str("return") {

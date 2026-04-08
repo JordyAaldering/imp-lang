@@ -92,6 +92,7 @@ impl<'ast> Traverse<'ast> for ToSsa<'ast> {
         self.pop_env();
 
         Fundef {
+            is_public: fundef.is_public,
             name: fundef.name,
             args: fundef.args,
             decs: mem::take(&mut self.decs),

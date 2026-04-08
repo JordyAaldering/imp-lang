@@ -86,8 +86,8 @@ impl<'src> Parser<'src> {
 
         while self.lexer.peek().is_some() {
             match self.peek()?.0.clone() {
-                Token::Fn => {
-                    let fundef = self.parse_fn_item()?;
+                Token::Public | Token::Fn => {
+                    let fundef = self.parse_fundef()?;
                     let name = fundef.name.clone();
                     if functions.insert(name.clone(), fundef).is_some() {
                         return Err(ParseError::DuplicateFunction(name));
@@ -125,23 +125,11 @@ impl<'src> Parser<'src> {
         Ok(Program { functions, typesets, members, traits, impls })
     }
 
-    fn parse_fn_item(&mut self) -> ParseResult<Fundef<'static, ParsedAst>> {
-        let (_, _span_start) = self.expect(Token::Fn)?;
+    fn parse_fundef(&mut self) -> ParseResult<Fundef<'static, ParsedAst>> {
+        let is_public = self.matches(Token::Public).is_some();
+
+        let _ = self.expect(Token::Fn)?;
         let (name, _) = self.parse_id()?;
-
-        if matches!(self.peek()?.0, Token::Lt) {
-            let (token, span) = self.next()?;
-            return Err(ParseError::UnexpectedToken(
-                "generic functions are not supported; use `impl` blocks instead".to_owned(),
-                token,
-                span,
-            ));
-        }
-
-        Ok(self.parse_fundef_after_name(name)?)
-    }
-
-    fn parse_fundef_after_name(&mut self, name: String) -> ParseResult<Fundef<'static, ParsedAst>> {
 
         let mut args = Vec::new();
 
@@ -175,6 +163,7 @@ impl<'src> Parser<'src> {
         }
 
         Ok(Fundef {
+            is_public,
             name,
             args,
             decs: Vec::new(),

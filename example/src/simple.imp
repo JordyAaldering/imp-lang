@@ -19,11 +19,11 @@ member Num :: usize;
 member Num :: f32;
 member Num :: f64;
 
-fn dim(usize[d:shp] arr) -> usize {
+pub fn dim(usize[d:shp] arr) -> usize {
     return d;
 }
 
-fn shape(usize[d:shp] arr) -> usize[d] {
+pub fn shape(usize[d:shp] arr) -> usize[d] {
     return shp;
 }
 
@@ -70,7 +70,7 @@ impl<T: Any> Sel(usize[n] idx, T[n:shp] arr) -> T {
 
 
 
-fn shouldbefolded() -> u32 {
+pub fn shouldbefolded() -> u32 {
     return @addSxS(4u32, @addSxS(2u32, 3u32));
 }
 
@@ -79,25 +79,25 @@ fn shouldbefolded() -> u32 {
 //     return a + b + c;
 // }
 
-fn iota(usize n) -> usize[n] {
+pub fn iota(usize n) -> usize[n] {
     return { iv[[0usize]] | [0usize] <= iv < [n] };
 }
 
-fn my_add_after_iota(usize[d:shp] a, usize[d:shp] b) -> usize[d:shp] {
+pub fn my_add_after_iota(usize[d:shp] a, usize[d:shp] b) -> usize[d:shp] {
     return a + b;
 }
 
-fn arrays() -> u32[n] {
+pub fn arrays() -> u32[n] {
     a = [1u32,3u32,1u32,4u32,1u32];
     return a;
 }
 
-fn sel() -> u32 {
+pub fn sel() -> u32 {
     arr = [1u32,2u32,3u32,4u32,5u32];
     x = arr[[2usize]];
     return x;
 }
 
-fn scalar_or_array(u32[*] a) -> u32[*] {
+pub fn scalar_or_array(u32[*] a) -> u32[*] {
     return a;
 }
