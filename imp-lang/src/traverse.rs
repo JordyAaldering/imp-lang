@@ -31,14 +31,6 @@ pub trait Visit<'ast> {
 
     fn visit_farg(&mut self, _arg: &Farg) { }
 
-    fn visit_farg_poly(&mut self, _arg: &PolyArg) { }
-
-    fn visit_fargs_poly(&mut self, args: &[PolyArg]) {
-        for arg in args {
-            self.visit_farg_poly(arg);
-        }
-    }
-
     fn visit_vardec(&mut self, _vardec: &'ast VarInfo<'ast, Self::Ast>) { }
 
     // Statements
@@ -214,13 +206,7 @@ pub trait Traverse<'ast> {
             functions.insert(name, self.trav_fundef(fundef));
         }
 
-        Program {
-            functions,
-            typesets: program.typesets,
-            members: program.members,
-            traits: program.traits,
-            impls: program.impls,
-        }
+        Program { functions }
     }
 
     fn trav_fundef(&mut self, fundef: Fundef<'ast, Self::InAst>) -> Fundef<'ast, Self::OutAst> {

@@ -4,16 +4,15 @@ use crate::{ast::*, traverse::Traverse};
 
 pub fn type_infer<'ast>(program: Program<'ast, UntypedAst>) -> Result<Program<'ast, TypedAst>, InferenceError> {
     let mut typed_functions: HashMap<String, Fundef<'ast, TypedAst>> = HashMap::new();
-    let impls = program.impls.clone();
 
-    // Collect and sort function names to ensure deterministic ordering
-    let mut func_names: Vec<_> = program.functions.keys().cloned().collect();
-    func_names.sort();
+    // Collect and sort internal function keys to ensure deterministic ordering.
+    let mut internal_keys: Vec<_> = program.functions.keys().cloned().collect();
+    internal_keys.sort();
 
-    // First pass: create stub signatures for all functions to enable forward references
-    let mut functions_by_name: HashMap<String, &'ast Fundef<'ast, TypedAst>> = HashMap::new();
-    for name in &func_names {
-        if let Some(fundef) = program.functions.get(name) {
+    // First pass: create stub signatures for all functions to enable forward references.
+    let mut stubs_by_internal_key: HashMap<String, &'ast Fundef<'ast, TypedAst>> = HashMap::new();
+    for key in &internal_keys {
+        if let Some(fundef) = program.functions.get(key) {
             let stub = Box::leak(Box::new(Fundef {
                 is_public: fundef.is_public,
                 name: fundef.name.clone(),
@@ -22,31 +21,35 @@ pub fn type_infer<'ast>(program: Program<'ast, UntypedAst>) -> Result<Program<'a
                 decs: Vec::new(),
                 body: Vec::new(),
             }));
-            functions_by_name.insert(name.clone(), stub);
+            stubs_by_internal_key.insert(key.clone(), stub);
         }
     }
 
-    // Second pass: type-check each function with all function signatures available
-    for name in func_names {
-        let fundef = program.functions.get(&name).unwrap();
-        let mut infer = TypeInfer::new(&functions_by_name, &impls);
+    let overloads = build_overload_families(&stubs_by_internal_key);
+    if let Some(err) = validate_overload_families(&overloads) {
+        return Err(err);
+    }
+
+    // Second pass: type-check each function with all overload signatures available.
+    for key in &internal_keys {
+        let fundef = program.functions.get(key).unwrap();
+        let mut infer = TypeInfer::new(&overloads);
         let typed = infer.trav_fundef(fundef.clone());
         if let Some(err) = infer.errors.into_iter().next() {
             return Err(err);
         }
 
-        let typed_ref = Box::leak(Box::new(typed.clone()));
-        functions_by_name.insert(name.clone(), typed_ref);
-        typed_functions.insert(name.clone(), typed);
+        typed_functions.insert(key.clone(), typed);
     }
 
-    Ok(Program {
-        functions: typed_functions,
-        typesets: program.typesets,
-        members: program.members,
-        traits: program.traits,
-        impls: program.impls,
-    })
+    Ok(Program { functions: typed_functions })
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct OverloadKey {
+    name: String,
+    arity: usize,
+    arg_bases: Vec<BaseType>,
 }
 
 pub struct TypeInfer<'ast> {
@@ -54,9 +57,8 @@ pub struct TypeInfer<'ast> {
     idmap: HashMap<*const VarInfo<'ast, UntypedAst>, &'ast VarInfo<'ast, TypedAst>>,
     new_ids: Vec<&'ast VarInfo<'ast, TypedAst>>,
     errors: Vec<InferenceError>,
-    /// Mapping of function names to typed signatures for direct-call resolution.
-    functions: HashMap<String, &'ast Fundef<'ast, TypedAst>>,
-    impls: Vec<ImplDef>,
+    /// Overload families keyed by function name + arity + argument base types.
+    overloads: HashMap<OverloadKey, Vec<&'ast Fundef<'ast, TypedAst>>>,
 }
 
 #[allow(dead_code)]
@@ -83,11 +85,11 @@ pub enum InferenceError {
     UndefinedFunction {
         name: String,
     },
-    /// Call argument count mismatch.
-    CallArgumentCountMismatch {
-        func_name: String,
-        expected: usize,
-        provided: usize,
+    /// Function exists, but no overload matches argument base types and count.
+    NoMatchingOverload {
+        name: String,
+        arity: usize,
+        arg_bases: Vec<BaseType>,
     },
     /// Call argument type mismatch.
     CallArgumentTypeMismatch {
@@ -96,42 +98,34 @@ pub enum InferenceError {
         expected: Type,
         provided: Type,
     },
+    AmbiguousOverload {
+        name: String,
+        arity: usize,
+        arg_bases: Vec<BaseType>,
+    },
     PrimitiveArgumentKindMismatch {
         primitive: String,
         arg_index: usize,
         expected: &'static str,
         provided: Type,
     },
-    TraitImplNotFound {
-        trait_name: String,
-        method_name: String,
-        arg_types: Vec<Type>,
+    InconsistentOverloadReturnBase {
+        name: String,
+        arg_bases: Vec<BaseType>,
+        expected: BaseType,
+        found: BaseType,
     },
 }
 
 impl<'ast> TypeInfer<'ast> {
-    pub fn new(functions: &HashMap<String, &'ast Fundef<'ast, TypedAst>>, impls: &[ImplDef]) -> Self {
+    fn new(overloads: &HashMap<OverloadKey, Vec<&'ast Fundef<'ast, TypedAst>>>) -> Self {
         Self {
             args: Vec::new(),
             idmap: HashMap::new(),
             new_ids: Vec::new(),
             errors: Vec::new(),
-            functions: functions.clone(),
-            impls: impls.to_vec(),
+            overloads: overloads.clone(),
         }
-    }
-
-    fn has_trait_impl(&self, trait_name: &str, method_name: &str, arg_types: &[Type]) -> bool {
-        let _ = method_name;
-        self.impls.iter().any(|impl_def| {
-            impl_def.trait_name == trait_name
-                && impl_def.args.len() == arg_types.len()
-                && impl_def.args.iter().zip(arg_types.iter()).all(|(poly, ty)| poly_matches_concrete(poly, ty))
-        })
-    }
-
-    fn alloc_farg(&self, name: String, ty: Type) -> &'ast Farg {
-        Box::leak(Box::new(Farg { id: name, ty }))
     }
 
     fn alloc_lvis(&self, name: String, ty: Type, ssa: Option<&'ast Expr<'ast, TypedAst>>) -> &'ast VarInfo<'ast, TypedAst> {
@@ -198,20 +192,20 @@ impl<'ast> TypeInfer<'ast> {
                         (iv_ty, Some(*k))
                     }
                     AxisPattern::Dim(DimPattern::Any) => {
-                        // ub rank-1 but unknown length → k unknown.
+                        // ub rank-1 with unknown extent still implies one loop dimension.
                         let iv_ty = Type {
                             ty: ub_ty.ty.clone(),
                             shape: TypePattern::Axes(vec![AxisPattern::Dim(DimPattern::Any)]),
                         };
-                        (iv_ty, None)
+                        (iv_ty, Some(1))
                     }
                     AxisPattern::Dim(DimPattern::Var(_)) => {
-                        // Named extent (e.g., `usize[n]`): value unknown at compile time.
+                        // Named extent (e.g., `usize[n]`): rank is still statically 1.
                         let iv_ty = Type {
                             ty: ub_ty.ty.clone(),
                             shape: TypePattern::Axes(vec![AxisPattern::Dim(DimPattern::Any)]),
                         };
-                        (iv_ty, None)
+                        (iv_ty, Some(1))
                     }
                     _ => unreachable!("guard ensured AxisPattern::Dim"),
                 }
@@ -350,33 +344,6 @@ impl<'ast> TypeInfer<'ast> {
         }
     }
 
-    fn operator_trait(call_name: &str, arity: usize) -> Option<(&'static str, &'static str)> {
-        match (call_name, arity) {
-            ("+", 2) => Some(("Add", "+")),
-            ("-", 2) => Some(("Sub", "-")),
-            ("*", 2) => Some(("Mul", "*")),
-            ("/", 2) => Some(("Div", "/")),
-            ("sel", 2) => Some(("Sel", "sel")),
-            ("==", 2) => Some(("Eq", "==")),
-            ("!=", 2) => Some(("Ne", "!=")),
-            ("<", 2) => Some(("Lt", "<")),
-            ("<=", 2) => Some(("Le", "<=")),
-            (">", 2) => Some(("Gt", ">")),
-            (">=", 2) => Some(("Ge", ">=")),
-            ("-", 1) => Some(("Neg", "-")),
-            ("!", 1) => Some(("Not", "!")),
-            _ => None,
-        }
-    }
-
-    fn operator_fallback_type(call_name: &str, arg_types: &[Type]) -> Option<Type> {
-        match call_name {
-            "==" | "!=" | "<" | "<=" | ">" | ">=" | "!" => Some(Type::scalar(BaseType::Bool)),
-            "sel" => Some(Type::scalar(arg_types[1].ty.clone())),
-            "+" | "-" | "*" | "/" => Some(arg_types[0].clone()),
-            _ => None,
-        }
-    }
 }
 
 impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
@@ -464,79 +431,85 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
     fn trav_call(&mut self, call: Call<'ast, Self::InAst>) -> Self::CallOut {
         let func_name = &call.id;
 
-        if let Some((trait_name, method_name)) = Self::operator_trait(func_name, call.args.len()) {
-            let mut typed_args = Vec::with_capacity(call.args.len());
-            let mut arg_types = Vec::with_capacity(call.args.len());
-            for arg in call.args {
-                let (typed_arg, ty) = self.trav_id(arg);
-                typed_args.push(typed_arg);
-                arg_types.push(ty);
-            }
+        let mut typed_args = Vec::with_capacity(call.args.len());
+        let mut arg_types = Vec::with_capacity(call.args.len());
+        for arg in call.args {
+            let (typed_arg, ty) = self.trav_id(arg);
+            typed_args.push(typed_arg);
+            arg_types.push(ty);
+        }
 
-            if !self.has_trait_impl(trait_name, method_name, &arg_types) {
-                self.errors.push(InferenceError::TraitImplNotFound {
-                    trait_name: trait_name.to_owned(),
-                    method_name: method_name.to_owned(),
-                    arg_types: arg_types.clone(),
+        let key = overload_key_for_call(func_name, &arg_types);
+        let Some(candidates) = self.overloads.get(&key) else {
+            let function_exists = self.overloads.keys().any(|k| k.name == *func_name);
+            if function_exists {
+                self.errors.push(InferenceError::NoMatchingOverload {
+                    name: func_name.clone(),
+                    arity: arg_types.len(),
+                    arg_bases: arg_types.iter().map(|ty| ty.ty.clone()).collect(),
+                });
+            } else {
+                self.errors.push(InferenceError::UndefinedFunction {
+                    name: func_name.clone(),
                 });
             }
 
-            let ty = Self::operator_fallback_type(func_name, &arg_types)
-                .unwrap_or_else(|| Type::scalar(BaseType::I32));
-            let typed_call = Call {
-                id: CallTarget::TraitMethod {
-                    trait_name: trait_name.to_owned(),
-                    method_name: method_name.to_owned(),
-                },
-                args: typed_args,
-            };
-            return (typed_call, ty);
-        }
-
-        let Some(&target) = self.functions.get(func_name) else {
-            self.errors.push(InferenceError::UndefinedFunction { name: func_name.clone() });
-            // Traverse arguments anyway to catch errors in them.
-            for arg in call.args {
-                let (_id, _ty) = self.trav_id(arg);
-            }
-            // Return a stub with a dummy error-type result. Use the first available function as a placeholder.
-            let stub_target = self.functions.values().next().copied().expect("at least one function must be defined");
-            let stub_call = Call { id: CallTarget::Function(stub_target), args: vec![] };
-            return (stub_call, Type {
-                ty: BaseType::I32,
-                shape: TypePattern::Any,
-            });
+            let stub_target = self
+                .overloads
+                .values()
+                .find_map(|family| family.first().copied())
+                .expect("at least one function must be defined");
+            let stub_call = Call { id: CallTarget::Function(stub_target), args: typed_args };
+            return (stub_call, Type { ty: BaseType::I32, shape: TypePattern::Any });
         };
 
-        // Check argument count.
-        if call.args.len() != target.args.len() {
-            self.errors.push(InferenceError::CallArgumentCountMismatch {
-                func_name: func_name.clone(),
-                expected: target.args.len(),
-                provided: call.args.len(),
-            });
-        }
-
-        // Type-check each argument.
-        let mut typed_args = Vec::with_capacity(call.args.len());
-        for (arg_idx, arg) in call.args.into_iter().enumerate() {
-            let (typed_arg, arg_ty) = self.trav_id(arg);
-            if arg_idx < target.args.len() {
-                let expected_ty = &target.args[arg_idx].ty;
-                if !types_compatible(expected_ty, &arg_ty) {
-                    self.errors.push(InferenceError::CallArgumentTypeMismatch {
-                        func_name: func_name.clone(),
-                        arg_index: arg_idx,
-                        expected: expected_ty.clone(),
-                        provided: arg_ty,
-                    });
+        let mut matching = Vec::new();
+        for target in candidates {
+            let mut is_match = true;
+            for (expected, provided) in target.args.iter().zip(arg_types.iter()) {
+                if !types_compatible(&expected.ty, provided) {
+                    is_match = false;
                 }
             }
-            typed_args.push(typed_arg);
+
+            if is_match {
+                matching.push(*target);
+            }
         }
 
-        let typed_call = Call { id: CallTarget::Function(target), args: typed_args };
-        (typed_call, target.ret_type.clone())
+        let mut runtime_dispatch = false;
+        let target = if matching.is_empty() {
+            self.errors.push(InferenceError::NoMatchingOverload {
+                name: func_name.clone(),
+                arity: arg_types.len(),
+                arg_bases: arg_types.iter().map(|ty| ty.ty.clone()).collect(),
+            });
+            candidates[0]
+        } else {
+            let maximal = maximal_candidates(&matching);
+            runtime_dispatch = maximal.len() > 1 && arg_types.iter().any(type_requires_runtime_dispatch);
+            if maximal.len() > 1 && !runtime_dispatch {
+                self.errors.push(InferenceError::AmbiguousOverload {
+                    name: func_name.clone(),
+                    arity: arg_types.len(),
+                    arg_bases: arg_types.iter().map(|ty| ty.ty.clone()).collect(),
+                });
+            }
+            maximal[0]
+        };
+        let call_ty = if runtime_dispatch {
+            Type {
+                ty: target.ret_type.ty.clone(),
+                shape: TypePattern::Any,
+            }
+        } else {
+            target.ret_type.clone()
+        };
+        let typed_call = Call {
+            id: CallTarget::Function(target),
+            args: typed_args,
+        };
+        (typed_call, call_ty)
     }
 
     type TensorOut = (Tensor<'ast, Self::OutAst>, Type);
@@ -793,7 +766,6 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
     }
 
     // Terminals
-
     type IdOut = (Id<'ast, Self::OutAst>, Type);
 
     fn trav_id(&mut self, id: Id<'ast, Self::InAst>) -> Self::IdOut {
@@ -853,16 +825,15 @@ fn types_compatible(expected: &Type, provided: &Type) -> bool {
 /// Check if two shape patterns are compatible.
 /// For now, we use structural equality; later this could support variance.
 fn shapes_compatible(expected: &TypePattern, provided: &TypePattern) -> bool {
-    // A `d:shp` rank capture is AUD-compatible with any shape on either side.
+    // A `d:shp` rank capture is wildcard-like for array shapes, but does not match scalars.
     let has_rank = |axes: &[AxisPattern]| axes.iter().any(|a| matches!(a, AxisPattern::Rank(_)));
-    if let TypePattern::Axes(exp_axes) = expected
-        && has_rank(exp_axes) { return true; }
-    if let TypePattern::Axes(prov_axes) = provided
-        && has_rank(prov_axes) { return true; }
     match (expected, provided) {
         (TypePattern::Scalar, TypePattern::Scalar) => true,
         (TypePattern::Any, _) | (_, TypePattern::Any) => true,
         (TypePattern::Axes(exp_axes), TypePattern::Axes(prov_axes)) => {
+            if has_rank(exp_axes) || has_rank(prov_axes) {
+                return true;
+            }
             if exp_axes.len() != prov_axes.len() {
                 return false;
             }
@@ -890,50 +861,195 @@ fn dims_compatible(expected: &DimPattern, provided: &DimPattern) -> bool {
     match (expected, provided) {
         (DimPattern::Any, _) | (_, DimPattern::Any) => true,
         (DimPattern::Known(e), DimPattern::Known(p)) => e == p,
-        (DimPattern::Var(e), DimPattern::Var(p)) => e.name == p.name,
+        // Named extents in function signatures are symbolic constraints, so they
+        // may match concrete or renamed dimensions at call sites.
+        (DimPattern::Var(_), DimPattern::Known(_)) => true,
+        (DimPattern::Known(_), DimPattern::Var(_)) => true,
+        (DimPattern::Var(_), DimPattern::Var(_)) => true,
+    }
+}
+
+fn overload_key_from_sig(name: &str, args: &[Farg]) -> OverloadKey {
+    OverloadKey {
+        name: name.to_owned(),
+        arity: args.len(),
+        arg_bases: args.iter().map(|a| a.ty.ty.clone()).collect(),
+    }
+}
+
+fn overload_key_for_call(name: &str, arg_types: &[Type]) -> OverloadKey {
+    OverloadKey {
+        name: name.to_owned(),
+        arity: arg_types.len(),
+        arg_bases: arg_types.iter().map(|t| t.ty.clone()).collect(),
+    }
+}
+
+fn build_overload_families<'ast>(
+    stubs_by_internal_key: &HashMap<String, &'ast Fundef<'ast, TypedAst>>,
+) -> HashMap<OverloadKey, Vec<&'ast Fundef<'ast, TypedAst>>> {
+    let mut internal_keys: Vec<_> = stubs_by_internal_key.keys().cloned().collect();
+    internal_keys.sort();
+
+    let mut overloads: HashMap<OverloadKey, Vec<&'ast Fundef<'ast, TypedAst>>> = HashMap::new();
+    for key in internal_keys {
+        let f = stubs_by_internal_key[&key];
+        let ov_key = overload_key_from_sig(&f.name, &f.args);
+        overloads.entry(ov_key).or_default().push(f);
+    }
+    overloads
+}
+
+fn validate_overload_families(
+    overloads: &HashMap<OverloadKey, Vec<&Fundef<'_, TypedAst>>>,
+) -> Option<InferenceError> {
+    for (k, family) in overloads {
+        let expected = &family[0].ret_type.ty;
+        for f in family.iter().skip(1) {
+            if &f.ret_type.ty != expected {
+                return Some(InferenceError::InconsistentOverloadReturnBase {
+                    name: k.name.clone(),
+                    arg_bases: k.arg_bases.clone(),
+                    expected: expected.clone(),
+                    found: f.ret_type.ty.clone(),
+                });
+            }
+        }
+    }
+    None
+}
+
+fn maximal_candidates<'ast>(candidates: &[&'ast Fundef<'ast, TypedAst>]) -> Vec<&'ast Fundef<'ast, TypedAst>> {
+    let mut maximal: Vec<&Fundef<'_, TypedAst>> = Vec::new();
+
+    'outer: for a in candidates {
+        for b in candidates {
+            if std::ptr::eq(*a, *b) {
+                continue;
+            }
+            if overload_more_specific(b, a) {
+                continue 'outer;
+            }
+        }
+        maximal.push(*a);
+    }
+
+    maximal
+}
+
+fn overload_more_specific(a: &Fundef<'_, TypedAst>, b: &Fundef<'_, TypedAst>) -> bool {
+    if a.args.len() != b.args.len() {
+        return false;
+    }
+
+    let mut any_strict = false;
+    for (a_arg, b_arg) in a.args.iter().zip(b.args.iter()) {
+        let rel = shape_relation(&a_arg.ty.shape, &b_arg.ty.shape);
+        match rel {
+            ShapeRel::More => any_strict = true,
+            ShapeRel::Equal => {}
+            ShapeRel::Less | ShapeRel::Incomparable => return false,
+        }
+    }
+
+    any_strict
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ShapeRel {
+    More,
+    Equal,
+    Less,
+    Incomparable,
+}
+
+fn shape_relation(a: &TypePattern, b: &TypePattern) -> ShapeRel {
+    if shape_more_or_equal(a, b) {
+        if shape_more_or_equal(b, a) {
+            ShapeRel::Equal
+        } else {
+            ShapeRel::More
+        }
+    } else if shape_more_or_equal(b, a) {
+        ShapeRel::Less
+    } else {
+        ShapeRel::Incomparable
+    }
+}
+
+fn shape_more_or_equal(a: &TypePattern, b: &TypePattern) -> bool {
+    match (a, b) {
+        (TypePattern::Scalar, TypePattern::Scalar) => true,
+        (TypePattern::Scalar, TypePattern::Any) => true,
+        (TypePattern::Scalar, TypePattern::Axes(axes)) => {
+            axes.iter().any(|axis| matches!(axis, AxisPattern::Rank(_)))
+        }
+
+        (TypePattern::Any, TypePattern::Any) => true,
+
+        (TypePattern::Axes(_), TypePattern::Any) => true,
+        (TypePattern::Axes(a_axes), TypePattern::Scalar) => {
+            a_axes.iter().any(|axis| matches!(axis, AxisPattern::Rank(_)))
+        }
+        (TypePattern::Axes(a_axes), TypePattern::Axes(b_axes)) => axes_more_or_equal(a_axes, b_axes),
+
         _ => false,
     }
 }
 
-fn poly_matches_concrete(poly: &PolyType, ty: &Type) -> bool {
-    let head_ok = match poly.head.as_str() {
-        "i32" => ty.ty == BaseType::I32,
-        "i64" => ty.ty == BaseType::I64,
-        "u32" => ty.ty == BaseType::U32,
-        "u64" => ty.ty == BaseType::U64,
-        "usize" => ty.ty == BaseType::Usize,
-        "f32" => ty.ty == BaseType::F32,
-        "f64" => ty.ty == BaseType::F64,
-        "bool" => ty.ty == BaseType::Bool,
-        _ => true,
-    };
+fn axes_more_or_equal(a: &[AxisPattern], b: &[AxisPattern]) -> bool {
+    let a_has_rank = a.iter().any(|axis| matches!(axis, AxisPattern::Rank(_)));
+    let b_has_rank = b.iter().any(|axis| matches!(axis, AxisPattern::Rank(_)));
 
-    if !head_ok {
+    if b_has_rank {
+        return true;
+    }
+    if a_has_rank {
         return false;
     }
 
-    match (&poly.shape, &ty.shape) {
-        (None, TypePattern::Scalar) => true,
-        (None, _) => false,
-        (Some(TypePattern::Any), _) => true,
-        (Some(TypePattern::Scalar), TypePattern::Scalar) => true,
-        (Some(TypePattern::Scalar), _) => false,
-        (Some(TypePattern::Axes(exp_axes)), TypePattern::Axes(got_axes)) => {
-            if exp_axes.iter().any(|a| matches!(a, AxisPattern::Rank(_))) {
-                return true;
-            }
-            if exp_axes.len() != got_axes.len() {
-                return false;
-            }
-            exp_axes.iter().zip(got_axes.iter()).all(|(e, g)| match (e, g) {
-                (AxisPattern::Dim(DimPattern::Any), AxisPattern::Dim(_)) => true,
-                (AxisPattern::Dim(DimPattern::Known(a)), AxisPattern::Dim(DimPattern::Known(b))) => a == b,
-                (AxisPattern::Dim(DimPattern::Var(_)), AxisPattern::Dim(_)) => true,
-                (AxisPattern::Rank(_), _) => true,
-                _ => false,
-            })
-        }
-        (Some(TypePattern::Axes(exp_axes)), TypePattern::Scalar) => exp_axes.is_empty(),
-        (Some(TypePattern::Axes(_)), TypePattern::Any) => true,
+    if a.len() != b.len() {
+        return false;
+    }
+
+    a.iter().zip(b.iter()).all(|(ax, bx)| axis_more_or_equal(ax, bx))
+}
+
+fn axis_more_or_equal(a: &AxisPattern, b: &AxisPattern) -> bool {
+    match (a, b) {
+        (AxisPattern::Rank(_), AxisPattern::Rank(_)) => true,
+        (AxisPattern::Rank(_), _) => false,
+        (_, AxisPattern::Rank(_)) => true,
+        (AxisPattern::Dim(ad), AxisPattern::Dim(bd)) => dim_more_or_equal(ad, bd),
     }
 }
+
+fn dim_more_or_equal(a: &DimPattern, b: &DimPattern) -> bool {
+    match (a, b) {
+        (DimPattern::Known(x), DimPattern::Known(y)) => x == y,
+        (DimPattern::Known(_), DimPattern::Var(_)) => true,
+        (DimPattern::Known(_), DimPattern::Any) => true,
+
+        (DimPattern::Var(x), DimPattern::Var(y)) => x.name == y.name,
+        (DimPattern::Var(_), DimPattern::Any) => true,
+
+        (DimPattern::Any, DimPattern::Any) => true,
+        _ => false,
+    }
+}
+
+fn type_requires_runtime_dispatch(ty: &Type) -> bool {
+    match &ty.shape {
+        TypePattern::Any => true,
+        TypePattern::Axes(axes) => axes.iter().any(axis_requires_runtime_dispatch),
+        TypePattern::Scalar => false,
+    }
+}
+
+fn axis_requires_runtime_dispatch(axis: &AxisPattern) -> bool {
+    match axis {
+        AxisPattern::Rank(_) => true,
+        AxisPattern::Dim(dim) => matches!(dim, DimPattern::Any | DimPattern::Var(_)),
+    }
+}
+

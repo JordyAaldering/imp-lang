@@ -1,9 +1,4 @@
-typeset Num;
-member Num :: i32;
-member Num :: i64;
-
-impl<T: Num> Add(T a, T b) -> T
-{
+fn @add(i32 a, i32 b) -> i32 {
     return @addSxS(a, b);
 }
 

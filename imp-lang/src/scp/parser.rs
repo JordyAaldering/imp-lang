@@ -1,4 +1,4 @@
-use std::{collections::{HashMap, HashSet}, iter::Peekable};
+use std::{collections::HashMap, iter::Peekable};
 
 use crate::ast::*;
 
@@ -14,10 +14,7 @@ pub struct Parser<'src> {
 pub enum ParseError {
     NonAssociative,
     MissingReturn,
-    DuplicateFunction(String),
-    DuplicateTypeset(String),
-    UndefinedTypeset(String),
-    DuplicateGenericFunction(String),
+    DuplicateFunctionSignature(String),
     UnknownPrimitive(String, Span),
     UnexpectedToken(String, Token, Span),
     UnexpectedEof,
@@ -36,10 +33,6 @@ impl<'src> Parser<'src> {
     fn fresh_uid(&mut self) -> String {
         self.uid += 1;
         format!("_ret_{}", self.uid)
-    }
-
-    fn alloc_farg(&self, name: String, ty: Type) -> &'static Farg {
-        Box::leak(Box::new(Farg { id: name, ty }))
     }
 
     fn alloc_lvis(&self, name: String, ty: Option<Type>) -> &'static VarInfo<'static, ParsedAst> {
@@ -78,42 +71,27 @@ impl<'src> Parser<'src> {
 
 impl<'src> Parser<'src> {
     pub fn parse_program(&mut self) -> ParseResult<Program<'static, ParsedAst>> {
-        let mut functions = HashMap::new();
-        let mut typesets = HashSet::new();
-        let mut members = HashMap::new();
-        let mut traits = HashMap::new();
-        let mut impls = Vec::new();
+        let mut functions: HashMap<String, Fundef<'static, ParsedAst>> = HashMap::new();
+        let mut overload_counts: HashMap<String, usize> = HashMap::new();
 
         while self.lexer.peek().is_some() {
             match self.peek()?.0.clone() {
                 Token::Public | Token::Fn => {
                     let fundef = self.parse_fundef()?;
-                    let name = fundef.name.clone();
-                    if functions.insert(name.clone(), fundef).is_some() {
-                        return Err(ParseError::DuplicateFunction(name));
+                    if functions.values().any(|existing| {
+                        existing.name == fundef.name && Self::same_farg_signature(&existing.args, &fundef.args)
+                    }) {
+                        return Err(ParseError::DuplicateFunctionSignature(fundef.name.clone()));
                     }
-                }
-                Token::Trait => {
-                    let trait_def = self.parse_trait_def()?;
-                    traits.insert(trait_def.name.clone(), trait_def);
-                }
-                Token::Typeset => {
-                    let typeset = self.parse_typeset_def()?;
-                    if !typesets.insert(typeset.clone()) {
-                        return Err(ParseError::DuplicateTypeset(typeset));
-                    }
-                    members.insert(typeset, Vec::new());
-                }
-                Token::Member => {
-                    let (typeset_name, member) = self.parse_member_def()?;
-                    if let Some(typeset) = members.get_mut(&typeset_name) {
-                        typeset.push(member);
+
+                    let idx = overload_counts.entry(fundef.name.clone()).or_insert(0);
+                    let key = if *idx == 0 {
+                        fundef.name.clone()
                     } else {
-                        return Err(ParseError::UndefinedTypeset(typeset_name));
-                    }
-                }
-                Token::Impl => {
-                    impls.push(self.parse_impl_def()?);
+                        format!("{}__ovl{}", fundef.name, *idx)
+                    };
+                    *idx += 1;
+                    functions.insert(key, fundef);
                 }
                 _ => {
                     let (token, span) = self.next()?;
@@ -122,14 +100,21 @@ impl<'src> Parser<'src> {
             }
         }
 
-        Ok(Program { functions, typesets, members, traits, impls })
+        Ok(Program { functions })
+    }
+
+    fn same_farg_signature(a: &[Farg], b: &[Farg]) -> bool {
+        if a.len() != b.len() {
+            return false;
+        }
+        a.iter().zip(b.iter()).all(|(l, r)| l.ty.ty == r.ty.ty && shape_signature_eq(&l.ty.shape, &r.ty.shape))
     }
 
     fn parse_fundef(&mut self) -> ParseResult<Fundef<'static, ParsedAst>> {
         let is_public = self.matches(Token::Public).is_some();
 
         let _ = self.expect(Token::Fn)?;
-        let (name, _) = self.parse_id()?;
+        let name = self.parse_callable_name()?;
 
         let mut args = Vec::new();
 
@@ -355,313 +340,54 @@ impl<'src> Parser<'src> {
         Ok(self.alloc_expr(Expr::Call(Call { id, args })))
     }
 
-    fn parse_trait_def(&mut self) -> ParseResult<TraitDef> {
-        self.expect(Token::Trait)?;
-        let (name, _) = self.parse_id()?;
-
-        // Parse optional <T, U, ...> type parameters
-        let mut type_params = Vec::new();
-        if self.matches(Token::Lt).is_some() {
-            let (param, _) = self.parse_id()?;
-            type_params.push(param);
-            while self.matches(Token::Comma).is_some() {
-                let (param, _) = self.parse_id()?;
-                type_params.push(param);
-            }
-            self.expect(Token::Gt)?;
-        }
-
-        self.expect(Token::ColonColon)?;
-        let args = self.parse_poly_sig_types()?;
-        self.expect(Token::Arrow)?;
-        let ret = self.parse_poly_type()?;
-        self.expect(Token::Semicolon)?;
-        Ok(TraitDef { name, type_params, args, ret })
-    }
-
-    fn parse_poly_sig_types(&mut self) -> ParseResult<Vec<PolyType>> {
-        self.expect(Token::LParen)?;
-        let mut args = Vec::new();
-        if self.matches(Token::RParen).is_none() {
-            loop {
-                let ty = self.parse_poly_type()?;
-                // Optional argument name in signatures, e.g. `(usize[n] idx, T[n] arr)`.
-                if matches!(self.peek()?.0, Token::Identifier(_)) {
-                    let _ = self.parse_id()?;
-                }
-                args.push(ty);
-
-                if self.matches(Token::Comma).is_some() {
-                    continue;
-                }
-                self.expect(Token::RParen)?;
-                break;
-            }
-        }
-        Ok(args)
-    }
-
-    fn parse_typeset_def(&mut self) -> ParseResult<String> {
-        self.expect(Token::Typeset)?;
-        let (name, _) = self.parse_id()?;
-        self.expect(Token::Semicolon)?;
-        Ok(name)
-    }
-
-    fn parse_member_def(&mut self) -> ParseResult<(String, BaseType)> {
-        self.expect(Token::Member)?;
-        let (typeset, _) = self.parse_id()?;
-        self.expect(Token::ColonColon)?;
-        let (member, _) = self.parse_basetype()?;
-        self.expect(Token::Semicolon)?;
-        Ok((typeset, member))
-    }
-
-    fn parse_impl_def(&mut self) -> ParseResult<ImplDef> {
-        self.expect(Token::Impl)?;
-
-        // Parse optional <T: Constraint, U: Other, ...> — inline type params + bounds
-        let mut type_params = Vec::new();
-        let mut where_bounds = Vec::new();
-        if self.matches(Token::Lt).is_some() {
-            let (param, _) = self.parse_id()?;
-            if self.matches(Token::Colon).is_some() {
-                let (type_set, _) = self.parse_id()?;
-                where_bounds.push(MemberBound { type_var: param.clone(), type_set });
-            }
-            type_params.push(param);
-            while self.matches(Token::Comma).is_some() {
-                let (param, _) = self.parse_id()?;
-                if self.matches(Token::Colon).is_some() {
-                    let (type_set, _) = self.parse_id()?;
-                    where_bounds.push(MemberBound { type_var: param.clone(), type_set });
-                }
-                type_params.push(param);
-            }
-            self.expect(Token::Gt)?;
-        }
-
-        let (trait_name, _) = self.parse_id()?;
-        // New syntax: TraitName(args) -> ret  (no `::` before args)
-        let args = self.parse_poly_sig_types()?;
-        self.expect(Token::Arrow)?;
-        let ret_type = self.parse_poly_type()?;
-
-        self.expect(Token::LBrace)?;
-        let mut methods = Vec::new();
-        if matches!(self.peek()?.0, Token::Fn) {
-            while self.peek()?.0 != Token::RBrace {
-                methods.push(self.parse_impl_method_sig()?);
-            }
-            self.expect(Token::RBrace)?;
-        } else {
-            self.skip_block_contents()?;
-        }
-
-        Ok(ImplDef {
-            trait_name,
-            args,
-            ret_type,
-            type_params,
-            where_bounds,
-            methods,
-        })
-    }
-
-    fn parse_impl_method_sig(&mut self) -> ParseResult<TraitMethodSig> {
-        self.expect(Token::Fn)?;
-        let name = self.parse_method_name()?;
-        let args = self.parse_poly_args()?;
-        self.expect(Token::Arrow)?;
-        let ret_type = self.parse_poly_type()?;
-        self.skip_block()?;
-        Ok(TraitMethodSig { name, args, ret_type })
-    }
-
-    fn parse_poly_args(&mut self) -> ParseResult<Vec<PolyArg>> {
-        let mut args = Vec::new();
-        self.expect(Token::LParen)?;
-        if self.matches(Token::RParen).is_none() {
-            args.push(self.parse_poly_arg()?);
-            while self.matches(Token::Comma).is_some() {
-                args.push(self.parse_poly_arg()?);
-            }
-            self.expect(Token::RParen)?;
-        }
-        Ok(args)
-    }
-
-    fn parse_poly_arg(&mut self) -> ParseResult<PolyArg> {
-        let ty = self.parse_poly_type()?;
-        let (name, _) = self.parse_id()?;
-        Ok(PolyArg { name, ty })
-    }
-
-    fn parse_poly_type(&mut self) -> ParseResult<PolyType> {
-        let (token, span) = self.next()?;
-        let head = match token {
-            Token::I32Type => "i32".to_owned(),
-            Token::I64Type => "i64".to_owned(),
-            Token::U32Type => "u32".to_owned(),
-            Token::U64Type => "u64".to_owned(),
-            Token::UsizeType => "usize".to_owned(),
-            Token::F32Type => "f32".to_owned(),
-            Token::F64Type => "f64".to_owned(),
-            Token::BoolType => "bool".to_owned(),
-            // User-defined types, such as `member Complex :: complex32`
-            Token::Identifier(name) => name,
-            _ => return Err(ParseError::UnexpectedToken("type".to_owned(), token, span)),
-        };
-
-        let shape = if self.matches(Token::LSquare).is_some() {
-            if self.matches(Token::Mul).is_some() {
-                self.expect(Token::RSquare)?;
-                Some(TypePattern::Any)
-            } else {
-                let axes = self.parse_axes()?;
-                self.expect(Token::RSquare)?;
-                Some(TypePattern::Axes(axes))
-            }
-        } else {
-            None
-        };
-
-        Ok(PolyType { head, shape })
-    }
-
-    fn parse_method_name(&mut self) -> ParseResult<String> {
+    fn parse_callable_name(&mut self) -> ParseResult<String> {
         let (token, span) = self.next()?;
         match token {
             Token::Identifier(name) => Ok(name),
-            Token::Add => Ok("+".to_owned()),
-            Token::Sub => Ok("-".to_owned()),
-            Token::Mul => Ok("*".to_owned()),
-            Token::Div => Ok("/".to_owned()),
-            Token::Eq => Ok("==".to_owned()),
-            Token::Ne => Ok("!=".to_owned()),
-            Token::Lt => Ok("<".to_owned()),
-            Token::Le => Ok("<=".to_owned()),
-            Token::Gt => Ok(">".to_owned()),
-            Token::Ge => Ok(">=".to_owned()),
-            Token::Not => Ok("!".to_owned()),
-            _ => Err(ParseError::UnexpectedToken("method name".to_owned(), token, span)),
+            Token::Prf(name) => Ok(format!("@{name}")),
+            _ => Err(ParseError::UnexpectedToken("function name".to_owned(), token, span)),
         }
-    }
-
-    fn skip_block(&mut self) -> ParseResult<()> {
-        self.expect(Token::LBrace)?;
-        let mut depth = 1usize;
-        while depth > 0 {
-            let (token, _) = self.next()?;
-            match token {
-                Token::LBrace => depth += 1,
-                Token::RBrace => depth -= 1,
-                _ => {}
-            }
-        }
-        Ok(())
-    }
-
-    fn skip_block_contents(&mut self) -> ParseResult<()> {
-        let mut depth = 1usize;
-        while depth > 0 {
-            let (token, _) = self.next()?;
-            match token {
-                Token::LBrace => depth += 1,
-                Token::RBrace => depth -= 1,
-                _ => {}
-            }
-        }
-        Ok(())
     }
 
     fn parse_prf_call(&mut self, id: String, span: Span) -> ParseResult<&'static Expr<'static, ParsedAst>> {
         self.expect(Token::LParen)?;
 
+        let mut args = Vec::new();
+        if self.matches(Token::RParen).is_none() {
+            args.push(self.parse_expr(None::<Bop>)?);
+
+            while self.matches(Token::Comma).is_some() {
+                args.push(self.parse_expr(None::<Bop>)?);
+            }
+
+            self.expect(Token::RParen)?;
+        }
+
         use PrfCall::*;
-        let prf = match id.as_str() {
-            "selVxA" => {
-                let a = self.parse_expr(None::<Bop>)?;
-                self.expect(Token::Comma)?;
-                let b = self.parse_expr(None::<Bop>)?;
-                SelVxA(a, b)
-            },
-            "addSxS" => {
-                let a = self.parse_expr(None::<Bop>)?;
-                self.expect(Token::Comma)?;
-                let b = self.parse_expr(None::<Bop>)?;
-                AddSxS(a, b)
-            },
-            "subSxS" => {
-                let a = self.parse_expr(None::<Bop>)?;
-                self.expect(Token::Comma)?;
-                let b = self.parse_expr(None::<Bop>)?;
-                SubSxS(a, b)
-            },
-            "mulSxS" => {
-                let a = self.parse_expr(None::<Bop>)?;
-                self.expect(Token::Comma)?;
-                let b = self.parse_expr(None::<Bop>)?;
-                MulSxS(a, b)
-            },
-            "divSxS" => {
-                let a = self.parse_expr(None::<Bop>)?;
-                self.expect(Token::Comma)?;
-                let b = self.parse_expr(None::<Bop>)?;
-                DivSxS(a, b)
-            },
-            "ltSxS" => {
-                let a = self.parse_expr(None::<Bop>)?;
-                self.expect(Token::Comma)?;
-                let b = self.parse_expr(None::<Bop>)?;
-                LtSxS(a, b)
-            },
-            "leSxS" => {
-                let a = self.parse_expr(None::<Bop>)?;
-                self.expect(Token::Comma)?;
-                let b = self.parse_expr(None::<Bop>)?;
-                LeSxS(a, b)
-            },
-            "gtSxS" => {
-                let a = self.parse_expr(None::<Bop>)?;
-                self.expect(Token::Comma)?;
-                let b = self.parse_expr(None::<Bop>)?;
-                GtSxS(a, b)
-            },
-            "geSxS" => {
-                let a = self.parse_expr(None::<Bop>)?;
-                self.expect(Token::Comma)?;
-                let b = self.parse_expr(None::<Bop>)?;
-                GeSxS(a, b)
-            },
-            "eqSxS" => {
-                let a = self.parse_expr(None::<Bop>)?;
-                self.expect(Token::Comma)?;
-                let b = self.parse_expr(None::<Bop>)?;
-                EqSxS(a, b)
-            },
-            "neSxS" => {
-                let a = self.parse_expr(None::<Bop>)?;
-                self.expect(Token::Comma)?;
-                let b = self.parse_expr(None::<Bop>)?;
-                NeSxS(a, b)
-            },
-            "negS" => {
-                let a = self.parse_expr(None::<Bop>)?;
-                NegS(a)
-            },
-            "notS" => {
-                let a = self.parse_expr(None::<Bop>)?;
-                NotS(a)
-            },
+        let expr = match (id.as_str(), args.as_slice()) {
+            ("selVxA", [a, b]) => Expr::PrfCall(SelVxA(*a, *b)),
+            ("addSxS", [a, b]) => Expr::PrfCall(AddSxS(*a, *b)),
+            ("subSxS", [a, b]) => Expr::PrfCall(SubSxS(*a, *b)),
+            ("mulSxS", [a, b]) => Expr::PrfCall(MulSxS(*a, *b)),
+            ("divSxS", [a, b]) => Expr::PrfCall(DivSxS(*a, *b)),
+            ("ltSxS", [a, b]) => Expr::PrfCall(LtSxS(*a, *b)),
+            ("leSxS", [a, b]) => Expr::PrfCall(LeSxS(*a, *b)),
+            ("gtSxS", [a, b]) => Expr::PrfCall(GtSxS(*a, *b)),
+            ("geSxS", [a, b]) => Expr::PrfCall(GeSxS(*a, *b)),
+            ("eqSxS", [a, b]) => Expr::PrfCall(EqSxS(*a, *b)),
+            ("neSxS", [a, b]) => Expr::PrfCall(NeSxS(*a, *b)),
+            ("negS", [a]) => Expr::PrfCall(NegS(*a)),
+            ("notS", [a]) => Expr::PrfCall(NotS(*a)),
+            _ if id.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') => Expr::Call(Call {
+                id: format!("@{id}"),
+                args,
+            }),
             _ => {
                 return Err(ParseError::UnknownPrimitive(id.clone(), span));
             }
         };
 
-        self.expect(Token::RParen)?;
-
-        Ok(self.alloc_expr(Expr::PrfCall(prf)))
+        Ok(self.alloc_expr(expr))
     }
 
     fn parse_array(&mut self) -> ParseResult<&'static Expr<'static, ParsedAst>> {
@@ -683,8 +409,6 @@ impl<'src> Parser<'src> {
         Ok(self.alloc_expr(Expr::Array(Array { elems: values })))
     }
 
-    // TODO: as with binary operators, this should assume that a trait Sel is defined.
-    // Currently, we just map this to @selVxA, but that should change.
     fn parse_sel(&mut self, arr: &'static Expr<'static, ParsedAst>) -> ParseResult<&'static Expr<'static, ParsedAst>> {
         self.expect(Token::LSquare)?;
 
@@ -692,7 +416,7 @@ impl<'src> Parser<'src> {
         self.expect(Token::RSquare)?;
 
         Ok(self.alloc_expr(Expr::Call(Call {
-            id: "sel".to_owned(),
+            id: "@sel".to_owned(),
             args: vec![idx, arr],
         })))
     }
@@ -817,5 +541,32 @@ impl<'src> Parser<'src> {
             Token::Identifier(id) => Ok((id, span)),
             _ => Err(ParseError::UnexpectedToken("identifier".to_owned(), token, span)),
         }
+    }
+}
+
+fn shape_signature_eq(a: &TypePattern, b: &TypePattern) -> bool {
+    match (a, b) {
+        (TypePattern::Scalar, TypePattern::Scalar) => true,
+        (TypePattern::Any, TypePattern::Any) => true,
+        (TypePattern::Axes(ax), TypePattern::Axes(bx)) => {
+            if ax.len() != bx.len() {
+                return false;
+            }
+            ax.iter().zip(bx.iter()).all(|(l, r)| axis_signature_eq(l, r))
+        }
+        _ => false,
+    }
+}
+
+fn axis_signature_eq(a: &AxisPattern, b: &AxisPattern) -> bool {
+    match (a, b) {
+        (AxisPattern::Dim(da), AxisPattern::Dim(db)) => match (da, db) {
+            (DimPattern::Any, DimPattern::Any) => true,
+            (DimPattern::Known(x), DimPattern::Known(y)) => x == y,
+            (DimPattern::Var(x), DimPattern::Var(y)) => x.name == y.name,
+            _ => false,
+        },
+        (AxisPattern::Rank(ra), AxisPattern::Rank(rb)) => ra.dim_name == rb.dim_name && ra.shp_name == rb.shp_name,
+        _ => false,
     }
 }

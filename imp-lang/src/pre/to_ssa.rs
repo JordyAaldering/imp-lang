@@ -3,19 +3,7 @@ use std::{collections::HashMap, mem};
 use crate::{ast::*, traverse::Traverse};
 
 pub fn to_ssa<'ast>(program: Program<'ast, FlattenedAst>) -> Program<'ast, UntypedAst> {
-    let functions = program.functions
-        .into_iter()
-        .map(|(name, fundef)| {
-            (name, ToSsa::new().trav_fundef(fundef))
-        })
-        .collect();
-    Program {
-        functions,
-        typesets: program.typesets,
-        members: program.members,
-        traits: program.traits,
-        impls: program.impls,
-    }
+    ToSsa::new().trav_program(program)
 }
 
 pub struct ToSsa<'ast> {

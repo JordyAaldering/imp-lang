@@ -32,6 +32,19 @@ fn main() {
     let res: ImpArray<usize> = expect_array(my_add_after_iota(arr1, arr2));
     println!("iota + iota = {:?}", res.data);
 
+    let overldemo = expect_scalar(overload_demo(ImpArrayOrScalar::Scalar(4), ImpArrayOrScalar::Scalar(5)));
+    println!("overload_demo scalar = {:?}", overldemo);
+
+    let overldemo: ImpArray<usize> = expect_array(overload_demo(four(), four()));
+    println!("overload_demo vector = {:?}", overldemo.data);
+
+    let panic_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(|_| {}));
+    let add_demo_mismatch = std::panic::catch_unwind(|| add_demo(expect_array(four()), expect_array(five())));
+    std::panic::set_hook(panic_hook);
+    assert!(add_demo_mismatch.is_err());
+    println!("add_demo mismatched extents rejected in Rust FFI wrapper");
+
     let shp: ImpArray<usize> = expect_array(shape(arr));
     println!("shape(arr) = {:?}", shp.data);
 
@@ -39,7 +52,15 @@ fn main() {
     assert_eq!(arr2.shp, vec![5]);
     println!("arr2.data = {:?}", arr2.data);
 
-    println!("sel = {}", expect_scalar(sel()));
+    println!("sel = {}", expect_scalar(sel_demo()));
+
+    println!("scalar_add_demo = {}", expect_scalar(scalar_add_demo()));
+
+    let dyn_sum = add_dyn(
+        ImpArrayOrScalar::Array(expect_array(iota(4))),
+        ImpArrayOrScalar::Array(expect_array(iota(4))),
+    );
+    println!("add_dyn = {:?}", dyn_sum);
 
     let arr = scalar_or_array(ImpArrayOrScalar::Scalar(37));
     println!("scalar_or_array = {:?}", arr);
