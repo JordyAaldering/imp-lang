@@ -274,31 +274,6 @@ impl<'ast> Visit<'ast> for CompileC {
         let base = base_ctype(&target_ty);
         let iv_name = tensor.iv.name.clone();
 
-        // ── Backward-compat path: scalar iv (old syntax where lb/ub are plain scalars) ──
-        if tensor.iv.ty.is_scalar() {
-            let data_name = format!("{target_name}_data");
-            let shp_name  = format!("{target_name}_shp");
-            let len_name  = format!("{target_name}_len");
-            let lb = self.render_expr(&Expr::Id(tensor.lb));
-            let ub = self.render_expr(&Expr::Id(tensor.ub));
-            self.push_line(&format!("size_t {len_name} = (size_t)({ub});"));
-            self.push_line(&format!("{base} *{data_name} = ({base} *)malloc({len_name} * sizeof({base}));"));
-            self.push_line(&format!("for (size_t {iv_name} = (size_t)({lb}); {iv_name} < (size_t)({ub}); {iv_name} += 1) {{"));
-            self.indent += 1;
-            for stmt in &tensor.body { self.visit_stmt(stmt); }
-            let ret = self.render_expr(&Expr::Id(tensor.ret));
-            self.push_line(&format!("{data_name}[{iv_name}] = {ret};"));
-            self.indent -= 1;
-            self.push_line("}");
-            self.push_line(&format!("size_t *{shp_name} = (size_t *)malloc(sizeof(size_t));"));
-            self.push_line(&format!("{shp_name}[0] = {len_name};"));
-            self.push_line(&format!(
-                "ImpArrayRaw {target_name} = (ImpArrayRaw) {{ .len = {len_name}, .shp = {shp_name}, .dim = 1, .data = (void *){data_name} }};"
-            ));
-            return;
-        }
-
-        // ── New path: vector iv, lb, ub are ImpArrayRaw vectors ──
         let rank = tensor.iv.ty.rank()
             .expect("tensor iv must have a statically-known rank for C codegen") as usize;
 
@@ -307,17 +282,14 @@ impl<'ast> Visit<'ast> for CompileC {
 
         let lb_name = self.nameof(&tensor.lb);
         let ub_name = self.nameof(&tensor.ub);
-        // Determine the element type stored inside lb/ub (for correct pointer cast).
-        let lb_elem = elem_ctype_of_id(&tensor.lb);
-        let ub_elem = elem_ctype_of_id(&tensor.ub);
 
         // Extract scalar lower/upper bound per dimension.
         for d in 0..rank {
             self.push_line(&format!(
-                "size_t {iv_name}_lb{d}_{t_uid} = (size_t)(({lb_elem}*){lb_name}.data)[{d}];"
+                "size_t {iv_name}_lb{d}_{t_uid} = ((size_t *){lb_name}.data)[{d}];"
             ));
             self.push_line(&format!(
-                "size_t {iv_name}_ub{d}_{t_uid} = (size_t)(({ub_elem}*){ub_name}.data)[{d}];"
+                "size_t {iv_name}_ub{d}_{t_uid} = ((size_t *){ub_name}.data)[{d}];"
             ));
         }
 

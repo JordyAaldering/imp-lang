@@ -85,25 +85,6 @@ impl<'ast, Ast: AstConfig> PrfCall<'ast, Ast> {
         }
     }
 
-    pub fn arity(&self) -> usize {
-        use PrfCall::*;
-        match self {
-            SelVxA(_, _) |
-            AddSxS(_, _) |
-            SubSxS(_, _) |
-            MulSxS(_, _) |
-            DivSxS(_, _) |
-            LtSxS(_, _) |
-            LeSxS(_, _) |
-            GtSxS(_, _) |
-            GeSxS(_, _) |
-            EqSxS(_, _) |
-            NeSxS(_, _) => 2,
-            NegS(_) |
-            NotS(_) => 1,
-        }
-    }
-
     pub fn args(&self) -> Vec<&Ast::Operand<'ast>> {
         use PrfCall::*;
         match self {

@@ -201,22 +201,10 @@ impl<'ast> TypeInfer<'ast> {
         Type { ty: base_ty, shape: result_shape, knowledge }
     }
 
-    /// Given the type of `ub` (the upper-bound operand of a tensor expression),
-    /// return:
-    ///   - the type to assign to the index variable `iv`
-    ///   - `Some(k)` as the number of leading `Any` dimensions the tensor adds to the
-    ///     element type, or `None` when it cannot be determined statically (→ AUD result).
-    ///
-    /// Semantics:
-    ///   - Scalar `ub`: backward-compatible 1-D iteration; `iv` gets the same base type.
-    ///   - `ub : T[k]` (rank-1, known size k): k-dimensional iteration; `iv` is `usize[k]`.
-    ///       - k = 0 → execute once (empty iteration space), result = element type.
-    ///   - Anything else (unknown rank, `..rest` present, `Any` shape): unknown → AUD.
     fn tensor_iv_and_dims(ub_ty: &Type) -> (Type, Option<usize>) {
         match &ub_ty.shape {
             ShapePattern::Scalar => {
-                // Backward-compatible 1-D: scalar ub, scalar iv of the same base type.
-                (Type::scalar(ub_ty.ty.clone()), Some(1))
+                unreachable!("cannot iterate over scalar ub")
             }
             ShapePattern::Axes(axes)
                 if axes.len() == 1 && matches!(axes[0], AxisPattern::Dim(_)) =>
