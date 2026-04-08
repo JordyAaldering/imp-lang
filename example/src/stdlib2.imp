@@ -16,7 +16,7 @@ trait Zero :: () -> T;
 trait One :: () -> T;
 
 // Marker set for numeric types.
-type Num :: T;
+typeset Num;
 
 // -----------------------------------------------------------------------------
 // Scalar impls (built from compiler primitives)

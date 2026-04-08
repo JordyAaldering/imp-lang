@@ -14,14 +14,3 @@ pub struct Farg {
     pub name: String,
     pub ty: Type,
 }
-
-#[derive(Clone, Debug)]
-pub struct GenericFundef<'ast, Ast: AstConfig> {
-    pub name: String,
-    pub type_param: String,
-    pub where_bounds: Vec<WhereBound>,
-    pub ret_type: PolyType,
-    pub args: Vec<PolyArg>,
-    pub decs: Vec<&'ast VarInfo<'ast, Ast>>,
-    pub body: Vec<Stmt<'ast, Ast>>,
-}

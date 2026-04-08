@@ -1,4 +1,4 @@
-use std::iter::Peekable;
+use std::{collections::{HashMap, HashSet}, iter::Peekable};
 
 use crate::ast::*;
 
@@ -15,6 +15,7 @@ pub enum ParseError {
     NonAssociative,
     MissingReturn,
     DuplicateFunction(String),
+    DuplicateTypeset(String),
     DuplicateGenericFunction(String),
     UnknownPrimitive(String, Span),
     UnexpectedToken(String, Token, Span),
@@ -76,11 +77,10 @@ impl<'src> Parser<'src> {
 
 impl<'src> Parser<'src> {
     pub fn parse_program(&mut self) -> ParseResult<Program<'static, ParsedAst>> {
-        let mut functions = std::collections::HashMap::new();
-        let generic_functions = std::collections::HashMap::new();
-        let mut typesets = std::collections::HashMap::new();
+        let mut functions = HashMap::new();
+        let mut typesets = HashSet::new();
         let mut members = Vec::new();
-        let mut traits = std::collections::HashMap::new();
+        let mut traits = HashMap::new();
         let mut impls = Vec::new();
 
         while self.lexer.peek().is_some() {
@@ -96,9 +96,11 @@ impl<'src> Parser<'src> {
                     let trait_def = self.parse_trait_def()?;
                     traits.insert(trait_def.name.clone(), trait_def);
                 }
-                Token::Type => {
+                Token::Typeset => {
                     let typeset = self.parse_typeset_def()?;
-                    typesets.insert(typeset.name.clone(), typeset);
+                    if !typesets.insert(typeset.clone()) {
+                        return Err(ParseError::DuplicateTypeset(typeset));
+                    }
                 }
                 Token::Member => {
                     members.push(self.parse_member_def()?);
@@ -113,7 +115,7 @@ impl<'src> Parser<'src> {
             }
         }
 
-        Ok(Program { functions, generic_functions, typesets, members, traits, impls })
+        Ok(Program { functions, typesets, members, traits, impls })
     }
 
     fn parse_fn_item(&mut self) -> ParseResult<Fundef<'static, ParsedAst>> {
@@ -403,13 +405,11 @@ impl<'src> Parser<'src> {
         Ok(args)
     }
 
-    fn parse_typeset_def(&mut self) -> ParseResult<TypeSetDef> {
-        self.expect(Token::Type)?;
+    fn parse_typeset_def(&mut self) -> ParseResult<String> {
+        self.expect(Token::Typeset)?;
         let (name, _) = self.parse_id()?;
-        self.expect(Token::ColonColon)?;
-        let (param, _) = self.parse_id()?;
         self.expect(Token::Semicolon)?;
-        Ok(TypeSetDef { name, param })
+        Ok(name)
     }
 
     fn parse_member_def(&mut self) -> ParseResult<MemberDef> {
@@ -512,6 +512,7 @@ impl<'src> Parser<'src> {
             Token::F32Type => "f32".to_owned(),
             Token::F64Type => "f64".to_owned(),
             Token::BoolType => "bool".to_owned(),
+            // User-defined types, such as `member Complex :: complex32`
             Token::Identifier(name) => name,
             _ => return Err(ParseError::UnexpectedToken("type".to_owned(), token, span)),
         };

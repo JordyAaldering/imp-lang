@@ -1,5 +1,5 @@
 // Any built-in base type
-type Any :: T;
+typeset Any;
 member Any :: i32;
 member Any :: i64;
 member Any :: u32;
@@ -10,7 +10,7 @@ member Any :: f64;
 member Any :: bool;
 
 // Built-in numerical types
-type Num :: T;
+typeset Num;
 member Num :: i32;
 member Num :: i64;
 member Num :: u32;

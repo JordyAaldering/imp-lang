@@ -39,12 +39,6 @@ pub enum WhereBound {
 }
 
 #[derive(Clone, Debug)]
-pub struct TypeSetDef {
-    pub name: String,
-    pub param: String,
-}
-
-#[derive(Clone, Debug)]
 pub struct MemberDef {
     pub type_name: String,
     pub member: PolyType,

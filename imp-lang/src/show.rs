@@ -51,33 +51,8 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
             self.write("\n");
         }
 
-        for fundef in program.generic_functions.values() {
-            self.write(&format!("fn {}<{}>(", fundef.name, fundef.type_param));
-            for arg in &fundef.args {
-                self.write_poly_type(&arg.ty);
-                self.write(&format!(" {}, ", arg.name));
-            }
-            self.write(") -> ");
-            self.write_poly_type(&fundef.ret_type);
-            if !fundef.where_bounds.is_empty() {
-                self.write("\nwhere\n");
-                for bound in &fundef.where_bounds {
-                    self.write("    ");
-                    self.write_where_bound(bound);
-                    self.write("\n");
-                }
-            }
-            self.write("{\n");
-            self.depth += 1;
-            for stmt in &fundef.body {
-                self.visit_stmt(stmt);
-            }
-            self.depth -= 1;
-            self.write("}\n");
-        }
-
-        for typeset in program.typesets.values() {
-            self.write(&format!("type {} :: {};\n", typeset.name, typeset.param));
+        for typeset in &program.typesets {
+            self.write(&format!("typeset {};\n", typeset));
         }
 
         for member in &program.members {

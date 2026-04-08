@@ -5,7 +5,7 @@
 Use callable traits for operations and a dedicated concept notation for marker constraints.
 
 ```imp
-type Num :: T;
+typeset Num;
 
 trait Add :: (A, B) -> R;
 ```
@@ -32,7 +32,7 @@ We don't do this yet, but should keep the notation in mind so that we can remain
 typedef complex32 :: (f32, f32);
 typedef complex64 :: (f64, f64);
 
-type Complex;
+typeset Complex;
 member Complex :: complex32;
 member Complex :: complex64;
 ```

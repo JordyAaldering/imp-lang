@@ -41,7 +41,6 @@ pub fn type_infer<'ast>(program: Program<'ast, UntypedAst>) -> Result<Program<'a
 
     Ok(Program {
         functions: typed_functions,
-        generic_functions: HashMap::new(),
         typesets: program.typesets,
         members: program.members,
         traits: program.traits,

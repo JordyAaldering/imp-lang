@@ -9,13 +9,6 @@ pub trait Visit<'ast> {
         for fundef in program.functions.values() {
             self.visit_fundef(fundef);
         }
-
-        for fundef in program.generic_functions.values() {
-            self.visit_fargs_poly(&fundef.args);
-            for stmt in &fundef.body {
-                self.visit_stmt(stmt);
-            }
-        }
     }
 
     fn visit_fundef(&mut self, fundef: &Fundef<'ast, Self::Ast>) {
@@ -128,12 +121,6 @@ pub trait Rewrite<'ast> {
         for fundef in program.functions.values_mut() {
             self.rewrite_fundef(fundef);
         }
-
-        for fundef in program.generic_functions.values_mut() {
-            for stmt in &mut fundef.body {
-                self.rewrite_stmt(stmt);
-            }
-        }
     }
 
     fn rewrite_fundef(&mut self, fundef: &mut Fundef<'ast, Self::Ast>) {
@@ -235,7 +222,6 @@ pub trait Traverse<'ast> {
 
         Program {
             functions,
-            generic_functions: std::collections::HashMap::new(),
             typesets: program.typesets,
             members: program.members,
             traits: program.traits,

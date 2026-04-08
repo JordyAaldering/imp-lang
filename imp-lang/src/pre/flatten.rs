@@ -11,7 +11,6 @@ pub fn flatten<'ast>(program: Program<'ast, ParsedAst>) -> Program<'ast, Flatten
         .collect();
     Program {
         functions,
-        generic_functions: HashMap::new(),
         typesets: program.typesets,
         members: program.members,
         traits: program.traits,

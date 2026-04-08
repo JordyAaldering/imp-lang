@@ -31,7 +31,7 @@ pub enum Token {
     Fn,
     Return,
     Trait,
-    Type,
+    Typeset,
     Member,
     Impl,
     Where,
@@ -189,8 +189,8 @@ impl<'source> Iterator for Lexer<'source> {
             Return
         } else if self.match_str("trait") {
             Trait
-        } else if self.match_str("type") {
-            Type
+        } else if self.match_str("typeset") {
+            Typeset
         } else if self.match_str("member") {
             Member
         } else if self.match_str("impl") {
