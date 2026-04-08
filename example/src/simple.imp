@@ -51,7 +51,6 @@ impl<T: Num> Add(T[d:shp] a, T[d:shp] b) -> T[d:shp]
     return { @addSxS(a[iv], b[iv]) | iv < shp };
 }
 
-
 // If `arr[idx]` is encountered, it is assumed that the trait `Sel`
 // is implemented for the types and shapes of `arr` and `idx`.
 trait Sel<T> :: (usize[.] idx, T[*]) -> T[*];

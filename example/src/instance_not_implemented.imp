@@ -1,0 +1,16 @@
+typeset Num;
+member Num :: i32;
+member Num :: i64;
+
+impl<T: Num> Add(T a, T b) -> T
+{
+    return @addSxS(a, b);
+}
+
+pub fn this_should_work(i32 a, i32 b) -> i32 {
+    return a + b;
+}
+
+pub fn this_should_fail(bool a, bool b) -> bool {
+    return a + b;
+}
