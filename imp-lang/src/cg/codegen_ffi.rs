@@ -47,7 +47,7 @@ impl<'ast> Visit<'ast> for CompileFfi {
                     self.push(&format!("    let mut __{}_ffi = {};\n", arg.name, arg.name));
                     self.push(&format!("    let __{}_raw = __{}_ffi.as_raw();\n", arg.name, arg.name));
                     call_args.push(format!("__{}_raw", arg.name));
-                } else if matches!(arg.ty.shape, ShapePattern::Any) {
+                } else if matches!(arg.ty.shape, TypePattern::Any) {
                     self.push(&format!("    let mut __{}_dyn = {};\n", arg.name, arg.name));
                     self.push(&format!("    let __{}_ffi = match &mut __{}_dyn {{\n", arg.name, arg.name));
                     self.push("        imp_core::ImpArrayOrScalar::Scalar(v) => imp_core::ImpDyn::from_scalar(*v),\n");
@@ -59,7 +59,7 @@ impl<'ast> Visit<'ast> for CompileFfi {
                 }
             }
 
-            if matches!(fundef.ret_type.shape, ShapePattern::Any) {
+            if matches!(fundef.ret_type.shape, TypePattern::Any) {
                 self.push(&format!(
                     "    let __dyn = unsafe {{ IMP_{}({}) }};\n",
                     fundef.name,
@@ -90,7 +90,7 @@ impl<'ast> Visit<'ast> for CompileFfi {
 }
 
 fn is_static_array(ty: &Type) -> bool {
-    ty.is_array() && !matches!(ty.shape, ShapePattern::Any)
+    ty.is_array() && !matches!(ty.shape, TypePattern::Any)
 }
 
 fn join_args(args: &Vec<&Farg>, map_ty: fn(&Type) -> String) -> String {
@@ -101,7 +101,7 @@ fn join_args(args: &Vec<&Farg>, map_ty: fn(&Type) -> String) -> String {
 }
 
 fn rust_api_type(ty: &Type) -> String {
-    if matches!(ty.shape, ShapePattern::Any) {
+    if matches!(ty.shape, TypePattern::Any) {
         return format!("imp_core::ImpDyn<{}>", rust_base_type(ty));
     }
 
@@ -115,7 +115,7 @@ fn rust_api_type(ty: &Type) -> String {
 }
 
 fn rust_api_arg_type(ty: &Type) -> String {
-    if matches!(ty.shape, ShapePattern::Any) {
+    if matches!(ty.shape, TypePattern::Any) {
         format!("imp_core::ImpArrayOrScalar<{}>", rust_base_type(ty))
     } else {
         rust_api_type(ty)
@@ -127,7 +127,7 @@ fn rust_api_ret_type(ty: &Type) -> String {
 }
 
 fn rust_ffi_type(ty: &Type) -> String {
-    if matches!(ty.shape, ShapePattern::Any) {
+    if matches!(ty.shape, TypePattern::Any) {
         return format!("imp_core::ImpDyn<{}>", rust_base_type(ty));
     }
 

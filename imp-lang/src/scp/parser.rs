@@ -516,11 +516,11 @@ impl<'src> Parser<'src> {
         let shape = if self.matches(Token::LSquare).is_some() {
             if self.matches(Token::Mul).is_some() {
                 self.expect(Token::RSquare)?;
-                Some(ShapePattern::Any)
+                Some(TypePattern::Any)
             } else {
                 let axes = self.parse_axes()?;
                 self.expect(Token::RSquare)?;
-                Some(ShapePattern::Axes(axes))
+                Some(TypePattern::Axes(axes))
             }
         } else {
             None
@@ -718,8 +718,7 @@ impl<'src> Parser<'src> {
                 self.expect(Token::RSquare)?;
                 Type {
                     ty: base,
-                    shape: ShapePattern::Any,
-                    knowledge: TypeKnowledge::AUD,
+                    shape: TypePattern::Any,
                 }
             } else {
                 let axes = self.parse_axes()?;
@@ -727,8 +726,7 @@ impl<'src> Parser<'src> {
                 // Knowledge and symbol roles are resolved later by tp::analyse_tp.
                 Type {
                     ty: base,
-                    shape: ShapePattern::Axes(axes),
-                    knowledge: TypeKnowledge::AUD,
+                    shape: TypePattern::Axes(axes),
                 }
             }
         } else {

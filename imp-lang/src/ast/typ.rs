@@ -19,14 +19,14 @@ pub enum BaseType {
 pub struct Type {
     pub ty: BaseType,
     /// Shape as declared in the source pattern
-    pub shape: ShapePattern,
-    /// Compile-time knowledge about this shape, derived by `tp::analyse_tp`
-    pub knowledge: TypeKnowledge,
+    pub shape: TypePattern,
+    // Compile-time knowledge about this shape, derived by `tp::analyse_tp`
+    //pub knowledge: TypeKnowledge,
 }
 
 /// The shape component of a type pattern.
 #[derive(Clone, Debug)]
-pub enum ShapePattern {
+pub enum TypePattern {
     /// Rank-0; no array dimensions
     ///
     /// Example: `u32`
@@ -95,31 +95,9 @@ pub enum SymbolRole {
     Use,
 }
 
-#[derive(Clone, Debug)]
-pub enum TypeKnowledge {
-    /// Rank-0 scalar; not an array.
-    Scalar,
-    /// Array Known Shape: rank and all symbolic extents are statically constrained.
-    ///
-    /// Example: `u32[n]`, `u32[42,m]`
-    AKS,
-    /// Array Known Dimension: rank is known but at least one extent is unconstrained (`_`)
-    ///
-    /// Example: `u32[_]`, `u32[n,_]`
-    AKD,
-    /// Array Unknown Dimension Greater than N: a `d:shp` capture is present
-    ///
-    /// Example: `u32[m,n,d:rest]` gives `AUDGN { min_rank: 2 }`
-    AUDGN { min_rank: u8 },
-    /// Array Unknown Dimension: shape fully unconstrained
-    ///
-    /// Example: `u32[*]`
-    AUD,
-}
-
 impl Type {
     pub fn scalar(ty: BaseType) -> Self {
-        Self { ty, shape: ShapePattern::Scalar, knowledge: TypeKnowledge::Scalar }
+        Self { ty, shape: TypePattern::Scalar }
     }
 
     pub fn vector(ty: BaseType, extent: &str) -> Self {
@@ -132,11 +110,11 @@ impl Type {
     }
 
     pub fn vector_dim(ty: BaseType, dim: DimPattern) -> Self {
-        Self { ty, shape: ShapePattern::Axes(vec![AxisPattern::Dim(dim)]), knowledge: TypeKnowledge::AKS }
+        Self { ty, shape: TypePattern::Axes(vec![AxisPattern::Dim(dim)]) }
     }
 
     pub fn is_scalar(&self) -> bool {
-        matches!(self.shape, ShapePattern::Scalar)
+        matches!(self.shape, TypePattern::Scalar)
     }
 
     pub fn is_array(&self) -> bool {
@@ -145,15 +123,15 @@ impl Type {
 
     pub fn rank(&self) -> Option<u8> {
         match &self.shape {
-            ShapePattern::Scalar => Some(0),
-            ShapePattern::Axes(axes) => {
+            TypePattern::Scalar => Some(0),
+            TypePattern::Axes(axes) => {
                 if axes.iter().any(|a| matches!(a, AxisPattern::Rank(_))) {
                     None
                 } else {
                     Some(axes.len() as u8)
                 }
             }
-            ShapePattern::Any => None,
+            TypePattern::Any => None,
         }
     }
 }

@@ -57,12 +57,12 @@ fn poly_matches_concrete(poly: &PolyType, ty: &Type) -> bool {
     }
 
     match (&poly.shape, &ty.shape) {
-        (None, ShapePattern::Scalar) => true,
+        (None, TypePattern::Scalar) => true,
         (None, _) => false,
-        (Some(ShapePattern::Any), _) => true,
-        (Some(ShapePattern::Scalar), ShapePattern::Scalar) => true,
-        (Some(ShapePattern::Scalar), _) => false,
-        (Some(ShapePattern::Axes(exp_axes)), ShapePattern::Axes(got_axes)) => {
+        (Some(TypePattern::Any), _) => true,
+        (Some(TypePattern::Scalar), TypePattern::Scalar) => true,
+        (Some(TypePattern::Scalar), _) => false,
+        (Some(TypePattern::Axes(exp_axes)), TypePattern::Axes(got_axes)) => {
             if exp_axes.iter().any(|a| matches!(a, AxisPattern::Rank(_))) {
                 return true;
             }
@@ -77,7 +77,7 @@ fn poly_matches_concrete(poly: &PolyType, ty: &Type) -> bool {
                 _ => false,
             })
         }
-        (Some(ShapePattern::Axes(exp_axes)), ShapePattern::Scalar) => exp_axes.is_empty(),
-        (Some(ShapePattern::Axes(_)), ShapePattern::Any) => true,
+        (Some(TypePattern::Axes(exp_axes)), TypePattern::Scalar) => exp_axes.is_empty(),
+        (Some(TypePattern::Axes(_)), TypePattern::Any) => true,
     }
 }

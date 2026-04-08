@@ -93,7 +93,7 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
         }
 
         for (i, arg) in fundef.args.iter().enumerate() {
-            if let ShapePattern::Axes(axes) = &arg.ty.shape {
+            if let TypePattern::Axes(axes) = &arg.ty.shape {
                 for (k, axis) in axes.iter().enumerate() {
                     if let AxisPattern::Rank(capture) = axis {
                         self.bind_env(capture.dim_name.clone(), Id::Dim(i));

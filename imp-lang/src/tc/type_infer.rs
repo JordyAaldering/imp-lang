@@ -71,7 +71,7 @@ pub enum InferenceError {
     SelectionRankTooSmall {
         needed: usize,
         known_min_rank: Option<usize>,
-        shape: ShapePattern,
+        shape: TypePattern,
     },
     /// Array literal elements have different base types or ranks.
     InhomogeneousArray {
@@ -142,24 +142,6 @@ impl<'ast> TypeInfer<'ast> {
         Box::leak(Box::new(expr))
     }
 
-    fn shape_knowledge(shape: &ShapePattern) -> TypeKnowledge {
-        match shape {
-            ShapePattern::Scalar => TypeKnowledge::Scalar,
-            ShapePattern::Any => TypeKnowledge::AUD,
-            ShapePattern::Axes(axes) => {
-                let has_rest = axes.iter().any(|a| matches!(a, AxisPattern::Rank(_)));
-                if has_rest {
-                    let min_rank = axes.iter().filter(|a| matches!(a, AxisPattern::Dim(_))).count() as u8;
-                    TypeKnowledge::AUDGN { min_rank }
-                } else if axes.iter().any(|a| matches!(a, AxisPattern::Dim(DimPattern::Any))) {
-                    TypeKnowledge::AKD
-                } else {
-                    TypeKnowledge::AKS
-                }
-            }
-        }
-    }
-
     /// Build the type of an array literal. The element count becomes a leading `Known(n)` dimension
     /// prepended to the element type's shape. Errors on base-type or rank mismatch between elements.
     fn array_literal_type(&mut self, elem_types: Vec<Type>) -> Type {
@@ -186,27 +168,26 @@ impl<'ast> TypeInfer<'ast> {
 
         let leading = AxisPattern::Dim(DimPattern::Known(count));
         let result_shape = match &elem_shape {
-            ShapePattern::Scalar => ShapePattern::Axes(vec![leading]),
-            ShapePattern::Axes(axes) => {
+            TypePattern::Scalar => TypePattern::Axes(vec![leading]),
+            TypePattern::Axes(axes) => {
                 let mut new_axes = Vec::with_capacity(1 + axes.len());
                 new_axes.push(leading);
                 new_axes.extend_from_slice(axes);
-                ShapePattern::Axes(new_axes)
+                TypePattern::Axes(new_axes)
             }
             // Element shape is fully unknown; result shape is also fully unknown.
-            ShapePattern::Any => ShapePattern::Any,
+            TypePattern::Any => TypePattern::Any,
         };
 
-        let knowledge = Self::shape_knowledge(&result_shape);
-        Type { ty: base_ty, shape: result_shape, knowledge }
+        Type { ty: base_ty, shape: result_shape }
     }
 
     fn tensor_iv_and_dims(ub_ty: &Type) -> (Type, Option<usize>) {
         match &ub_ty.shape {
-            ShapePattern::Scalar => {
+            TypePattern::Scalar => {
                 unreachable!("cannot iterate over scalar ub")
             }
-            ShapePattern::Axes(axes)
+            TypePattern::Axes(axes)
                 if axes.len() == 1 && matches!(axes[0], AxisPattern::Dim(_)) =>
             {
                 // Rank-1 ub: its element count gives the iteration dimensionality k.
@@ -220,8 +201,7 @@ impl<'ast> TypeInfer<'ast> {
                         // ub rank-1 but unknown length → k unknown.
                         let iv_ty = Type {
                             ty: ub_ty.ty.clone(),
-                            shape: ShapePattern::Axes(vec![AxisPattern::Dim(DimPattern::Any)]),
-                            knowledge: TypeKnowledge::AKD,
+                            shape: TypePattern::Axes(vec![AxisPattern::Dim(DimPattern::Any)]),
                         };
                         (iv_ty, None)
                     }
@@ -229,8 +209,7 @@ impl<'ast> TypeInfer<'ast> {
                         // Named extent (e.g., `usize[n]`): value unknown at compile time.
                         let iv_ty = Type {
                             ty: ub_ty.ty.clone(),
-                            shape: ShapePattern::Axes(vec![AxisPattern::Dim(DimPattern::Any)]),
-                            knowledge: TypeKnowledge::AKD,
+                            shape: TypePattern::Axes(vec![AxisPattern::Dim(DimPattern::Any)]),
                         };
                         (iv_ty, None)
                     }
@@ -241,8 +220,7 @@ impl<'ast> TypeInfer<'ast> {
                 // Multi-rank ub, contains `..rest`, or `Any` shape: fully unknown.
                 let iv_ty = Type {
                     ty: ub_ty.ty.clone(),
-                    shape: ShapePattern::Any,
-                    knowledge: TypeKnowledge::AUD,
+                    shape: TypePattern::Any,
                 };
                 (iv_ty, None)
             }
@@ -258,19 +236,18 @@ impl<'ast> TypeInfer<'ast> {
             return elem_ty;
         }
         let result_shape = match elem_ty.shape {
-            ShapePattern::Scalar => ShapePattern::Axes(leading_axes),
-            ShapePattern::Axes(elem_axes) => {
+            TypePattern::Scalar => TypePattern::Axes(leading_axes),
+            TypePattern::Axes(elem_axes) => {
                 let mut new_axes = leading_axes;
                 new_axes.extend(elem_axes);
-                ShapePattern::Axes(new_axes)
+                TypePattern::Axes(new_axes)
             }
-            ShapePattern::Any => {
+            TypePattern::Any => {
                 // Element shape fully unknown; result shape is also fully unknown.
-                ShapePattern::Any
+                TypePattern::Any
             }
         };
-        let knowledge = Self::shape_knowledge(&result_shape);
-        Type { ty: elem_ty.ty, shape: result_shape, knowledge }
+        Type { ty: elem_ty.ty, shape: result_shape }
     }
 
     /// Try to extract one named/constant `AxisPattern` per element from `ub`'s SSA-defining
@@ -348,7 +325,7 @@ impl<'ast> TypeInfer<'ast> {
     fn expect_usize_vector_prf_arg(&mut self, prf_name: &str, arg_index: usize, ty: &Type) {
         let is_vector = matches!(
             ty.shape,
-            ShapePattern::Axes(ref axes)
+            TypePattern::Axes(ref axes)
                 if axes.len() == 1 && matches!(axes[0], AxisPattern::Dim(_))
         );
 
@@ -532,8 +509,7 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
             let stub_call = Call { id: CallTarget::Function(stub_target), args: vec![] };
             return (stub_call, Type {
                 ty: BaseType::I32,
-                shape: ShapePattern::Any,
-                knowledge: TypeKnowledge::AUD,
+                shape: TypePattern::Any,
             });
         };
 
@@ -797,8 +773,7 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
             Some(axes) => Self::tensor_result_type(ret_ty, axes),
             None => Type {
                 ty: ret_ty.ty,
-                shape: ShapePattern::Any,
-                knowledge: TypeKnowledge::AUD,
+                shape: TypePattern::Any,
             },
         };
 
@@ -843,7 +818,7 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
             }
             Id::Shp(i) => {
                 let dim_name = match &self.args[i].ty.shape {
-                    ShapePattern::Axes(axes) => axes.iter().find_map(|a| {
+                    TypePattern::Axes(axes) => axes.iter().find_map(|a| {
                         if let AxisPattern::Rank(cap) = a { Some(cap.dim_name.clone()) } else { None }
                     }),
                     _ => None,
@@ -882,17 +857,17 @@ fn types_compatible(expected: &Type, provided: &Type) -> bool {
 
 /// Check if two shape patterns are compatible.
 /// For now, we use structural equality; later this could support variance.
-fn shapes_compatible(expected: &ShapePattern, provided: &ShapePattern) -> bool {
+fn shapes_compatible(expected: &TypePattern, provided: &TypePattern) -> bool {
     // A `d:shp` rank capture is AUD-compatible with any shape on either side.
     let has_rank = |axes: &[AxisPattern]| axes.iter().any(|a| matches!(a, AxisPattern::Rank(_)));
-    if let ShapePattern::Axes(exp_axes) = expected
+    if let TypePattern::Axes(exp_axes) = expected
         && has_rank(exp_axes) { return true; }
-    if let ShapePattern::Axes(prov_axes) = provided
+    if let TypePattern::Axes(prov_axes) = provided
         && has_rank(prov_axes) { return true; }
     match (expected, provided) {
-        (ShapePattern::Scalar, ShapePattern::Scalar) => true,
-        (ShapePattern::Any, _) | (_, ShapePattern::Any) => true,
-        (ShapePattern::Axes(exp_axes), ShapePattern::Axes(prov_axes)) => {
+        (TypePattern::Scalar, TypePattern::Scalar) => true,
+        (TypePattern::Any, _) | (_, TypePattern::Any) => true,
+        (TypePattern::Axes(exp_axes), TypePattern::Axes(prov_axes)) => {
             if exp_axes.len() != prov_axes.len() {
                 return false;
             }
@@ -943,12 +918,12 @@ fn poly_matches_concrete(poly: &PolyType, ty: &Type) -> bool {
     }
 
     match (&poly.shape, &ty.shape) {
-        (None, ShapePattern::Scalar) => true,
+        (None, TypePattern::Scalar) => true,
         (None, _) => false,
-        (Some(ShapePattern::Any), _) => true,
-        (Some(ShapePattern::Scalar), ShapePattern::Scalar) => true,
-        (Some(ShapePattern::Scalar), _) => false,
-        (Some(ShapePattern::Axes(exp_axes)), ShapePattern::Axes(got_axes)) => {
+        (Some(TypePattern::Any), _) => true,
+        (Some(TypePattern::Scalar), TypePattern::Scalar) => true,
+        (Some(TypePattern::Scalar), _) => false,
+        (Some(TypePattern::Axes(exp_axes)), TypePattern::Axes(got_axes)) => {
             if exp_axes.iter().any(|a| matches!(a, AxisPattern::Rank(_))) {
                 return true;
             }
@@ -963,7 +938,7 @@ fn poly_matches_concrete(poly: &PolyType, ty: &Type) -> bool {
                 _ => false,
             })
         }
-        (Some(ShapePattern::Axes(exp_axes)), ShapePattern::Scalar) => exp_axes.is_empty(),
-        (Some(ShapePattern::Axes(_)), ShapePattern::Any) => true,
+        (Some(TypePattern::Axes(exp_axes)), TypePattern::Scalar) => exp_axes.is_empty(),
+        (Some(TypePattern::Axes(_)), TypePattern::Any) => true,
     }
 }

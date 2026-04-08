@@ -64,8 +64,7 @@ impl CompileC {
             Id::Dim(_) | Id::DimAt(_, _) => Type::scalar(BaseType::Usize),
             Id::Shp(_) => Type {
                 ty: BaseType::Usize,
-                shape: ShapePattern::Axes(vec![AxisPattern::Dim(DimPattern::Any)]),
-                knowledge: TypeKnowledge::AKD,
+                shape: TypePattern::Axes(vec![AxisPattern::Dim(DimPattern::Any)]),
             },
         }
     }
@@ -409,8 +408,7 @@ impl<'ast> Visit<'ast> for CompileC {
             Id::DimAt(_, _) => Type::scalar(BaseType::Usize),
             Id::Shp(_) => Type {
                 ty: BaseType::Usize,
-                shape: ShapePattern::Axes(vec![AxisPattern::Dim(DimPattern::Any)]),
-                knowledge: TypeKnowledge::AKD,
+                shape: TypePattern::Axes(vec![AxisPattern::Dim(DimPattern::Any)]),
             },
         }).collect();
         let name = rename_fundefs::mangle_call_name(&base_name, &arg_types);
@@ -553,7 +551,7 @@ fn base_ctype(ty: &Type) -> String {
 }
 
 fn full_ctype(ty: &Type) -> String {
-    if matches!(ty.shape, ShapePattern::Any) {
+    if matches!(ty.shape, TypePattern::Any) {
         use BaseType::*;
         return match &ty.ty {
             I32 => "ImpDynI32".to_owned(),
@@ -607,8 +605,7 @@ fn type_of_id_in_context(id: &Id<'_, TypedAst>, args: &[&Farg]) -> Type {
         Id::Dim(_) | Id::DimAt(_, _) => Type::scalar(BaseType::Usize),
         Id::Shp(_) => Type {
             ty: BaseType::Usize,
-            shape: ShapePattern::Axes(vec![AxisPattern::Dim(DimPattern::Any)]),
-            knowledge: TypeKnowledge::AKD,
+            shape: TypePattern::Axes(vec![AxisPattern::Dim(DimPattern::Any)]),
         },
     }
 }

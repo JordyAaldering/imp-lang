@@ -278,9 +278,9 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
         self.write_basetype(&ty.ty);
 
         match &ty.shape {
-            ShapePattern::Scalar => {}
-            ShapePattern::Any => self.write("[*]"),
-            ShapePattern::Axes(axes) => {
+            TypePattern::Scalar => {}
+            TypePattern::Any => self.write("[*]"),
+            TypePattern::Axes(axes) => {
                 self.write("[");
                 for axis in axes {
                     match axis {
@@ -322,9 +322,9 @@ impl<'ast, Ast: AstConfig> Show<'ast, Ast> {
         self.write(&ty.head);
         if let Some(shape) = &ty.shape {
             match shape {
-                ShapePattern::Scalar => {}
-                ShapePattern::Any => self.write("[*]"),
-                ShapePattern::Axes(axes) => {
+                TypePattern::Scalar => {}
+                TypePattern::Any => self.write("[*]"),
+                TypePattern::Axes(axes) => {
                     self.write("[");
                     for axis in axes {
                         match axis {

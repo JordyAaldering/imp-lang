@@ -93,7 +93,7 @@ fn base_ctype(ty: &Type) -> String {
 }
 
 fn full_ctype(ty: &Type) -> String {
-    if matches!(ty.shape, ShapePattern::Any) {
+    if matches!(ty.shape, TypePattern::Any) {
         use BaseType::*;
         return match &ty.ty {
             I32 => "ImpDynI32".to_owned(),

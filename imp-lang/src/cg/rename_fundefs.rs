@@ -120,11 +120,11 @@ pub fn mangle_type(ty: &Type) -> String {
     format!("{}_{}", base, mangle_shape(&ty.shape))
 }
 
-fn mangle_shape(shape: &ShapePattern) -> String {
+fn mangle_shape(shape: &TypePattern) -> String {
     match shape {
-        ShapePattern::Scalar => "0".to_owned(),
-        ShapePattern::Any => "any".to_owned(),
-        ShapePattern::Axes(axes) => {
+        TypePattern::Scalar => "0".to_owned(),
+        TypePattern::Any => "any".to_owned(),
+        TypePattern::Axes(axes) => {
             if axes.is_empty() {
                 return "0".to_owned();
             }

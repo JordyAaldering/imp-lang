@@ -11,5 +11,5 @@ pub struct TraitDef {
 #[derive(Clone, Debug)]
 pub struct PolyType {
     pub head: String,
-    pub shape: Option<ShapePattern>,
+    pub shape: Option<TypePattern>,
 }
