@@ -16,6 +16,7 @@ pub enum ParseError {
     MissingReturn,
     DuplicateFunction(String),
     DuplicateTypeset(String),
+    UndefinedTypeset(String),
     DuplicateGenericFunction(String),
     UnknownPrimitive(String, Span),
     UnexpectedToken(String, Token, Span),
@@ -79,7 +80,7 @@ impl<'src> Parser<'src> {
     pub fn parse_program(&mut self) -> ParseResult<Program<'static, ParsedAst>> {
         let mut functions = HashMap::new();
         let mut typesets = HashSet::new();
-        let mut members = Vec::new();
+        let mut members = HashMap::new();
         let mut traits = HashMap::new();
         let mut impls = Vec::new();
 
@@ -101,9 +102,15 @@ impl<'src> Parser<'src> {
                     if !typesets.insert(typeset.clone()) {
                         return Err(ParseError::DuplicateTypeset(typeset));
                     }
+                    members.insert(typeset, Vec::new());
                 }
                 Token::Member => {
-                    members.push(self.parse_member_def()?);
+                    let (typeset_name, member) = self.parse_member_def()?;
+                    if let Some(typeset) = members.get_mut(&typeset_name) {
+                        typeset.push(member);
+                    } else {
+                        return Err(ParseError::UndefinedTypeset(typeset_name));
+                    }
                 }
                 Token::Impl => {
                     impls.push(self.parse_impl_def()?);
@@ -412,13 +419,13 @@ impl<'src> Parser<'src> {
         Ok(name)
     }
 
-    fn parse_member_def(&mut self) -> ParseResult<MemberDef> {
+    fn parse_member_def(&mut self) -> ParseResult<(String, PolyType)> {
         self.expect(Token::Member)?;
-        let (type_name, _) = self.parse_id()?;
+        let (typeset, _) = self.parse_id()?;
         self.expect(Token::ColonColon)?;
         let member = self.parse_poly_type()?;
         self.expect(Token::Semicolon)?;
-        Ok(MemberDef { type_name, member })
+        Ok((typeset, member))
     }
 
     fn parse_impl_def(&mut self) -> ParseResult<ImplDef> {

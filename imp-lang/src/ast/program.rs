@@ -8,7 +8,7 @@ pub struct Program<'ast, Ast: AstConfig> {
     /// Type-set declarations (for example: `typeset Num;`).
     pub typesets: HashSet<String>,
     /// Type-set membership declarations (for example: `member Num :: u32;`).
-    pub members: Vec<MemberDef>,
+    pub members: HashMap<String, Vec<PolyType>>,
     /// Surface trait declarations. These are parsed and preserved before trait resolution exists.
     pub traits: HashMap<String, TraitDef>,
     /// Surface impl declarations. These are parsed and preserved before impl lowering exists.

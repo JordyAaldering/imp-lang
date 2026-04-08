@@ -39,12 +39,6 @@ pub enum WhereBound {
 }
 
 #[derive(Clone, Debug)]
-pub struct MemberDef {
-    pub type_name: String,
-    pub member: PolyType,
-}
-
-#[derive(Clone, Debug)]
 pub struct ImplDef {
     pub trait_name: String,
     pub args: Vec<PolyType>,

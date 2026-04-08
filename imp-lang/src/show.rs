@@ -55,12 +55,14 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
             self.write(&format!("typeset {};\n", typeset));
         }
 
-        for member in &program.members {
-            self.write("member ");
-            self.write(&member.type_name);
-            self.write(" :: ");
-            self.write_poly_type(&member.member);
-            self.write(";\n");
+        for (typeset, members) in &program.members {
+            for member in members {
+                self.write("member ");
+                self.write(&typeset);
+                self.write(" :: ");
+                self.write_poly_type(&member);
+                self.write(";\n");
+            }
         }
 
         for trait_def in program.traits.values() {
