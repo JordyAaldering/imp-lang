@@ -208,14 +208,7 @@ impl CompileC {
                 }
             }
             Expr::Id(id) => self.emit_trait_shims_for_id(id, args),
-            Expr::I32(_) => {},
-            Expr::I64(_) => {},
-            Expr::U32(_) => {}
-            Expr::U64(_) => {},
-            Expr::Usize(_) => {},
-            Expr::F32(_) => {},
-            Expr::F64(_) => {},
-            Expr::Bool(_) => {},
+            Expr::Const(_) => {},
         }
     }
 
@@ -292,20 +285,14 @@ impl<'ast> Visit<'ast> for CompileC {
     }
 
     fn visit_expr(&mut self, expr: &Expr<'ast, Self::Ast>) {
+        use Expr::*;
         match expr {
-            Expr::Call(call) => self.visit_call(call),
-            Expr::PrfCall(prf) => self.visit_prf_call(prf),
-            Expr::Tensor(tensor) => self.visit_tensor(tensor),
-            Expr::Array(array) => self.visit_array(array),
-            Expr::Id(id) => self.visit_id(id),
-            Expr::I32(v) => self.expr_stack.push(v.to_string()),
-            Expr::I64(v) => self.expr_stack.push(v.to_string()),
-            Expr::U32(v) => self.expr_stack.push(v.to_string()),
-            Expr::U64(v) => self.expr_stack.push(v.to_string()),
-            Expr::Usize(v) => self.expr_stack.push(v.to_string()),
-            Expr::F32(v) => self.expr_stack.push(format!("{}f", v)),
-            Expr::F64(v) => self.expr_stack.push(v.to_string()),
-            Expr::Bool(v) => self.expr_stack.push(if *v { "true".to_owned() } else { "false".to_owned() }),
+            Call(n) => self.visit_call(n),
+            PrfCall(n) => self.visit_prf_call(n),
+            Tensor(n) => self.visit_tensor(n),
+            Array(n) => self.visit_array(n),
+            Id(n) => self.visit_id(n),
+            Const(n) => self.visit_const(n),
         }
     }
 
@@ -553,6 +540,20 @@ impl<'ast> Visit<'ast> for CompileC {
                 ));
                 self.expr_stack.push(wrap);
             }
+        }
+    }
+
+    fn visit_const(&mut self, c: &Const) {
+        use Const::*;
+        match c {
+            I32(v) => self.expr_stack.push(v.to_string()),
+            I64(v) => self.expr_stack.push(v.to_string()),
+            U32(v) => self.expr_stack.push(v.to_string()),
+            U64(v) => self.expr_stack.push(v.to_string()),
+            Usize(v) => self.expr_stack.push(v.to_string()),
+            F32(v) => self.expr_stack.push(v.to_string()),
+            F64(v) => self.expr_stack.push(v.to_string()),
+            Bool(v) => self.expr_stack.push(v.to_string()),
         }
     }
 }

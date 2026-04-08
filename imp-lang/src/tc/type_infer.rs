@@ -189,7 +189,7 @@ impl<'ast> TypeInfer<'ast> {
             }
         }
 
-        let leading = AxisPattern::Dim(DimPattern::Known(count as u64));
+        let leading = AxisPattern::Dim(DimPattern::Known(count));
         let result_shape = match &elem_shape {
             ShapePattern::Scalar => ShapePattern::Axes(vec![leading]),
             ShapePattern::Axes(axes) => {
@@ -229,10 +229,9 @@ impl<'ast> TypeInfer<'ast> {
                 // Rank-1 ub: its element count gives the iteration dimensionality k.
                 match &axes[0] {
                     AxisPattern::Dim(DimPattern::Known(k)) => {
-                        let k = *k as usize;
-                            // iv has the same element type as ub; shape is [k].
-                            let iv_ty = Type::vector_dim(ub_ty.ty.clone(), DimPattern::Known(k as u64));
-                        (iv_ty, Some(k))
+                        // iv has the same element type as ub; shape is [k].
+                        let iv_ty = Type::vector_dim(ub_ty.ty.clone(), DimPattern::Known(*k));
+                        (iv_ty, Some(*k))
                     }
                     AxisPattern::Dim(DimPattern::Any) => {
                         // ub rank-1 but unknown length → k unknown.
@@ -327,9 +326,8 @@ impl<'ast> TypeInfer<'ast> {
                     role: SymbolRole::Use,
                 }),
                 Id::Var(v) => {
-                    // If the var's SSA is a U32 literal, use Known; otherwise Var by name.
                     match v.ssa {
-                        Some(Expr::U32(val)) => DimPattern::Known(*val as u64),
+                        Some(Expr::Const(Const::Usize(val))) => DimPattern::Known(*val),
                         _ => DimPattern::Var(ExtentVar {
                             name: v.name.clone(),
                             role: SymbolRole::Use,
@@ -515,14 +513,10 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
                 let (id, ty) = self.trav_id(n);
                 (Id(id), ty)
             }
-            I32(v) => (I32(v), Type::scalar(BaseType::I32)),
-            I64(v) => (I64(v), Type::scalar(BaseType::I64)),
-            U32(v) => (U32(v), Type::scalar(BaseType::U32)),
-            U64(v) => (U64(v), Type::scalar(BaseType::U64)),
-            Usize(v) => (Usize(v), Type::scalar(BaseType::Usize)),
-            F32(v) => (F32(v), Type::scalar(BaseType::F32)),
-            F64(v) => (F64(v), Type::scalar(BaseType::F64)),
-            Bool(v) => (Bool(v), Type::scalar(BaseType::Bool)),
+            Const(n) => {
+                let (id, ty) = self.trav_const(n);
+                (Const(id), ty)
+            }
         }
     }
 
@@ -775,6 +769,22 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
             Id::DimAt(i, k) => {
                 (Id::DimAt(i, k), Type::scalar(BaseType::Usize))
             }
+        }
+    }
+
+    type ConstOut = (Const, Type);
+
+    fn trav_const(&mut self, c: Const) -> Self::ConstOut {
+        use Const::*;
+        match c {
+            I32(v) => (I32(v), Type::scalar(BaseType::I32)),
+            I64(v) => (I64(v), Type::scalar(BaseType::I64)),
+            U32(v) => (U32(v), Type::scalar(BaseType::U32)),
+            U64(v) => (U64(v), Type::scalar(BaseType::U64)),
+            Usize(v) => (Usize(v), Type::scalar(BaseType::Usize)),
+            F32(v) => (F32(v), Type::scalar(BaseType::F32)),
+            F64(v) => (F64(v), Type::scalar(BaseType::F64)),
+            Bool(v) => (Bool(v), Type::scalar(BaseType::Bool)),
         }
     }
 }

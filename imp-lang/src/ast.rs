@@ -16,6 +16,7 @@ mod tensor;
 mod array;
 // Terminals
 mod id;
+mod constval;
 mod typ;
 
 // Declarations
@@ -36,6 +37,7 @@ pub use tensor::*;
 pub use array::*;
 // Terminals
 pub use id::*;
+pub use constval::*;
 pub use typ::*;
 
 use std::fmt;

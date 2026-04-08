@@ -60,7 +60,7 @@ pub enum DimPattern {
     /// Compile-time constant.
     ///
     /// Example: `u32[42]`
-    Known(u64),
+    Known(usize),
     /// Named symbol
     ///
     /// Example: `u32[n]`, `u32[len]`

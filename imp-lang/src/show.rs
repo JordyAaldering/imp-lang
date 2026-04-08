@@ -191,14 +191,7 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
             Tensor(n) => self.visit_tensor(n),
             Array(n) => self.visit_array(n),
             Id(n) => self.visit_id(n),
-            Bool(v) => self.write(&v.to_string()),
-            I32(v) => self.write(&v.to_string()),
-            I64(v) => self.write(&v.to_string()),
-            U32(v) => self.write(&v.to_string()),
-            U64(v) => self.write(&v.to_string()),
-            Usize(v) => self.write(&v.to_string()),
-            F32(v) => self.write(&v.to_string()),
-            F64(v) => self.write(&v.to_string()),
+            Const(n) => self.visit_const(n),
         }
     }
 
@@ -264,6 +257,20 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
             Id::Dim(i) => self.write(&format!("{}.dim", self.args[*i].name)),
             Id::Shp(i) => self.write(&format!("{}.shp", self.args[*i].name)),
             Id::DimAt(i, k) => self.write(&format!("{}.shp[{k}]", self.args[*i].name)),
+        }
+    }
+
+    fn visit_const(&mut self, c: &Const) {
+        use Const::*;
+        match c {
+            Bool(v) => self.write(&v.to_string()),
+            I32(v) => self.write(&v.to_string()),
+            I64(v) => self.write(&v.to_string()),
+            U32(v) => self.write(&v.to_string()),
+            U64(v) => self.write(&v.to_string()),
+            Usize(v) => self.write(&v.to_string()),
+            F32(v) => self.write(&v.to_string()),
+            F64(v) => self.write(&v.to_string()),
         }
     }
 

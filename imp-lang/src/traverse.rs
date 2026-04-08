@@ -64,14 +64,7 @@ pub trait Visit<'ast> {
             Tensor(n) => self.visit_tensor(n),
             Array(n) => self.visit_array(n),
             Id(n) => self.visit_id(n),
-            I32(_) => {},
-            I64(_) => {},
-            U32(_) => {},
-            U64(_) => {},
-            Usize(_) => {},
-            F32(_) => {},
-            F64(_) => {},
-            Bool(_) => {},
+            Const(n) => self.visit_const(n),
         }
     }
 
@@ -108,6 +101,8 @@ pub trait Visit<'ast> {
     // Terminals
 
     fn visit_id(&mut self, _id: &Id<'ast, Self::Ast>) { }
+
+    fn visit_const(&mut self, _c: &Const) { }
 
     fn visit_type(&mut self, _ty: &Type) { }
 }
@@ -165,14 +160,7 @@ pub trait Rewrite<'ast> {
             Array(n) => self.rewrite_array(n),
             // Terminals
             Id(n) => Id(self.rewrite_id(n)),
-            I32(v) => I32(v),
-            I64(v) => I64(v),
-            U32(v) => U32(v),
-            U64(v) => U64(v),
-            Usize(v) => Usize(v),
-            F32(v) => F32(v),
-            F64(v) => F64(v),
-            Bool(v) => Bool(v),
+            Const(n) => Const(self.rewrite_const(n)),
         }
     }
 
@@ -200,6 +188,10 @@ pub trait Rewrite<'ast> {
 
     fn rewrite_id(&mut self, id: Id<'ast, Self::Ast>) -> Id<'ast, Self::Ast> {
         id
+    }
+
+    fn rewrite_const(&mut self, c: Const) -> Const {
+        c
     }
 
     fn rewrite_type(&mut self, ty: Type) -> Type {
@@ -309,6 +301,12 @@ pub trait Traverse<'ast> {
     type IdOut = Id<'ast, Self::OutAst>;
 
     fn trav_id(&mut self, _id: Id<'ast, Self::InAst>) -> Self::IdOut {
+        unimplemented!()
+    }
+
+    type ConstOut = Const;
+
+    fn trav_const(&mut self, _c: Const) -> Self::ConstOut {
         unimplemented!()
     }
 

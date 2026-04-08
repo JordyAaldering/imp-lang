@@ -45,7 +45,7 @@ impl<'ast> Rewrite<'ast> for ConstantFold {
         let new_expr = self.rewrite_expr((*assign.expr).clone());
 
         match &new_expr {
-            Expr::U32(v) => {
+            Expr::Const(Const::U32(v)) => {
                 self.known.insert(Self::ptr(assign.lhs), *v);
                 assign.expr = Box::leak(Box::new(new_expr));
             }
@@ -59,22 +59,22 @@ impl<'ast> Rewrite<'ast> for ConstantFold {
         match (&prf_call.id, &prf_call.args.as_slice()) {
             (Prf::AddSxS, [l, r]) => {
                 if let (Some(l), Some(r)) = (self.const_u32(l), self.const_u32(r)) {
-                    return Expr::U32(l + r);
+                    return Expr::Const(Const::U32(l + r));
                 }
             }
             (Prf::SubSxS, [l, r]) => {
                 if let (Some(l), Some(r)) = (self.const_u32(l), self.const_u32(r)) {
-                    return Expr::U32(l - r);
+                    return Expr::Const(Const::U32(l - r));
                 }
             }
             (Prf::MulSxS, [l, r]) => {
                 if let (Some(l), Some(r)) = (self.const_u32(l), self.const_u32(r)) {
-                    return Expr::U32(l * r);
+                    return Expr::Const(Const::U32(l * r));
                 }
             }
             (Prf::DivSxS, [l, r]) => {
                 if let (Some(l), Some(r)) = (self.const_u32(l), self.const_u32(r)) && r != 0 {
-                    return Expr::U32(l / r);
+                    return Expr::Const(Const::U32(l / r));
                 }
             }
             _ => (),
