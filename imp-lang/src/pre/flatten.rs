@@ -3,19 +3,7 @@ use std::{collections::HashMap, mem};
 use crate::{ast::*, traverse::Traverse};
 
 pub fn flatten<'ast>(program: Program<'ast, ParsedAst>) -> Program<'ast, FlattenedAst> {
-    let functions = program.functions
-        .into_iter()
-        .map(|(name, fundef)| {
-            (name, Flatten::new().trav_fundef(fundef))
-        })
-        .collect();
-    Program {
-        functions,
-        typesets: program.typesets,
-        members: program.members,
-        traits: program.traits,
-        impls: program.impls,
-    }
+    Flatten::new().trav_program(program)
 }
 
 struct Flatten<'ast> {

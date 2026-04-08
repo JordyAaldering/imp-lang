@@ -1,24 +1,3 @@
-// Any built-in base type
-typeset Any;
-member Any :: i32;
-member Any :: i64;
-member Any :: u32;
-member Any :: u64;
-member Any :: usize;
-member Any :: f32;
-member Any :: f64;
-member Any :: bool;
-
-// Built-in numerical types
-typeset Num;
-member Num :: i32;
-member Num :: i64;
-member Num :: u32;
-member Num :: u64;
-member Num :: usize;
-member Num :: f32;
-member Num :: f64;
-
 fn dim(usize[d:shp] arr) -> usize {
     return d;
 }
@@ -27,47 +6,70 @@ pub fn shape(usize[d:shp] arr) -> usize[d] {
     return shp;
 }
 
-// If `a + b` is encountered, it is assumed that the trait `Add`
-// is implemented for the types and shapes of `a` and `b`.
-trait Add<T> :: (T[*], T[*]) -> T[*];
+fn zeros(usize n) -> usize[n] {
+    return { 0usize | [0usize] <= iv < [n] };
+}
 
-impl<T: Num> Add(T a, T b) -> T
-{
+fn @add(usize a, usize b) -> usize {
     return @addSxS(a, b);
 }
 
-impl<T: Num> Add(T[d:shp] a, T b) -> T[d:shp]
-{
-    return { @addSxS(a[iv], b) | iv < shp };
+fn @add(usize a, usize[d>0:shp] b) -> usize[d>0:shp] {
+    lb = zeros(d);
+    return { a + b[iv] | lb <= iv < shp };
 }
 
-impl<T: Num> Add(T a, T[d:shp] b) -> T[d:shp]
-{
-    return { @addSxS(a, b[iv]) | iv < shp };
+fn @add(usize[d>0:shp] a, usize b) -> usize[d>0:shp] {
+    lb = zeros(d);
+    return { a[iv] + b | lb <= iv < shp };
 }
 
-impl<T: Num> Add(T[d:shp] a, T[d:shp] b) -> T[d:shp]
-{
-    return { @addSxS(a[iv], b[iv]) | iv < shp };
+fn @add(usize[d>0:shp] a, usize[d>0:shp] b) -> usize[d>0:shp] {
+    lb = zeros(d);
+    return { a[iv] + b[iv] | lb <= iv < shp };
 }
 
-// If `arr[idx]` is encountered, it is assumed that the trait `Sel`
-// is implemented for the types and shapes of `arr` and `idx`.
-trait Sel<T> :: (usize[.] idx, T[*]) -> T[*];
-
-// Planar selection
-impl<T: Any> Sel(usize[n] idx, T[n:oshp,m>0:ishp] arr) -> T[m>0:ishp] {
-    return { @selVxA(@catVxV(idx, iv), arr) | iv < ishp };
+pub fn four() -> usize[4] {
+    return [0usize, 1usize, 2usize, 3usize];
 }
 
-// Scalar selection
-impl<T: Any> Sel(usize[n] idx, T[n:shp] arr) -> T {
+pub fn five() -> usize[5] {
+    return [0usize, 1usize, 2usize, 3usize, 4usize];
+}
+
+pub fn add_demo(usize[n] four, usize[n] five) -> usize[k] {
+    return four + five;
+}
+
+pub fn overload_demo(usize a, usize b) -> usize {
+    return a + b;
+}
+
+pub fn overload_demo(usize[n] a, usize[n] b) -> usize[n] {
+    return a + b;
+}
+
+pub fn we_could_statically_figure_this_error_out() -> usize[5] {
+    four = [0usize, 1usize, 2usize, 3usize];
+    five = [0usize, 1usize, 2usize, 3usize, 4usize];
+    return four + five;
+}
+
+fn @sel(usize[n] idx, usize[n:shp] arr) -> usize {
     return @selVxA(idx, arr);
 }
 
+fn @sel(usize[n] idx, usize arr) -> usize {
+    return arr;
+}
 
+fn @sel(usize[n] idx, u32[n:shp] arr) -> u32 {
+    return @selVxA(idx, arr);
+}
 
-
+pub fn scalar_add_demo() -> usize {
+    return 2usize + 3usize;
+}
 
 pub fn shouldbefolded() -> u32 {
     return @addSxS(4u32, @addSxS(2u32, 3u32));
@@ -91,7 +93,7 @@ pub fn arrays() -> u32[n] {
     return a;
 }
 
-pub fn sel() -> u32 {
+pub fn sel_demo() -> u32 {
     arr = [1u32,2u32,3u32,4u32,5u32];
     x = arr[[2usize]];
     return x;
@@ -99,4 +101,8 @@ pub fn sel() -> u32 {
 
 pub fn scalar_or_array(usize[*] a) -> usize[*] {
     return a;
+}
+
+pub fn add_dyn(usize[*] a, usize[*] b) -> usize[*] {
+    return a + b;
 }

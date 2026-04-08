@@ -51,21 +51,21 @@ pub fn rename_fundefs<'ast>(program: &mut Program<'ast, TypedAst>) {
 
 impl RenameFundefs {
     fn rename<'ast>(&self, program: &mut Program<'ast, TypedAst>) {
-    let mut used_names = HashSet::new();
+        let mut used_names = HashSet::new();
 
-    let mut function_names: Vec<String> = program.functions.keys().cloned().collect();
-    function_names.sort();
+        let mut internal_keys: Vec<String> = program.functions.keys().cloned().collect();
+        internal_keys.sort();
 
-    for function_name in function_names {
-        let Some(fundef) = program.functions.get_mut(&function_name) else {
-            continue;
-        };
+        for key in internal_keys {
+            let Some(fundef) = program.functions.get_mut(&key) else {
+                continue;
+            };
 
-        let base_name = mangle_fundef_name(&function_name, &fundef.args);
-        let unique_name = make_unique(base_name, &mut used_names);
-        fundef.name = unique_name;
+            let base_name = mangle_fundef_name(&fundef.name, &fundef.args);
+            let unique_name = make_unique(base_name, &mut used_names);
+            fundef.name = unique_name;
+        }
     }
-}
 }
 
 fn make_unique(mut candidate: String, used_names: &mut HashSet<String>) -> String {
@@ -85,11 +85,19 @@ fn make_unique(mut candidate: String, used_names: &mut HashSet<String>) -> Strin
 }
 
 pub fn mangle_fundef_name(base_name: &str, args: &[Farg]) -> String {
-    format!("{}__{}", base_name, mangle_arg_types(args.iter().map(|arg| &arg.ty)))
+    let arg_suffix = mangle_arg_types(args.iter().map(|arg| &arg.ty));
+    if base_name.ends_with(&format!("__{arg_suffix}")) {
+        return base_name.to_owned();
+    }
+    format!("{}__{}", sanitize_symbol_name(base_name), arg_suffix)
 }
 
 pub fn mangle_call_name(base_name: &str, arg_types: &[Type]) -> String {
-    format!("{}__{}", base_name, mangle_arg_types(arg_types.iter()))
+    format!("{}__{}", sanitize_symbol_name(base_name), mangle_arg_types(arg_types.iter()))
+}
+
+fn sanitize_symbol_name(name: &str) -> String {
+    name.strip_prefix('@').unwrap_or(name).to_owned()
 }
 
 fn mangle_arg_types<'a, I>(arg_types: I) -> String

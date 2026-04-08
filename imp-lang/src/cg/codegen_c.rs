@@ -1,18 +1,32 @@
-use crate::{ast::*, cg::{mono, rename_fundefs}, Visit};
-use std::collections::HashSet;
+use std::collections::HashMap;
+
+use crate::{ast::*, cg::rename_fundefs, Visit};
 
 pub struct CompileC {
     output: String,
     stem: String,
     arg_names: Vec<String>,
     arg_types: Vec<Type>,
+    ret_type: Option<Type>,
     expr_stack: Vec<String>,
     lhs_target: Option<(String, Type)>,
     indent: usize,
     shp_uid: usize,
     tensor_uid: usize,
-    impls: Vec<ImplDef>,
-    emitted_trait_shims: HashSet<String>,
+}
+
+struct WrapperFamily {
+    wrapper_name: String,
+    base_name: String,
+    arg_bases: Vec<BaseType>,
+    ret_base: BaseType,
+    overloads: Vec<WrapperCase>,
+}
+
+struct WrapperCase {
+    name: String,
+    args: Vec<Type>,
+    ret_type: Type,
 }
 
 impl CompileC {
@@ -22,13 +36,12 @@ impl CompileC {
             stem: stem.to_owned(),
             arg_names: Vec::new(),
             arg_types: Vec::new(),
+            ret_type: None,
             expr_stack: Vec::new(),
             lhs_target: None,
             indent: 0,
             shp_uid: 0,
             tensor_uid: 0,
-            impls: Vec::new(),
-            emitted_trait_shims: HashSet::new(),
         }
     }
 
@@ -47,16 +60,6 @@ impl CompileC {
         self.expr_stack.pop().expect("expression stack underflow")
     }
 
-    fn nameof(&mut self, id: &Id<'_, TypedAst>) -> String {
-        match id {
-            Id::Arg(i) => self.arg_names[*i].clone(),
-            Id::Var(v) => v.name.clone(),
-            Id::Dim(i) => format!("{}.dim", self.arg_names[*i]),
-            Id::DimAt(i, k) => format!("{}.shp[{k}]", self.arg_names[*i]),
-            Id::Shp(_) => panic!("nameof called on Id::Shp — use render_expr instead"),
-        }
-    }
-
     fn id_type(&self, id: &Id<'_, TypedAst>) -> Type {
         match id {
             Id::Arg(i) => self.arg_types[*i].clone(),
@@ -69,131 +72,124 @@ impl CompileC {
         }
     }
 
-    fn operator_ret_type(&self, method_name: &str, arg_types: &[Type]) -> Type {
-        match method_name {
-            "sel" => Type::scalar(arg_types[1].ty.clone()),
-            "==" | "!=" | "<" | "<=" | ">" | ">=" | "!" => Type::scalar(BaseType::Bool),
-            "+" | "-" | "*" | "/" => arg_types[0].clone(),
-            _ => arg_types[0].clone(),
+    fn nameof(&mut self, id: &Id<'_, TypedAst>) -> String {
+        match id {
+            Id::Arg(i) => self.arg_names[*i].clone(),
+            Id::Var(v) => v.name.clone(),
+            Id::Dim(i) => format!("{}.dim", self.arg_names[*i]),
+            Id::DimAt(i, k) => format!("{}.shp[{k}]", self.arg_names[*i]),
+            Id::Shp(_) => panic!("nameof called on Id::Shp — use render_expr instead"),
         }
     }
 
-    fn trait_shim_name(&self, trait_name: &str, method_name: &str, arg_types: &[Type]) -> String {
-        mono::trait_shim_name(trait_name, method_name, arg_types)
+    fn emit_function_prototype(&mut self, fundef: &Fundef<'_, TypedAst>) {
+        let args: Vec<String> = fundef
+            .args
+            .iter()
+            .map(|arg| format!("{} {}", full_ctype(&arg.ty), arg.id))
+            .collect();
+        self.output.push_str(&format!(
+            "{} IMP_{}({});\n",
+            full_ctype(&fundef.ret_type),
+            fundef.name,
+            args.join(", ")
+        ));
     }
 
-    fn has_impl_for_call(&self, trait_name: &str, method_name: &str, arg_types: &[Type]) -> bool {
-        mono::has_impl_for_call(&self.impls, trait_name, method_name, arg_types)
+    fn emit_wrapper_prototype(&mut self, family: &WrapperFamily) {
+        let args: Vec<String> = family
+            .arg_bases
+            .iter()
+            .enumerate()
+            .map(|(i, base)| format!("{} arg{i}", dyn_ctype(base)))
+            .collect();
+        self.output.push_str(&format!(
+            "{} IMP_{}({});\n",
+            dyn_ctype(&family.ret_base),
+            family.wrapper_name,
+            args.join(", ")
+        ));
     }
 
-    fn emit_trait_shim(&mut self, trait_name: &str, method_name: &str, arg_types: &[Type]) {
-        let shim_name = self.trait_shim_name(trait_name, method_name, arg_types);
-        if self.emitted_trait_shims.contains(&shim_name) {
-            return;
-        }
-        if !self.has_impl_for_call(trait_name, method_name, arg_types) {
-            panic!("missing impl for {}::{} with arg types {:?}", trait_name, method_name, arg_types);
-        }
+    fn emit_wrapper_function(&mut self, family: &WrapperFamily) {
+        let args: Vec<String> = family
+            .arg_bases
+            .iter()
+            .enumerate()
+            .map(|(i, base)| format!("{} arg{i}", dyn_ctype(base)))
+            .collect();
 
-        self.emitted_trait_shims.insert(shim_name.clone());
+        self.push_line(&format!(
+            "{} IMP_{}({}) {{",
+            dyn_ctype(&family.ret_base),
+            family.wrapper_name,
+            args.join(", ")
+        ));
 
-        let ret_type = self.operator_ret_type(method_name, arg_types);
-        let args_decl = arg_types.iter().enumerate()
-            .map(|(i, ty)| format!("{} a{}", full_ctype(ty), i))
-            .collect::<Vec<_>>()
-            .join(", ");
-        self.push_line(&format!("static {} IMP_{}({}) {{", full_ctype(&ret_type), shim_name, args_decl));
         self.indent += 1;
-        let binary_array = arg_types.len() == 2 && arg_types[0].is_array() && arg_types[1].is_array();
-        if method_name == "sel" && arg_types.len() == 2 {
-            if !arg_types[1].is_array() {
-                panic!("Sel::sel expects second argument to be an array");
+        for (idx, overload) in family.overloads.iter().enumerate() {
+            let condition = overload
+                .args
+                .iter()
+                .enumerate()
+                .map(|(i, arg)| shape_match_condition(&arg.shape, &format!("arg{i}")))
+                .collect::<Vec<_>>()
+                .join(" && ");
+
+            if idx == 0 {
+                self.push_line(&format!("if ({condition}) {{"));
+            } else {
+                self.push_line(&format!("else if ({condition}) {{"));
             }
-            let elem = base_ctype(&arg_types[1]);
-            let flat_fn = match arg_types[0].ty {
-                BaseType::Usize => "imp_flat_index",
-                _ => panic!("Sel::sel expects usize index vector in C lowering"),
-            };
-            self.push_line(&format!("return (({elem} *)a1.data)[{flat_fn}(a1, a0)];"));
-        } else if binary_array {
-            let op = match method_name {
-                "+" => "+",
-                "-" => "-",
-                "*" => "*",
-                "/" => "/",
-                _ => panic!("unsupported array trait dispatch operator {}", method_name),
-            };
-            let elem = base_ctype(&arg_types[0]);
-            self.push_line("size_t len = a0.len;");
-            self.push_line(&format!("size_t *shp = (size_t *)malloc(a0.dim * sizeof(size_t));"));
-            self.push_line("for (size_t i = 0; i < a0.dim; i += 1) { shp[i] = a0.shp[i]; }");
-            self.push_line(&format!("{} *data = ({})malloc(len * sizeof({}));", format!("{elem}"), format!("{elem} *"), elem));
-            self.push_line(&format!("for (size_t i = 0; i < len; i += 1) {{ data[i] = (({elem}*)a0.data)[i] {op} (({elem}*)a1.data)[i]; }}"));
-            self.push_line("ImpArrayRaw out = (ImpArrayRaw) { .len = len, .dim = a0.dim, .shp = shp, .data = (void *)data };");
-            self.push_line("return out;");
-        } else {
-            let expr = match (method_name, arg_types.len()) {
-                ("+", 2) => "a0 + a1".to_owned(),
-                ("-", 2) => "a0 - a1".to_owned(),
-                ("*", 2) => "a0 * a1".to_owned(),
-                ("/", 2) => "a0 / a1".to_owned(),
-                ("==", 2) => "a0 == a1".to_owned(),
-                ("!=", 2) => "a0 != a1".to_owned(),
-                ("<", 2) => "a0 < a1".to_owned(),
-                ("<=", 2) => "a0 <= a1".to_owned(),
-                (">", 2) => "a0 > a1".to_owned(),
-                (">=", 2) => "a0 >= a1".to_owned(),
-                ("-", 1) => "-a0".to_owned(),
-                ("!", 1) => "!a0".to_owned(),
-                _ => panic!("unsupported trait dispatch operator {} / {} args", method_name, arg_types.len()),
-            };
-            self.push_line(&format!("return {};", expr));
+            self.indent += 1;
+
+            let call_args: Vec<String> = overload
+                .args
+                .iter()
+                .enumerate()
+                .map(|(i, arg)| wrapper_call_arg(&arg.shape, &format!("arg{i}")))
+                .collect();
+            let call_expr = format!("IMP_{}({})", overload.name, call_args.join(", "));
+
+            if matches!(overload.ret_type.shape, TypePattern::Any) {
+                self.push_line(&format!("return {call_expr};"));
+            } else if overload.ret_type.is_array() {
+                let dyn_ty = dyn_ctype(&overload.ret_type.ty);
+                self.push_line(&format!("ImpArrayRaw __ret = {call_expr};"));
+                self.push_line(&format!(
+                    "return ({dyn_ty}) {{ .is_array = true, .data.array = __ret }};"
+                ));
+            } else {
+                let dyn_ty = dyn_ctype(&overload.ret_type.ty);
+                self.push_line(&format!("{} __ret = {call_expr};", base_ctype(&overload.ret_type)));
+                self.push_line(&format!(
+                    "return ({dyn_ty}) {{ .is_array = false, .data.scalar = __ret }};"
+                ));
+            }
+
+            self.indent -= 1;
+            self.push_line("}");
         }
+
+        self.push_line(&format!(
+            "fprintf(stderr, \"runtime overload dispatch failed: {}\\n\");",
+            family.base_name
+        ));
+        self.push_line("abort();");
+
         self.indent -= 1;
         self.push_line("}");
-        self.push_line("");
     }
 
-    fn emit_trait_shims_for_program<'ast>(&mut self, program: &Program<'ast, TypedAst>) {
-        for fundef in program.functions.values() {
-            for stmt in &fundef.body {
-                self.emit_trait_shims_for_stmt(stmt, &fundef.args);
-            }
-        }
-    }
-
-    fn emit_trait_shims_for_stmt<'ast>(&mut self, stmt: &Stmt<'ast, TypedAst>, args: &[Farg]) {
-        match stmt {
-            Stmt::Assign(n) => self.emit_trait_shims_for_expr(n.expr, args),
-            Stmt::Return(_) => { },
-        }
-    }
-
-    fn emit_trait_shims_for_expr<'ast>(&mut self, expr: &Expr<'ast, TypedAst>, args: &[Farg]) {
-        match expr {
-            Expr::Call(call) => {
-                if let CallTarget::TraitMethod { trait_name, method_name } = &call.id {
-                    let arg_types = call.args.iter().map(|id| type_of_id_in_context(id, args)).collect::<Vec<_>>();
-                    self.emit_trait_shim(&trait_name, &method_name, &arg_types);
-                }
-            }
-            Expr::Tensor(t) => {
-                for stmt in &t.body {
-                    self.emit_trait_shims_for_stmt(stmt, args);
-                }
-            }
-            _ => {}
-        }
-    }
 }
 
 impl<'ast> Visit<'ast> for CompileC {
     type Ast = TypedAst;
 
     fn visit_program(&mut self, program: &Program<'ast, TypedAst>) {
-        self.impls = program.impls.clone();
-        self.emitted_trait_shims.clear();
-        self.output.push_str(&format!("#include \"{}.h\"\n\n", self.stem));
+        self.output.push_str(&format!("#include \"{}.h\"\n", self.stem));
+        self.output.push_str("#include <stdio.h>\n\n");
+        self.output.push_str("#include <string.h>\n\n");
         self.output.push_str("static size_t imp_flat_index(ImpArrayRaw arr, ImpArrayRaw idx) {\n");
         self.output.push_str("    size_t flat = 0;\n");
         self.output.push_str("    size_t *idx_data = (size_t *)idx.data;\n");
@@ -202,11 +198,35 @@ impl<'ast> Visit<'ast> for CompileC {
         self.output.push_str("    }\n");
         self.output.push_str("    return flat;\n");
         self.output.push_str("}\n\n");
+        self.output.push_str("static ImpArrayRaw imp_clone_array_raw(ImpArrayRaw src, size_t elem_size) {\n");
+        self.output.push_str("    size_t *shp = src.dim == 0 ? NULL : (size_t *)malloc(src.dim * sizeof(size_t));\n");
+        self.output.push_str("    if (src.dim > 0) { memcpy(shp, src.shp, src.dim * sizeof(size_t)); }\n");
+        self.output.push_str("    void *data = src.len == 0 ? NULL : malloc(src.len * elem_size);\n");
+        self.output.push_str("    if (src.len > 0) { memcpy(data, src.data, src.len * elem_size); }\n");
+        self.output.push_str("    return (ImpArrayRaw) { .len = src.len, .dim = src.dim, .shp = shp, .data = data };\n");
+        self.output.push_str("}\n\n");
 
-        self.emit_trait_shims_for_program(program);
+        let mut func_names: Vec<&str> = program.functions.keys().map(String::as_str).collect();
+        func_names.sort();
+        let wrapper_families = collect_wrapper_families(program);
 
-        for fundef in program.functions.values() {
+        for name in &func_names {
+            let fundef = &program.functions[*name];
+            self.emit_function_prototype(fundef);
+        }
+        for family in &wrapper_families {
+            self.emit_wrapper_prototype(family);
+        }
+        self.output.push('\n');
+
+        for name in &func_names {
+            let fundef = &program.functions[*name];
             self.visit_fundef(fundef);
+            self.output.push('\n');
+        }
+
+        for family in &wrapper_families {
+            self.emit_wrapper_function(family);
             self.output.push('\n');
         }
     }
@@ -214,6 +234,7 @@ impl<'ast> Visit<'ast> for CompileC {
     fn visit_fundef(&mut self, fundef: &Fundef<'ast, TypedAst>) {
         self.arg_names = fundef.args.iter().map(|arg| arg.id.clone()).collect();
         self.arg_types = fundef.args.iter().map(|arg| arg.ty.clone()).collect();
+        self.ret_type = Some(fundef.ret_type.clone());
         let args: Vec<String> = fundef.args.iter()
             .map(|arg| format!("{} {}", full_ctype(&arg.ty), arg.id))
             .collect();
@@ -224,12 +245,16 @@ impl<'ast> Visit<'ast> for CompileC {
         ));
 
         self.indent += 1;
+        for arg in &fundef.args {
+            self.push_line(&format!("(void){};", arg.id));
+        }
         for stmt in &fundef.body {
             self.visit_stmt(stmt);
         }
         self.indent -= 1;
 
         self.push_line("}");
+        self.ret_type = None;
     }
 
     fn visit_assign(&mut self, assign: &Assign<'ast, Self::Ast>) {
@@ -253,7 +278,54 @@ impl<'ast> Visit<'ast> for CompileC {
 
     fn visit_return(&mut self, ret: &Return<'ast, Self::Ast>) {
         let name = self.render_expr(&Expr::Id(ret.id));
-        self.push_line(&format!("return {};", name));
+        let declared_ty = self.ret_type.clone().unwrap_or_else(|| self.id_type(&ret.id));
+        let value_ty = self.id_type(&ret.id);
+
+        if matches!(declared_ty.shape, TypePattern::Any) {
+            let dyn_ty = dyn_ctype(&declared_ty.ty);
+            self.push_line(&format!("if ({name}.is_array) {{"));
+            self.indent += 1;
+            self.push_line(&format!("{dyn_ty} out = {name};"));
+            self.push_line(&format!(
+                "out.data.array = imp_clone_array_raw({name}.data.array, sizeof({}));",
+                base_ctype(&declared_ty)
+            ));
+            self.push_line("return out;");
+            self.indent -= 1;
+            self.push_line("}");
+            self.push_line(&format!("return {};", name));
+        } else if declared_ty.is_array() {
+            if matches!(value_ty.shape, TypePattern::Any) {
+                self.push_line(&format!("if (!{name}.is_array) {{"));
+                self.indent += 1;
+                self.push_line("fprintf(stderr, \"return type mismatch: expected array\\n\");");
+                self.push_line("abort();");
+                self.indent -= 1;
+                self.push_line("}");
+                self.push_line(&format!(
+                    "return imp_clone_array_raw({name}.data.array, sizeof({}));",
+                    base_ctype(&declared_ty)
+                ));
+            } else {
+                self.push_line(&format!(
+                    "return imp_clone_array_raw({}, sizeof({}));",
+                    name,
+                    base_ctype(&declared_ty)
+                ));
+            }
+        } else {
+            if matches!(value_ty.shape, TypePattern::Any) {
+                self.push_line(&format!("if ({name}.is_array) {{"));
+                self.indent += 1;
+                self.push_line("fprintf(stderr, \"return type mismatch: expected scalar\\n\");");
+                self.push_line("abort();");
+                self.indent -= 1;
+                self.push_line("}");
+                self.push_line(&format!("return {name}.data.scalar;"));
+            } else {
+                self.push_line(&format!("return {};", name));
+            }
+        }
     }
 
     fn visit_expr(&mut self, expr: &Expr<'ast, Self::Ast>) {
@@ -389,18 +461,12 @@ impl<'ast> Visit<'ast> for CompileC {
     }
 
     fn visit_call(&mut self, call: &Call<'ast, TypedAst>) {
-        if let CallTarget::TraitMethod { trait_name, method_name } = &call.id {
-            let args: Vec<String> = call.args.iter()
-                .map(|arg| self.render_expr(&Expr::Id(*arg)))
-                .collect();
-            let arg_types: Vec<Type> = call.args.iter().map(|id| self.id_type(id)).collect();
-            let shim_name = self.trait_shim_name(&trait_name, &method_name, &arg_types);
-            let rendered = format!("IMP_{}({})", shim_name, args.join(", "));
-            self.expr_stack.push(rendered);
-            return;
-        }
-
-        let base_name = TypedAst::dispatch_name(&call.id);
+        let (target_base_name, target_symbol) = match &call.id {
+            CallTarget::Function(f) => (
+                f.name.clone(),
+                rename_fundefs::mangle_fundef_name(&f.name, &f.args),
+            ),
+        };
         let arg_types: Vec<Type> = call.args.iter().map(|id| match id {
             Id::Arg(i) => self.arg_types[*i].clone(),
             Id::Var(v) => v.ty.clone(),
@@ -411,7 +477,19 @@ impl<'ast> Visit<'ast> for CompileC {
                 shape: TypePattern::Axes(vec![AxisPattern::Dim(DimPattern::Any)]),
             },
         }).collect();
-        let name = rename_fundefs::mangle_call_name(&base_name, &arg_types);
+
+        let needs_runtime_wrapper = arg_types.iter().any(|t| matches!(t.shape, TypePattern::Any));
+        let name = if needs_runtime_wrapper {
+            let root = target_base_name.split("__").next().unwrap_or(&target_base_name);
+            let any_types: Vec<Type> = arg_types
+                .iter()
+                .map(|t| Type { ty: t.ty.clone(), shape: TypePattern::Any })
+                .collect();
+            rename_fundefs::mangle_call_name(root, &any_types)
+        } else {
+            target_symbol
+        };
+
         let args: Vec<String> = call.args.iter()
             .map(|arg| self.render_expr(&Expr::Id(*arg)))
             .collect();
@@ -420,73 +498,28 @@ impl<'ast> Visit<'ast> for CompileC {
 
     fn visit_prf_call(&mut self, prf_call: &PrfCall<'ast, TypedAst>) {
         use PrfCall::*;
-        match prf_call {
-            AddSxS(a, b) => {
-                self.visit_id(a);
-                self.output.push_str(" + ");
-                self.visit_id(b);
-            },
-            SubSxS(a, b) => {
-                self.visit_id(a);
-                self.output.push_str(" - ");
-                self.visit_id(b);
-            },
-            MulSxS(a, b) => {
-                self.visit_id(a);
-                self.output.push_str(" * ");
-                self.visit_id(b);
-            },
-            DivSxS(a, b) => {
-                self.visit_id(a);
-                self.output.push_str(" / ");
-                self.visit_id(b);
-            },
-            LtSxS(a, b) => {
-                self.visit_id(a);
-                self.output.push_str(" < ");
-                self.visit_id(b);
-            },
-            LeSxS(a, b) => {
-                self.visit_id(a);
-                self.output.push_str(" <= ");
-                self.visit_id(b);
-            },
-            GtSxS(a, b) => {
-                self.visit_id(a);
-                self.output.push_str(" > ");
-                self.visit_id(b);
-            },
-            GeSxS(a, b) => {
-                self.visit_id(a);
-                self.output.push_str(" >= ");
-                self.visit_id(b);
-            },
-            EqSxS(a, b) => {
-                self.visit_id(a);
-                self.output.push_str(" == ");
-                self.visit_id(b);
-            },
-            NeSxS(a, b) => {
-                self.visit_id(a);
-                self.output.push_str(" != ");
-                self.visit_id(b);
-            },
-            NegS(a) => {
-                self.output.push_str("-");
-                self.visit_id(a);
-            },
-            NotS(a) => {
-                self.output.push_str("!");
-                self.visit_id(a);
-            },
+        let rendered = match prf_call {
+            AddSxS(a, b) => format!("{} + {}", self.render_expr(&Expr::Id(*a)), self.render_expr(&Expr::Id(*b))),
+            SubSxS(a, b) => format!("{} - {}", self.render_expr(&Expr::Id(*a)), self.render_expr(&Expr::Id(*b))),
+            MulSxS(a, b) => format!("{} * {}", self.render_expr(&Expr::Id(*a)), self.render_expr(&Expr::Id(*b))),
+            DivSxS(a, b) => format!("{} / {}", self.render_expr(&Expr::Id(*a)), self.render_expr(&Expr::Id(*b))),
+            LtSxS(a, b) => format!("{} < {}", self.render_expr(&Expr::Id(*a)), self.render_expr(&Expr::Id(*b))),
+            LeSxS(a, b) => format!("{} <= {}", self.render_expr(&Expr::Id(*a)), self.render_expr(&Expr::Id(*b))),
+            GtSxS(a, b) => format!("{} > {}", self.render_expr(&Expr::Id(*a)), self.render_expr(&Expr::Id(*b))),
+            GeSxS(a, b) => format!("{} >= {}", self.render_expr(&Expr::Id(*a)), self.render_expr(&Expr::Id(*b))),
+            EqSxS(a, b) => format!("{} == {}", self.render_expr(&Expr::Id(*a)), self.render_expr(&Expr::Id(*b))),
+            NeSxS(a, b) => format!("{} != {}", self.render_expr(&Expr::Id(*a)), self.render_expr(&Expr::Id(*b))),
+            NegS(a) => format!("-{}", self.render_expr(&Expr::Id(*a))),
+            NotS(a) => format!("!{}", self.render_expr(&Expr::Id(*a))),
             SelVxA(idx, arr) => {
-                let arr_name = self.nameof(arr);
-                let idx_name = self.nameof(idx);
+                let arr_name = self.render_expr(&Expr::Id(*arr));
+                let idx_name = self.render_expr(&Expr::Id(*idx));
                 let elem_base = elem_ctype_of_id(arr);
                 let flat_fn = flat_index_fn_of_id(idx);
-                self.output.push_str(&format!("(({elem_base} *){arr_name}.data)[{flat_fn}({arr_name}, {idx_name})]"))
+                format!("(({elem_base} *){arr_name}.data)[{flat_fn}({arr_name}, {idx_name})]")
             }
         };
+        self.expr_stack.push(rendered);
     }
 
     fn visit_id(&mut self, id: &Id<'ast, Self::Ast>) {
@@ -573,6 +606,100 @@ fn full_ctype(ty: &Type) -> String {
     }
 }
 
+fn dyn_ctype(base: &BaseType) -> String {
+    full_ctype(&Type {
+        ty: base.clone(),
+        shape: TypePattern::Any,
+    })
+}
+
+fn supports_dyn_base(base: &BaseType) -> bool {
+    matches!(base, BaseType::U32 | BaseType::Usize | BaseType::Bool)
+}
+
+fn collect_wrapper_families(program: &Program<'_, TypedAst>) -> Vec<WrapperFamily> {
+    let mut grouped: HashMap<(String, usize, Vec<BaseType>), Vec<WrapperCase>> = HashMap::new();
+
+    let mut names: Vec<&str> = program.functions.keys().map(String::as_str).collect();
+    names.sort();
+    for name in names {
+        let fundef = &program.functions[name];
+        let Some((base_name, _)) = fundef.name.split_once("__") else {
+            continue;
+        };
+
+        let arg_bases: Vec<BaseType> = fundef.args.iter().map(|a| a.ty.ty.clone()).collect();
+        let key = (base_name.to_owned(), fundef.args.len(), arg_bases);
+        grouped.entry(key).or_default().push(WrapperCase {
+            name: fundef.name.clone(),
+            args: fundef.args.iter().map(|a| a.ty.clone()).collect(),
+            ret_type: fundef.ret_type.clone(),
+        });
+    }
+
+    let mut families = Vec::new();
+    for ((base_name, _arity, arg_bases), mut overloads) in grouped {
+        if overloads.len() < 2 {
+            continue;
+        }
+
+        let ret_base = overloads[0].ret_type.ty.clone();
+        if !supports_dyn_base(&ret_base) || arg_bases.iter().any(|b| !supports_dyn_base(b)) {
+            continue;
+        }
+
+        overloads.sort_by(|a, b| a.name.cmp(&b.name));
+        let any_types: Vec<Type> = arg_bases
+            .iter()
+            .cloned()
+            .map(|ty| Type { ty, shape: TypePattern::Any })
+            .collect();
+        let wrapper_name = rename_fundefs::mangle_call_name(&base_name, &any_types);
+
+        families.push(WrapperFamily {
+            wrapper_name,
+            base_name,
+            arg_bases,
+            ret_base,
+            overloads,
+        });
+    }
+
+    families.sort_by(|a, b| a.wrapper_name.cmp(&b.wrapper_name));
+    families
+}
+
+fn shape_match_condition(shape: &TypePattern, arg: &str) -> String {
+    match shape {
+        TypePattern::Scalar => format!("!{arg}.is_array"),
+        TypePattern::Any => "1".to_owned(),
+        TypePattern::Axes(axes) => {
+            if axes.iter().any(|ax| matches!(ax, AxisPattern::Rank(_))) {
+                return format!("{arg}.is_array");
+            }
+
+            let mut checks = vec![
+                format!("{arg}.is_array"),
+                format!("{arg}.data.array.dim == {}", axes.len()),
+            ];
+            for (i, axis) in axes.iter().enumerate() {
+                if let AxisPattern::Dim(DimPattern::Known(v)) = axis {
+                    checks.push(format!("{arg}.data.array.shp[{i}] == {v}"));
+                }
+            }
+            checks.join(" && ")
+        }
+    }
+}
+
+fn wrapper_call_arg(shape: &TypePattern, arg: &str) -> String {
+    match shape {
+        TypePattern::Scalar => format!("{arg}.data.scalar"),
+        TypePattern::Any => arg.to_owned(),
+        TypePattern::Axes(_) => format!("{arg}.data.array"),
+    }
+}
+
 /// The C element type for the data pointer stored inside an ImpArrayRaw id.
 fn elem_ctype_of_id(id: &Id<'_, TypedAst>) -> String {
     match id {
@@ -598,15 +725,4 @@ fn id_base_type(id: &Id<'_, TypedAst>) -> BaseType {
     }
 }
 
-fn type_of_id_in_context(id: &Id<'_, TypedAst>, args: &[Farg]) -> Type {
-    match id {
-        Id::Arg(i) => args[*i].ty.clone(),
-        Id::Var(v) => v.ty.clone(),
-        Id::Dim(_) | Id::DimAt(_, _) => Type::scalar(BaseType::Usize),
-        Id::Shp(_) => Type {
-            ty: BaseType::Usize,
-            shape: TypePattern::Axes(vec![AxisPattern::Dim(DimPattern::Any)]),
-        },
-    }
-}
 

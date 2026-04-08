@@ -68,15 +68,15 @@ We get rid of the trait-based method entirely.
 Using overloading instead, it may look as:
 
 ```imp
-fn +(i32 a, i32 b) -> i32 {
+fn @add(i32 a, i32 b) -> i32 {
     return @addSxS(a, b);
 }
 
-fn +(i32[d:shp] a, i32 b) -> i32[d:shp] {
+fn @add(i32[d:shp] a, i32 b) -> i32[d:shp] {
     return { @addSxS(@selVxA(iv, a), b) | iv < shp };
 }
 
-fn +(f32 a, complex32 b) -> complex32 b {
+fn @add(f32 a, complex32 b) -> complex32 b {
     // User-defined types are not supported yet, this is just to highlight the idea
     return b
 }
@@ -185,13 +185,13 @@ This is an additional check we could add later without having to change other pa
 Overloads may also 'diverge', which is immediately obvious for the addition cases.
 
 ```imp
-fn +(i32 a, i32 b) -> i32 { ... } // (1)
+fn @add(i32 a, i32 b) -> i32 { ... } // (1)
 
-fn +(i32[d>0:shp] a, i32 b) -> i32[d>0:shp] { ... } // (2)
+fn @add(i32[d>0:shp] a, i32 b) -> i32[d>0:shp] { ... } // (2)
 
-fn +(i32 a, i32[d>0:shp] b) -> i32[d>0:shp] { ... } // (3)
+fn @add(i32 a, i32[d>0:shp] b) -> i32[d>0:shp] { ... } // (3)
 
-fn +(i32[d>0:shp] a, i32[d>0:shp] b) -> i32[d>0:shp] { ... } // (4)
+fn @add(i32[d>0:shp] a, i32[d>0:shp] b) -> i32[d>0:shp] { ... } // (4)
 ```
 
 As for the 'order' of these overloads, we have:

@@ -13,12 +13,12 @@ pub(super) enum Bop {
 impl Bop {
     pub(super) fn symbol(self) -> &'static str {
         match self {
-            Bop::Add => "+",
-            Bop::Sub => "-",
-            Bop::Mul => "*",
-            Bop::Div => "/",
-            Bop::Eq => "==",
-            Bop::Ne => "!=",
+            Bop::Add => "@add",
+            Bop::Sub => "@sub",
+            Bop::Mul => "@mul",
+            Bop::Div => "@div",
+            Bop::Eq => "@eq",
+            Bop::Ne => "@ne",
         }
     }
 }
@@ -48,8 +48,8 @@ pub(super) enum Uop {
 impl Uop {
     pub(super) fn symbol(self) -> &'static str {
         match self {
-            Uop::Neg => "-",
-            Uop::Not => "!",
+            Uop::Neg => "@neg",
+            Uop::Not => "@not",
         }
     }
 }

@@ -1,8 +1,6 @@
 // Declarations
 mod program;
 mod fundef;
-mod traitdef;
-mod impldef;
 // Statements
 mod stmt;
 mod assign;
@@ -22,8 +20,6 @@ mod typ;
 // Declarations
 pub use program::*;
 pub use fundef::*;
-pub use traitdef::*;
-pub use impldef::*;
 // Statements
 pub use stmt::*;
 pub use assign::*;

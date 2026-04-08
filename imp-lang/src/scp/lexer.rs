@@ -31,11 +31,6 @@ pub enum Token {
     Public,
     Fn,
     Return,
-    Trait,
-    Typeset,
-    Member,
-    Impl,
-    Where,
     // Arithmetic operators
     Add, Sub, Mul, Div,
     // Comparison operators
@@ -190,16 +185,6 @@ impl<'source> Iterator for Lexer<'source> {
             Fn
         } else if self.match_str("return") {
             Return
-        } else if self.match_str("trait") {
-            Trait
-        } else if self.match_str("typeset") {
-            Typeset
-        } else if self.match_str("member") {
-            Member
-        } else if self.match_str("impl") {
-            Impl
-        } else if self.match_str("where") {
-            Where
         } else {
             match self.next_char()? {
                 // Symbols
