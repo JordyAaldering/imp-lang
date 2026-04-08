@@ -102,7 +102,7 @@ impl<'ast> Traverse<'ast> for ToSsa<'ast> {
     }
 
     fn trav_assign(&mut self, assign: Assign<'ast, Self::InAst>) -> Assign<'ast, Self::OutAst> {
-        let old_name = assign.lvis.name.clone();
+        let old_name = assign.lhs.name.clone();
         let new_name = self.fresh_uid();
 
         let expr = self.trav_expr((*assign.expr).clone());
@@ -111,7 +111,7 @@ impl<'ast> Traverse<'ast> for ToSsa<'ast> {
         self.bind_env(old_name, Id::Var(lvis));
         self.decs.push(lvis);
 
-        Assign { lvis, expr }
+        Assign { lhs: lvis, expr }
     }
 
     fn trav_return(&mut self, ret: Return<'ast, Self::InAst>) -> Return<'ast, Self::OutAst> {
@@ -190,11 +190,11 @@ impl<'ast> Traverse<'ast> for ToSsa<'ast> {
     }
 
     fn trav_array(&mut self, array: Array<'ast, Self::InAst>) -> Self::ArrayOut {
-        let mut values = Vec::with_capacity(array.values.len());
-        for value in array.values {
+        let mut values = Vec::with_capacity(array.elems.len());
+        for value in array.elems {
             values.push(self.trav_id(value));
         }
-        Array { values }
+        Array { elems: values }
     }
 
     fn trav_id(&mut self, id: Id<'ast, Self::InAst>) -> Id<'ast, Self::OutAst> {

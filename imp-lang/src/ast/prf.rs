@@ -1,6 +1,8 @@
 use super::*;
 
 /// Primitive function call
+///
+/// TODO: make this an enum, with the args as enum fields
 #[derive(Clone, Debug)]
 pub struct PrfCall<'ast, Ast: AstConfig> {
     pub id: Prf,

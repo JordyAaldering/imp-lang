@@ -38,7 +38,7 @@ impl<'ast> Rewrite<'ast> for DeadCodeRemoval {
                     kept_rev.push(Stmt::Return(ret));
                 }
                 Stmt::Assign(mut assign) => {
-                    if self.used.contains(&Self::ptr(assign.lvis)) {
+                    if self.used.contains(&Self::ptr(assign.lhs)) {
                         self.rewrite_assign(&mut assign);
                         kept_rev.push(Stmt::Assign(assign));
                     }
@@ -81,7 +81,7 @@ impl<'ast> Rewrite<'ast> for DeadCodeRemoval {
                     kept_rev.push(Stmt::Return(ret));
                 }
                 Stmt::Assign(mut assign) => {
-                    if self.used.contains(&Self::ptr(assign.lvis)) {
+                    if self.used.contains(&Self::ptr(assign.lhs)) {
                         self.rewrite_assign(&mut assign);
                         kept_rev.push(Stmt::Assign(assign));
                     }
@@ -98,7 +98,7 @@ impl<'ast> Rewrite<'ast> for DeadCodeRemoval {
     }
 
     fn rewrite_array(&mut self, mut array: Array<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
-        for value in &mut array.values {
+        for value in &mut array.elems {
             *value = self.rewrite_id(*value);
         }
         Expr::Array(array)

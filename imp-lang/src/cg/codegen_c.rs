@@ -186,7 +186,7 @@ impl CompileC {
                 }
                 if let CallTarget::TraitMethod { trait_name, method_name } = &call.id {
                     let arg_types = call.args.iter().map(|id| type_of_id_in_context(id, args)).collect::<Vec<_>>();
-                    self.emit_trait_shim(trait_name, method_name, &arg_types);
+                    self.emit_trait_shim(&trait_name, &method_name, &arg_types);
                 }
             }
             Expr::PrfCall(prf) => {
@@ -203,7 +203,7 @@ impl CompileC {
                 self.emit_trait_shims_for_id(&t.ret, args);
             }
             Expr::Array(a) => {
-                for id in &a.values {
+                for id in &a.elems {
                     self.emit_trait_shims_for_id(id, args);
                 }
             }
@@ -269,21 +269,21 @@ impl<'ast> Visit<'ast> for CompileC {
 
     fn visit_assign(&mut self, assign: &Assign<'ast, Self::Ast>) {
         if let Expr::Tensor(tensor) = assign.expr {
-            self.lhs_target = Some((assign.lvis.name.clone(), assign.lvis.ty.clone()));
+            self.lhs_target = Some((assign.lhs.name.clone(), assign.lhs.ty.clone()));
             self.visit_tensor(tensor);
             self.lhs_target = None;
             return;
         }
 
         if let Expr::Array(array) = assign.expr {
-            self.lhs_target = Some((assign.lvis.name.clone(), assign.lvis.ty.clone()));
+            self.lhs_target = Some((assign.lhs.name.clone(), assign.lhs.ty.clone()));
             self.visit_array(array);
             self.lhs_target = None;
             return;
         }
 
         let rhs = self.render_expr(assign.expr);
-        self.push_line(&format!("{} {} = {};", full_ctype(&assign.lvis.ty), assign.lvis.name, rhs));
+        self.push_line(&format!("{} {} = {};", full_ctype(&assign.lhs.ty), assign.lhs.name, rhs));
     }
 
     fn visit_return(&mut self, ret: &Return<'ast, Self::Ast>) {
@@ -441,10 +441,10 @@ impl<'ast> Visit<'ast> for CompileC {
         let len_name = format!("{}_len", target_name);
         let base = base_ctype(&target_ty);
 
-        self.push_line(&format!("size_t {} = {};", len_name, array.values.len()));
+        self.push_line(&format!("size_t {} = {};", len_name, array.elems.len()));
         self.push_line(&format!("{} *{} = ({} *)malloc({} * sizeof({}));", base, data_name, base, len_name, base));
 
-        for (i, value) in array.values.iter().enumerate() {
+        for (i, value) in array.elems.iter().enumerate() {
             let rendered = self.render_expr(&Expr::Id(*value));
             self.push_line(&format!("{}[{}] = {};", data_name, i, rendered));
         }
@@ -463,7 +463,7 @@ impl<'ast> Visit<'ast> for CompileC {
                 .map(|arg| self.render_expr(&Expr::Id(*arg)))
                 .collect();
             let arg_types: Vec<Type> = call.args.iter().map(|id| self.id_type(id)).collect();
-            let shim_name = self.trait_shim_name(trait_name, method_name, &arg_types);
+            let shim_name = self.trait_shim_name(&trait_name, &method_name, &arg_types);
             let rendered = format!("IMP_{}({})", shim_name, args.join(", "));
             self.expr_stack.push(rendered);
             return;

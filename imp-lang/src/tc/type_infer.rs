@@ -310,8 +310,8 @@ impl<'ast> TypeInfer<'ast> {
             _ => return None,
         };
 
-        let mut axes = Vec::with_capacity(arr.values.len());
-        for elem in &arr.values {
+        let mut axes = Vec::with_capacity(arr.elems.len());
+        for elem in &arr.elems {
             let dp = match elem {
                 Id::Arg(i) => DimPattern::Var(ExtentVar {
                     name: self.args[*i].name.clone(),
@@ -477,10 +477,10 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
     fn trav_assign(&mut self, assign: Assign<'ast, Self::InAst>) -> Assign<'ast, Self::OutAst> {
         let (new_expr, new_ty) = self.trav_expr((*assign.expr).clone());
         let expr_ref = self.alloc_expr(new_expr);
-        let new_lvis = self.alloc_lvis(assign.lvis.name.clone(), new_ty, Some(expr_ref));
-        self.idmap.insert(assign.lvis as *const _, new_lvis);
+        let new_lvis = self.alloc_lvis(assign.lhs.name.clone(), new_ty, Some(expr_ref));
+        self.idmap.insert(assign.lhs as *const _, new_lvis);
         self.new_ids.push(new_lvis);
-        Assign { lvis: new_lvis, expr: expr_ref }
+        Assign { lhs: new_lvis, expr: expr_ref }
     }
 
     fn trav_return(&mut self, ret: Return<'ast, Self::InAst>) -> Return<'ast, Self::OutAst> {
@@ -731,17 +731,17 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
     type ArrayOut = (Array<'ast, Self::OutAst>, Type);
 
     fn trav_array(&mut self, array: Array<'ast, Self::InAst>) -> Self::ArrayOut {
-        let mut values = Vec::with_capacity(array.values.len());
-        let mut elem_types = Vec::with_capacity(array.values.len());
+        let mut values = Vec::with_capacity(array.elems.len());
+        let mut elem_types = Vec::with_capacity(array.elems.len());
 
-        for value in array.values {
+        for value in array.elems {
             let (value, ty) = self.trav_id(value);
             elem_types.push(ty);
             values.push(value);
         }
 
         let ty = self.array_literal_type(elem_types);
-        (Array { values }, ty)
+        (Array { elems: values }, ty)
     }
 
     // Terminals

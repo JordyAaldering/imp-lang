@@ -185,8 +185,8 @@ impl<'src> Parser<'src> {
             Token::Identifier(lhs) => {
                 self.expect(Token::Assign)?;
                 let expr = self.parse_expr(None::<Bop>)?;
-                let lvis = self.alloc_lvis(lhs, None);
-                vec![Stmt::Assign(Assign { lvis, expr })]
+                let lhs = self.alloc_lvis(lhs, None);
+                vec![Stmt::Assign(Assign { lhs, expr })]
             }
             Token::Return => {
                 let expr = self.parse_expr(None::<Bop>)?;
@@ -196,7 +196,7 @@ impl<'src> Parser<'src> {
                         let ret_name = self.fresh_uid();
                         let ret_lvis = self.alloc_lvis(ret_name.clone(), None);
                         vec![
-                            Stmt::Assign(Assign { lvis: ret_lvis, expr }),
+                            Stmt::Assign(Assign { lhs: ret_lvis, expr }),
                             Stmt::Return(Return {
                                 id: Id::Var(ret_name),
                             }),
@@ -427,14 +427,14 @@ impl<'src> Parser<'src> {
             let (param, _) = self.parse_id()?;
             if self.matches(Token::Colon).is_some() {
                 let (type_set, _) = self.parse_id()?;
-                where_bounds.push(WhereBound::Member(MemberBound { type_var: param.clone(), type_set }));
+                where_bounds.push(MemberBound { type_var: param.clone(), type_set });
             }
             type_params.push(param);
             while self.matches(Token::Comma).is_some() {
                 let (param, _) = self.parse_id()?;
                 if self.matches(Token::Colon).is_some() {
                     let (type_set, _) = self.parse_id()?;
-                    where_bounds.push(WhereBound::Member(MemberBound { type_var: param.clone(), type_set }));
+                    where_bounds.push(MemberBound { type_var: param.clone(), type_set });
                 }
                 type_params.push(param);
             }
@@ -612,7 +612,7 @@ impl<'src> Parser<'src> {
             self.expect(Token::RSquare)?;
         }
 
-        Ok(self.alloc_expr(Expr::Array(Array { values })))
+        Ok(self.alloc_expr(Expr::Array(Array { elems: values })))
     }
 
     // TODO: as with binary operators, this should assume that a trait Sel is defined.

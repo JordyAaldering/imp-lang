@@ -100,7 +100,7 @@ pub trait Visit<'ast> {
     }
 
     fn visit_array(&mut self, array: &Array<'ast, Self::Ast>) {
-        for value in &array.values {
+        for value in &array.elems {
             Self::Ast::visit_operand(self, value);
         }
     }

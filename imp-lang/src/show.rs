@@ -30,16 +30,6 @@ impl<'ast, Ast: AstConfig> Show<'ast, Ast> {
     fn indent(&mut self) {
         self.output.push_str(&" ".repeat(4 * self.depth));
     }
-
-    fn write_where_bound(&mut self, bound: &WhereBound) {
-        match bound {
-            WhereBound::Member(b) => {
-                self.write(&b.type_var);
-                self.write(": ");
-                self.write(&b.type_set);
-            }
-        }
-    }
 }
 
 impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
@@ -94,9 +84,11 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
                 for (i, param) in impl_def.type_params.iter().enumerate() {
                     if i > 0 { self.write(", "); }
                     if let Some(bound) = impl_def.where_bounds.iter().find(|b| {
-                        matches!(b, WhereBound::Member(m) if m.type_var == *param)
+                        matches!(b, m if m.type_var == *param)
                     }) {
-                        self.write_where_bound(bound);
+                        self.write(&bound.type_var);
+                        self.write(": ");
+                        self.write(&bound.type_set);
                     } else {
                         self.write(param);
                     }
@@ -180,7 +172,7 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
 
     fn visit_assign(&mut self, assign: &Assign<'ast, Self::Ast>) {
         self.indent();
-        self.write(&assign.lvis.name);
+        self.write(&assign.lhs.name);
         self.write(" = ");
         self.visit_expr(assign.expr);
     }
@@ -258,7 +250,7 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
 
     fn visit_array(&mut self, array: &Array<'ast, Self::Ast>) {
         self.write("[");
-        for v in &array.values {
+        for v in &array.elems {
             Ast::visit_operand(self, v);
             self.write(", ");
         }

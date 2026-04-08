@@ -72,7 +72,7 @@ impl<'ast> Flatten<'ast> {
         let lvis = self.alloc_lvis(name.clone(), None);
         let expr = self.alloc_expr(expr);
 
-        self.new_assigns.push(Stmt::Assign(Assign { lvis, expr }));
+        self.new_assigns.push(Stmt::Assign(Assign { lhs: lvis, expr }));
 
         let id = Id::Var(name.clone());
         self.bind_env(name, id.clone());
@@ -127,13 +127,13 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
 
     fn trav_assign(&mut self, assign: Assign<'ast, Self::InAst>) -> Assign<'ast, Self::OutAst> {
         let rhs = self.trav_expr((*assign.expr).clone());
-        let lhs_name = assign.lvis.name.clone();
-        let lhs_lvis = self.alloc_lvis(lhs_name.clone(), assign.lvis.ty.clone());
+        let lhs_name = assign.lhs.name.clone();
+        let lhs_lvis = self.alloc_lvis(lhs_name.clone(), assign.lhs.ty.clone());
         let rhs_expr = self.alloc_expr(Expr::Id(rhs));
 
         self.bind_env(lhs_name.clone(), Id::Var(lhs_name));
 
-        Assign { lvis: lhs_lvis, expr: rhs_expr }
+        Assign { lhs: lhs_lvis, expr: rhs_expr }
     }
 
     fn trav_return(&mut self, ret: Return<'ast, Self::InAst>) -> Return<'ast, Self::OutAst> {
@@ -208,11 +208,11 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
     }
 
     fn trav_array(&mut self, array: Array<'ast, Self::InAst>) -> Self::ArrayOut {
-        let mut values = Vec::with_capacity(array.values.len());
-        for value in array.values {
+        let mut values = Vec::with_capacity(array.elems.len());
+        for value in array.elems {
             values.push(self.trav_expr(value.clone()));
         }
-        Array { values }
+        Array { elems: values }
     }
 
     fn trav_id(&mut self, id: Id<'ast, Self::InAst>) -> Self::IdOut {

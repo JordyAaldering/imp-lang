@@ -46,11 +46,11 @@ impl<'ast> Rewrite<'ast> for ConstantFold {
 
         match &new_expr {
             Expr::U32(v) => {
-                self.known.insert(Self::ptr(assign.lvis), *v);
+                self.known.insert(Self::ptr(assign.lhs), *v);
                 assign.expr = Box::leak(Box::new(new_expr));
             }
             _ => {
-                debug_assert!(!self.known.contains_key(&Self::ptr(assign.lvis)));
+                debug_assert!(!self.known.contains_key(&Self::ptr(assign.lhs)));
             }
         }
     }

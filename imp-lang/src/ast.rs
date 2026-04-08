@@ -2,13 +2,14 @@
 mod program;
 mod fundef;
 mod traitdef;
-mod calltarget;
+mod impldef;
 // Statements
 mod stmt;
 mod assign;
 mod ret;
 // Expressions
 mod expr;
+mod calltarget;
 mod call;
 mod prf;
 mod tensor;
@@ -21,13 +22,14 @@ mod typ;
 pub use program::*;
 pub use fundef::*;
 pub use traitdef::*;
-pub use calltarget::*;
+pub use impldef::*;
 // Statements
 pub use stmt::*;
 pub use assign::*;
 pub use ret::*;
 // Expressions
 pub use expr::*;
+pub use calltarget::*;
 pub use call::*;
 pub use prf::*;
 pub use tensor::*;
@@ -236,7 +238,7 @@ impl AstConfig for TypedAst {
     type SsaLink<'ast> = Option<&'ast Expr<'ast, TypedAst>>;
 
     /// Function dispatch target for a direct free-function call.
-    type Dispatch<'ast> = CallTarget<'ast>;
+    type Dispatch<'ast> = CallTarget<'ast, TypedAst>;
 
     type Operand<'ast> = Id<'ast, TypedAst>;
 
