@@ -126,6 +126,7 @@ impl<'ast> Traverse<'ast> for ToSsa<'ast> {
         match expr {
             Call(n) => Call(self.trav_call(n)),
             PrfCall(n) => PrfCall(self.trav_prf_call(n)),
+            Fold(n) => Fold(self.trav_fold(n)),
             Tensor(n) => Tensor(self.trav_tensor(n)),
             Array(n) => Array(self.trav_array(n)),
             Id(n) => Id(self.trav_id(n)),
@@ -248,6 +249,32 @@ impl<'ast> Traverse<'ast> for ToSsa<'ast> {
             iv: iv_lvis,
             lb,
             ub,
+        }
+    }
+
+    fn trav_fold(&mut self, fold: Fold<'ast, Self::InAst>) -> Self::FoldOut {
+        let neutral = self.trav_id(fold.neutral);
+
+        let foldfun = match fold.foldfun {
+            FoldFun::Name(id) => FoldFun::Name(id),
+            FoldFun::Apply { id, args } => {
+                let args = args
+                    .into_iter()
+                    .map(|arg| match arg {
+                        FoldFunArg::Placeholder => FoldFunArg::Placeholder,
+                        FoldFunArg::Bound(bound) => FoldFunArg::Bound(self.trav_id(bound)),
+                    })
+                    .collect();
+                FoldFun::Apply { id, args }
+            }
+        };
+
+        let selection = self.trav_tensor(fold.selection);
+
+        Fold {
+            neutral,
+            foldfun,
+            selection,
         }
     }
 

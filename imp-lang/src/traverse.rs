@@ -57,6 +57,7 @@ pub trait Visit<'ast> {
         match expr {
             Call(n) => self.visit_call(n),
             PrfCall(n) => self.visit_prf_call(n),
+            Fold(n) => self.visit_fold(n),
             Tensor(n) => self.visit_tensor(n),
             Array(n) => self.visit_array(n),
             Id(n) => self.visit_id(n),
@@ -74,6 +75,23 @@ pub trait Visit<'ast> {
         for arg in prf_call.args() {
             Self::Ast::visit_operand(self, arg);
         }
+    }
+
+    fn visit_fold(&mut self, fold: &Fold<'ast, Self::Ast>) {
+        Self::Ast::visit_operand(self, &fold.neutral);
+
+        match &fold.foldfun {
+            FoldFun::Name(_) => {}
+            FoldFun::Apply { args, .. } => {
+                for arg in args {
+                    if let FoldFunArg::Bound(bound) = arg {
+                        Self::Ast::visit_operand(self, bound);
+                    }
+                }
+            }
+        }
+
+        self.visit_tensor(&fold.selection);
     }
 
     fn visit_tensor(&mut self, tensor: &Tensor<'ast, Self::Ast>) {
@@ -158,6 +176,7 @@ pub trait Rewrite<'ast> {
         match expr {
             Call(n) => self.rewrite_call(n),
             PrfCall(n) => self.rewrite_prf_call(n),
+            Fold(n) => self.rewrite_fold(n),
             Tensor(n) => self.rewrite_tensor(n),
             Array(n) => self.rewrite_array(n),
             // Terminals
@@ -172,6 +191,10 @@ pub trait Rewrite<'ast> {
 
     fn rewrite_prf_call(&mut self, prf_call: PrfCall<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
         Expr::PrfCall(prf_call)
+    }
+
+    fn rewrite_fold(&mut self, fold: Fold<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
+        Expr::Fold(fold)
     }
 
     fn rewrite_tensor(&mut self, tensor: Tensor<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
@@ -289,6 +312,10 @@ pub trait Traverse<'ast> {
     type PrfCallOut = PrfCall<'ast, Self::OutAst>;
 
     fn trav_prf_call(&mut self, prf_call: PrfCall<'ast, Self::InAst>) -> Self::PrfCallOut;
+
+    type FoldOut = Fold<'ast, Self::OutAst>;
+
+    fn trav_fold(&mut self, fold: Fold<'ast, Self::InAst>) -> Self::FoldOut;
 
     type TensorOut = Tensor<'ast, Self::OutAst>;
 

@@ -215,6 +215,7 @@ fn rust_ffi_type(ty: &Type) -> String {
 fn rust_base_type(ty: &Type) -> String {
     use BaseType::*;
     match &ty.ty {
+        Bool => "bool".to_owned(),
         I32 => "i32".to_owned(),
         I64 => "i64".to_owned(),
         U32 => "u32".to_owned(),
@@ -222,7 +223,6 @@ fn rust_base_type(ty: &Type) -> String {
         Usize => "usize".to_owned(),
         F32 => "f32".to_owned(),
         F64 => "f64".to_owned(),
-        Bool => "bool".to_owned(),
         Udf(udf) => udf.to_owned(),
     }
 }

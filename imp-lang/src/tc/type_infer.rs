@@ -116,6 +116,17 @@ pub enum InferenceError {
         expected: BaseType,
         found: BaseType,
     },
+    FoldSelectionTypeMismatch {
+        expected: Type,
+        found: Type,
+    },
+    FoldFunPlaceholderCountMismatch {
+        found: usize,
+    },
+    FoldFunctionTypeMismatch {
+        expected: Type,
+        found: Type,
+    },
 }
 
 impl<'ast> TypeInfer<'ast> {
@@ -328,6 +339,95 @@ impl<'ast> TypeInfer<'ast> {
         }
     }
 
+    fn trav_fold_selection(&mut self, tensor: Tensor<'ast, UntypedAst>) -> (Tensor<'ast, TypedAst>, Type) {
+        let (lb, _lb_ty) = self.trav_id(tensor.lb);
+        let (ub, ub_ty) = self.trav_id(tensor.ub);
+
+        let (iv_ty, _leading_k) = Self::tensor_iv_and_dims(&ub_ty);
+        let iv_new = self.alloc_lvis(tensor.iv.name.clone(), iv_ty, None);
+        self.idmap.insert(tensor.iv as *const _, iv_new);
+        self.new_ids.push(iv_new);
+
+        let mut body = Vec::new();
+        for stmt in tensor.body {
+            body.push(self.trav_stmt(stmt));
+        }
+
+        let (ret, ret_ty) = self.trav_id(tensor.ret);
+
+        (
+            Tensor {
+                iv: iv_new,
+                lb,
+                ub,
+                ret,
+                body,
+            },
+            ret_ty,
+        )
+    }
+
+    fn resolve_dispatch(&mut self, func_name: &str, arg_types: &[Type]) -> (&'ast Fundef<'ast, TypedAst>, bool) {
+        let key = overload_key_for_call(func_name, arg_types);
+        let Some(candidates) = self.overloads.get(&key) else {
+            let function_exists = self.overloads.keys().any(|k| k.name == func_name);
+            if function_exists {
+                self.errors.push(InferenceError::NoMatchingOverload {
+                    name: func_name.to_owned(),
+                    arity: arg_types.len(),
+                    arg_bases: arg_types.iter().map(|ty| ty.ty.clone()).collect(),
+                });
+            } else {
+                self.errors.push(InferenceError::UndefinedFunction {
+                    name: func_name.to_owned(),
+                });
+            }
+
+            let stub_target = self
+                .overloads
+                .values()
+                .find_map(|family| family.first().copied())
+                .expect("at least one function must be defined");
+            return (stub_target, false);
+        };
+
+        let mut matching = Vec::new();
+        for target in candidates {
+            let mut is_match = true;
+            for (expected, provided) in target.args.iter().zip(arg_types.iter()) {
+                if !types_compatible(&expected.ty, provided) {
+                    is_match = false;
+                }
+            }
+
+            if is_match {
+                matching.push(*target);
+            }
+        }
+
+        if matching.is_empty() {
+            self.errors.push(InferenceError::NoMatchingOverload {
+                name: func_name.to_owned(),
+                arity: arg_types.len(),
+                arg_bases: arg_types.iter().map(|ty| ty.ty.clone()).collect(),
+            });
+            return (candidates[0], false);
+        }
+
+        let maximal = maximal_candidates(&matching);
+        let runtime_dispatch = maximal.len() > 1 && arg_types.iter().any(type_requires_runtime_dispatch);
+
+        if maximal.len() > 1 && !runtime_dispatch {
+            self.errors.push(InferenceError::AmbiguousOverload {
+                name: func_name.to_owned(),
+                arity: arg_types.len(),
+                arg_bases: arg_types.iter().map(|ty| ty.ty.clone()).collect(),
+            });
+        }
+
+        (maximal[0], runtime_dispatch)
+    }
+
 }
 
 impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
@@ -397,6 +497,10 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
                 let (prf_call, ty) = self.trav_prf_call(n);
                 (PrfCall(prf_call), ty)
             }
+            Fold(n) => {
+                let (fold, ty) = self.trav_fold(n);
+                (Fold(fold), ty)
+            }
             Tensor(n) => {
                 let (expr, ty) = self.trav_tensor(n);
                 (Tensor(expr), ty)
@@ -429,64 +533,7 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
             arg_types.push(ty);
         }
 
-        let key = overload_key_for_call(func_name, &arg_types);
-        let Some(candidates) = self.overloads.get(&key) else {
-            let function_exists = self.overloads.keys().any(|k| k.name == *func_name);
-            if function_exists {
-                self.errors.push(InferenceError::NoMatchingOverload {
-                    name: func_name.clone(),
-                    arity: arg_types.len(),
-                    arg_bases: arg_types.iter().map(|ty| ty.ty.clone()).collect(),
-                });
-            } else {
-                self.errors.push(InferenceError::UndefinedFunction {
-                    name: func_name.clone(),
-                });
-            }
-
-            let stub_target = self
-                .overloads
-                .values()
-                .find_map(|family| family.first().copied())
-                .expect("at least one function must be defined");
-            let stub_call = Call { id: CallTarget::Function(stub_target), args: typed_args };
-            return (stub_call, Type { ty: BaseType::I32, shape: TypePattern::Any });
-        };
-
-        let mut matching = Vec::new();
-        for target in candidates {
-            let mut is_match = true;
-            for (expected, provided) in target.args.iter().zip(arg_types.iter()) {
-                if !types_compatible(&expected.ty, provided) {
-                    is_match = false;
-                }
-            }
-
-            if is_match {
-                matching.push(*target);
-            }
-        }
-
-        let mut runtime_dispatch = false;
-        let target = if matching.is_empty() {
-            self.errors.push(InferenceError::NoMatchingOverload {
-                name: func_name.clone(),
-                arity: arg_types.len(),
-                arg_bases: arg_types.iter().map(|ty| ty.ty.clone()).collect(),
-            });
-            candidates[0]
-        } else {
-            let maximal = maximal_candidates(&matching);
-            runtime_dispatch = maximal.len() > 1 && arg_types.iter().any(type_requires_runtime_dispatch);
-            if maximal.len() > 1 && !runtime_dispatch {
-                self.errors.push(InferenceError::AmbiguousOverload {
-                    name: func_name.clone(),
-                    arity: arg_types.len(),
-                    arg_bases: arg_types.iter().map(|ty| ty.ty.clone()).collect(),
-                });
-            }
-            maximal[0]
-        };
+        let (target, runtime_dispatch) = self.resolve_dispatch(func_name, &arg_types);
         let call_ty = if runtime_dispatch {
             Type {
                 ty: target.ret_type.ty.clone(),
@@ -500,6 +547,90 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
             args: typed_args,
         };
         (typed_call, call_ty)
+    }
+
+    type FoldOut = (Fold<'ast, Self::OutAst>, Type);
+
+    fn trav_fold(&mut self, fold: Fold<'ast, Self::InAst>) -> Self::FoldOut {
+        let (neutral, neutral_ty) = self.trav_id(fold.neutral);
+        let (selection, selection_ty) = self.trav_fold_selection(fold.selection);
+
+        if !types_compatible(&neutral_ty, &selection_ty) || !types_compatible(&selection_ty, &neutral_ty) {
+            self.errors.push(InferenceError::FoldSelectionTypeMismatch {
+                expected: neutral_ty.clone(),
+                found: selection_ty,
+            });
+        }
+
+        let (foldfun, ret_ty) = match fold.foldfun {
+            FoldFun::Name(id) => {
+                let arg_types = vec![neutral_ty.clone(), neutral_ty.clone()];
+                let (target, runtime_dispatch) = self.resolve_dispatch(&id, &arg_types);
+                let out_ty = if runtime_dispatch {
+                    Type { ty: target.ret_type.ty.clone(), shape: TypePattern::Any }
+                } else {
+                    target.ret_type.clone()
+                };
+                (FoldFun::Name(CallTarget::Function(target)), out_ty)
+            }
+            FoldFun::Apply { id, args } => {
+                let mut placeholder_count = 0usize;
+                let mut typed_args = Vec::with_capacity(args.len());
+                let mut arg_types = Vec::with_capacity(args.len());
+
+                for arg in args {
+                    match arg {
+                        FoldFunArg::Placeholder => {
+                            placeholder_count += 1;
+                            typed_args.push(FoldFunArg::Placeholder);
+                            arg_types.push(neutral_ty.clone());
+                        }
+                        FoldFunArg::Bound(bound) => {
+                            let (bound, ty) = self.trav_id(bound);
+                            typed_args.push(FoldFunArg::Bound(bound));
+                            arg_types.push(ty);
+                        }
+                    }
+                }
+
+                if placeholder_count != 2 {
+                    self.errors.push(InferenceError::FoldFunPlaceholderCountMismatch {
+                        found: placeholder_count,
+                    });
+                }
+
+                let (target, runtime_dispatch) = self.resolve_dispatch(&id, &arg_types);
+                let out_ty = if runtime_dispatch {
+                    Type { ty: target.ret_type.ty.clone(), shape: TypePattern::Any }
+                } else {
+                    target.ret_type.clone()
+                };
+
+                (
+                    FoldFun::Apply {
+                        id: CallTarget::Function(target),
+                        args: typed_args,
+                    },
+                    out_ty,
+                )
+            }
+        };
+
+        if !types_compatible(&neutral_ty, &ret_ty) || !types_compatible(&ret_ty, &neutral_ty) {
+            self.errors.push(InferenceError::FoldFunctionTypeMismatch {
+                expected: neutral_ty.clone(),
+                found: ret_ty,
+            });
+        }
+
+        (
+            Fold {
+                neutral,
+                foldfun,
+                selection,
+            },
+            neutral_ty,
+        )
     }
 
     type TensorOut = (Tensor<'ast, Self::OutAst>, Type);
@@ -788,6 +919,7 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
     fn trav_const(&mut self, c: Const) -> Self::ConstOut {
         use Const::*;
         match c {
+            Bool(v) => (Bool(v), Type::scalar(BaseType::Bool)),
             I32(v) => (I32(v), Type::scalar(BaseType::I32)),
             I64(v) => (I64(v), Type::scalar(BaseType::I64)),
             U32(v) => (U32(v), Type::scalar(BaseType::U32)),
@@ -795,7 +927,6 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
             Usize(v) => (Usize(v), Type::scalar(BaseType::Usize)),
             F32(v) => (F32(v), Type::scalar(BaseType::F32)),
             F64(v) => (F64(v), Type::scalar(BaseType::F64)),
-            Bool(v) => (Bool(v), Type::scalar(BaseType::Bool)),
         }
     }
 }

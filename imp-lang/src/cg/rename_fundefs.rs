@@ -115,6 +115,7 @@ where
 pub fn mangle_type(ty: &Type) -> String {
     use BaseType::*;
     let base = match &ty.ty {
+        Bool => "bool",
         I32 => "i32",
         I64 => "i64",
         U32 => "u32",
@@ -122,7 +123,6 @@ pub fn mangle_type(ty: &Type) -> String {
         Usize => "usize",
         F32 => "f32",
         F64 => "f64",
-        Bool => "bool",
         Udf(udf) => udf,
     };
     format!("{}_{}", base, mangle_shape(&ty.shape))
