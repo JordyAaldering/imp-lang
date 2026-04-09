@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, fmt::format};
 
 use crate::{ast::*, cg::rename_fundefs, Visit};
 
@@ -333,6 +333,7 @@ impl<'ast> Visit<'ast> for CompileC {
     fn visit_expr(&mut self, expr: &Expr<'ast, Self::Ast>) {
         use Expr::*;
         match expr {
+            Cond(n) => self.visit_cond(n),
             Call(n) => self.visit_call(n),
             PrfCall(n) => self.visit_prf_call(n),
             Fold(n) => self.visit_fold(n),
@@ -341,6 +342,13 @@ impl<'ast> Visit<'ast> for CompileC {
             Id(n) => self.visit_id(n),
             Const(n) => self.visit_const(n),
         }
+    }
+
+    fn visit_cond(&mut self, cond: &Cond<'ast, Self::Ast>) {
+        let c = self.nameof(&cond.cond);
+        let t = self.nameof(&cond.then_branch);
+        let f = self.nameof(&cond.else_branch);
+        self.expr_stack.push(format!("{} ? {} : {}", c, t, f));
     }
 
     fn visit_fold(&mut self, fold: &Fold<'ast, Self::Ast>) {

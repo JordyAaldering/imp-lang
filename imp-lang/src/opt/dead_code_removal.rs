@@ -51,6 +51,13 @@ impl<'ast> Rewrite<'ast> for DeadCodeRemoval {
         fundef.decs.retain(|lvis| self.used.contains(&Self::ptr(lvis)));
     }
 
+    fn rewrite_cond(&mut self, mut cond: Cond<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
+        cond.cond = self.rewrite_id(cond.cond);
+        cond.then_branch = self.rewrite_id(cond.then_branch);
+        cond.else_branch = self.rewrite_id(cond.else_branch);
+        Expr::Cond(cond)
+    }
+
     fn rewrite_call(&mut self, mut call: Call<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
         for arg in &mut call.args {
             *arg = self.rewrite_id(*arg);

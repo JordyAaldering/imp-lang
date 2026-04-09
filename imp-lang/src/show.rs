@@ -94,17 +94,14 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
         self.visit_id(&ret.id);
     }
 
-    fn visit_expr(&mut self, expr: &Expr<'ast, Self::Ast>) {
-        use Expr::*;
-        match expr {
-            Call(n) => self.visit_call(n),
-            PrfCall(n) => self.visit_prf_call(n),
-            Fold(n) => self.visit_fold(n),
-            Tensor(n) => self.visit_tensor(n),
-            Array(n) => self.visit_array(n),
-            Id(n) => self.visit_id(n),
-            Const(n) => self.visit_const(n),
-        }
+    fn visit_cond(&mut self, cond: &Cond<'ast, Self::Ast>) {
+        self.write("if ");
+        Self::Ast::visit_operand(self, &cond.cond);
+        self.write(" {");
+        Self::Ast::visit_operand(self, &cond.then_branch);
+        self.write("} else {");
+        Self::Ast::visit_operand(self, &cond.else_branch);
+        self.write("}");
     }
 
     fn visit_call(&mut self, call: &Call<'ast, Self::Ast>) {

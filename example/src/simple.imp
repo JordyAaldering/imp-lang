@@ -54,12 +54,9 @@ fn sum(i32[d:shp] arr) -> i32 {
     return @fold(0i32, +, { @selVxA(iv, arr) | lb <= iv < shp });
 }
 
-// Bogus implementation for now, we need tensor partitions to implement this.
-fn concat(usize[n] a, usize[m] b) -> usize[nm] {
-    // It says there is no matching overload, but n and m should be usize
-    // (Dimensions (e.g. i32[n], f64[p,q]) and shapes (e.g. bool[d:shp]) should always be usize)
-    return { 0usize | [0usize] <= iv < [n+m] };
-
+fn cat(usize[n] a, usize[m] b) -> usize[nm] {
+    return { if @ltSxS(iv[[0usize]], n) { a[iv] } else { b[[@subSxS(iv[[0usize]],n)]] } | [0usize] <= iv < [n+m] };
+    // In future, using partitions:
     //return { a[iv] | [0usize] <= iv < [n];
     //         b[iv-n] | [n] <= iv < [n+m] };
 }
@@ -69,7 +66,7 @@ fn @sel(usize[o] idx, i32[o:oshp,i:ishp] arr) -> i32[i:ishp] {
     // We need helpers for this in the future, but for now this is fine.
     ishp0 = { 0usize | [0usize] <= iv < [i] };
 
-    return { @selVxA(concat(idx, iv), arr) | ishp0 <= iv < ishp };
+    return { @selVxA(cat(idx, iv), arr) | ishp0 <= iv < ishp };
 }
 
 fn sumlast(i32[d:shp,n] arr) -> i32[n] {

@@ -124,6 +124,7 @@ impl<'ast> Traverse<'ast> for ToSsa<'ast> {
     fn trav_expr(&mut self, expr: Expr<'ast, Self::InAst>) -> Self::ExprOut {
         use Expr::*;
         match expr {
+            Cond(n) => Cond(self.trav_cond(n)),
             Call(n) => Call(self.trav_call(n)),
             PrfCall(n) => PrfCall(self.trav_prf_call(n)),
             Fold(n) => Fold(self.trav_fold(n)),
@@ -132,6 +133,13 @@ impl<'ast> Traverse<'ast> for ToSsa<'ast> {
             Id(n) => Id(self.trav_id(n)),
             Const(c) => Const(c),
         }
+    }
+
+    fn trav_cond(&mut self, cond: Cond<'ast, Self::InAst>) -> Cond<'ast, Self::OutAst> {
+        let c = self.trav_id(cond.cond);
+        let t = self.trav_id(cond.then_branch);
+        let e = self.trav_id(cond.else_branch);
+        Cond { cond: c, then_branch: t, else_branch: e }
     }
 
     fn trav_call(&mut self, call: Call<'ast, Self::InAst>) -> Self::CallOut {

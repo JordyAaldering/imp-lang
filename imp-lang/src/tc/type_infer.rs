@@ -489,6 +489,10 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
     fn trav_expr(&mut self, expr: Expr<'ast, Self::InAst>) -> Self::ExprOut {
         use Expr::*;
         match expr {
+            Cond(n) => {
+                let (cond, ty) = self.trav_cond(n);
+                (Cond(cond), ty)
+            }
             Call(n) => {
                 let (call, ty) = self.trav_call(n);
                 (Call(call), ty)
@@ -518,6 +522,27 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
                 (Const(id), ty)
             }
         }
+    }
+
+    type CondOut = (Cond<'ast, Self::OutAst>, Type);
+
+    fn trav_cond(&mut self, cond: Cond<'ast, Self::InAst>) -> Self::CondOut {
+        let (cond_id, cond_ty) = self.trav_id(cond.cond);
+        self.expect_bool_scalar_prf_arg("cond", 0, &cond_ty);
+
+        let (then_id, then_ty) = self.trav_id(cond.then_branch);
+        let (else_id, else_ty) = self.trav_id(cond.else_branch);
+
+        if !types_compatible(&then_ty, &else_ty) || !types_compatible(&else_ty, &then_ty) {
+            self.errors.push(InferenceError::PrimitiveArgumentKindMismatch {
+                primitive: "cond".to_owned(),
+                arg_index: 2,
+                expected: "same type as true-branch",
+                provided: then_ty.clone(),
+            });
+        }
+
+        (Cond { cond: cond_id, then_branch: then_id, else_branch: else_id }, then_ty)
     }
 
     type CallOut = (Call<'ast, Self::OutAst>, Type);

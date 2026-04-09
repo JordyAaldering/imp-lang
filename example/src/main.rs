@@ -21,10 +21,29 @@ fn main() {
     println!("shouldbefolded = {}", folded);
     assert_eq!(folded, 9);
 
+    let cat = expect_array(cat(expect_array(iota(3)), expect_array(iota(4))));
+    println!("cat = {:?}", cat.data);
+
     let fold_input = ImpArray { shp: vec![4], data: vec![1i32, 2, 3, 4] };
     let fold_sum = expect_scalar(sum(fold_input));
     assert_eq!(fold_sum, 10);
     println!("sum = {}", fold_sum);
+
+    let fold2d_input = ImpArray {
+        shp: vec![2, 3],
+        data: vec![1i32, 2, 3, 4, 5, 6],
+    };
+    let fold2d_sum = expect_scalar(sum(fold2d_input));
+    //assert_eq!(fold2d_sum, 21);
+    println!("sum2d = {}", fold2d_sum);
+
+    let fold2d_input = ImpArray {
+        shp: vec![3,2],
+        data: vec![1i32, 2, 3, 4, 5, 6],
+    };
+    let fold2d_sum = expect_scalar(sum(fold2d_input));
+    //assert_eq!(fold2d_sum, 21);
+    println!("sum2d = {}", fold2d_sum);
 
     let fold_last_input = ImpArray {
         shp: vec![2, 3],

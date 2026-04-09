@@ -2,6 +2,7 @@ use super::*;
 
 #[derive(Clone, Debug)]
 pub enum Expr<'ast, Ast: AstConfig> {
+    Cond(Cond<'ast, Ast>),
     Call(Call<'ast, Ast>),
     PrfCall(PrfCall<'ast, Ast>),
     Fold(Fold<'ast, Ast>),

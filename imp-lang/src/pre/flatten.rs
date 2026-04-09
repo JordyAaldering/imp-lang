@@ -134,6 +134,7 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
     fn trav_expr(&mut self, expr: Expr<'ast, Self::InAst>) -> Self::ExprOut {
         use Expr::*;
         let expr = match expr {
+            Cond(n) => Cond(self.trav_cond(n)),
             Call(n) => Call(self.trav_call(n)),
             PrfCall(n) => PrfCall(self.trav_prf_call(n)),
             Fold(n) => Fold(self.trav_fold(n)),
@@ -143,6 +144,17 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
             Const(c) => Const(c),
         };
         self.emit_expr(expr)
+    }
+
+    /// TODO: this is currently not correct
+    /// We are pushing expressions to the outer scope, which may cause invalid applications.
+    /// E.g., the statement may be there explicitly to check for out of bounds access.
+    /// In future, the true and false branches must be vecs of statements.
+    fn trav_cond(&mut self, cond: Cond<'ast, Self::InAst>) -> Self::CondOut {
+        let c = self.trav_expr(cond.cond.clone());
+        let t = self.trav_expr(cond.then_branch.clone());
+        let e = self.trav_expr(cond.else_branch.clone());
+        Cond { cond: c, then_branch: t, else_branch: e }
     }
 
     fn trav_call(&mut self, call: Call<'ast, Self::InAst>) -> Self::CallOut {

@@ -204,7 +204,9 @@ impl<'src> Parser<'src> {
     }
 
     fn parse_expr(&mut self, prev_op: Option<impl Operator>) -> ParseResult<&'static Expr<'static, ParsedAst>> {
-        if let Some((Token::LBrace, _)) = self.lexer.peek() {
+        if let Some((Token::If, _)) = self.lexer.peek() {
+            self.parse_cond()
+        } else if let Some((Token::LBrace, _)) = self.lexer.peek() {
             self.parse_tensor()
         } else if let Some((Token::LSquare, _)) = self.lexer.peek() {
             self.parse_array()
@@ -220,7 +222,7 @@ impl<'src> Parser<'src> {
 
         self.expect(Token::LBrace)?;
 
-        let true_branch = self.parse_expr(None::<Bop>)?;
+        let then_branch = self.parse_expr(None::<Bop>)?;
 
         self.expect(Token::RBrace)?;
 
@@ -228,12 +230,11 @@ impl<'src> Parser<'src> {
 
         self.expect(Token::LBrace)?;
 
-        let false_branch = self.parse_expr(None::<Bop>)?;
+        let else_branch = self.parse_expr(None::<Bop>)?;
 
         self.expect(Token::RBrace)?;
 
-        // Cond { cond, true_branch, false_branch };
-        todo!()
+        Ok(self.alloc_expr(Expr::Cond(Cond { cond, then_branch, else_branch })))
     }
 
     fn parse_tensor(&mut self) -> ParseResult<&'static Expr<'static, ParsedAst>> {

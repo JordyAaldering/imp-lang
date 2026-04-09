@@ -55,6 +55,7 @@ pub trait Visit<'ast> {
     fn visit_expr(&mut self, expr: &Expr<'ast, Self::Ast>) {
         use Expr::*;
         match expr {
+            Cond(n) => self.visit_cond(n),
             Call(n) => self.visit_call(n),
             PrfCall(n) => self.visit_prf_call(n),
             Fold(n) => self.visit_fold(n),
@@ -67,8 +68,8 @@ pub trait Visit<'ast> {
 
     fn visit_cond(&mut self, cond: &Cond<'ast, Self::Ast>) {
         Self::Ast::visit_operand(self, &cond.cond);
-        Self::Ast::visit_operand(self, &cond.true_branch);
-        Self::Ast::visit_operand(self, &cond.false_branch);
+        Self::Ast::visit_operand(self, &cond.then_branch);
+        Self::Ast::visit_operand(self, &cond.else_branch);
     }
 
     fn visit_call(&mut self, call: &Call<'ast, Self::Ast>) {
@@ -180,6 +181,7 @@ pub trait Rewrite<'ast> {
     fn rewrite_expr(&mut self, expr: Expr<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
         use Expr::*;
         match expr {
+            Cond(n) => self.rewrite_cond(n),
             Call(n) => self.rewrite_call(n),
             PrfCall(n) => self.rewrite_prf_call(n),
             Fold(n) => self.rewrite_fold(n),
@@ -192,7 +194,7 @@ pub trait Rewrite<'ast> {
     }
 
     fn rewrite_cond(&mut self, cond: Cond<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
-        todo!()
+        Expr::Cond(cond)
     }
 
     fn rewrite_call(&mut self, call: Call<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
@@ -315,9 +317,9 @@ pub trait Traverse<'ast> {
 
     fn trav_expr(&mut self, expr: Expr<'ast, Self::InAst>) -> Self::ExprOut;
 
-    // type CondOut = Cond<'ast, Self::OutAst>;
+    type CondOut = Cond<'ast, Self::OutAst>;
 
-    // fn trav_cond(&mut self, cond: Cond<'ast, Self::InAst>) -> Self::CondOut;
+    fn trav_cond(&mut self, cond: Cond<'ast, Self::InAst>) -> Self::CondOut;
 
     type CallOut = Call<'ast, Self::OutAst>;
 
