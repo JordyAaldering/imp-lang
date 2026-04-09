@@ -2,7 +2,7 @@ fn dim(usize[d:shp] arr) -> usize {
     return d;
 }
 
-pub fn shape(usize[d:shp] arr) -> usize[d] {
+fn shape(usize[d:shp] arr) -> usize[d] {
     return shp;
 }
 
@@ -29,27 +29,27 @@ fn @add(usize[d>0:shp] a, usize[d>0:shp] b) -> usize[d>0:shp] {
     return { a[iv] + b[iv] | lb <= iv < shp };
 }
 
-pub fn four() -> usize[4] {
+fn four() -> usize[4] {
     return [0usize, 1usize, 2usize, 3usize];
 }
 
-pub fn five() -> usize[5] {
+fn five() -> usize[5] {
     return [0usize, 1usize, 2usize, 3usize, 4usize];
 }
 
-pub fn add_demo(usize[n] four, usize[n] five) -> usize[k] {
+fn add_demo(usize[n] four, usize[n] five) -> usize[k] {
     return four + five;
 }
 
-pub fn overload_demo(usize a, usize b) -> usize {
+fn overload_demo(usize a, usize b) -> usize {
     return a + b;
 }
 
-pub fn overload_demo(usize[n] a, usize[n] b) -> usize[n] {
+fn overload_demo(usize[n] a, usize[n] b) -> usize[n] {
     return a + b;
 }
 
-pub fn we_could_statically_figure_this_error_out() -> usize[5] {
+fn we_could_statically_figure_this_error_out() -> usize[5] {
     four = [0usize, 1usize, 2usize, 3usize];
     five = [0usize, 1usize, 2usize, 3usize, 4usize];
     return four + five;
@@ -67,11 +67,11 @@ fn @sel(usize[n] idx, u32[n:shp] arr) -> u32 {
     return @selVxA(idx, arr);
 }
 
-pub fn scalar_add_demo() -> usize {
+fn scalar_add_demo() -> usize {
     return 2usize + 3usize;
 }
 
-pub fn shouldbefolded() -> u32 {
+fn shouldbefolded() -> u32 {
     return @addSxS(4u32, @addSxS(2u32, 3u32));
 }
 
@@ -80,29 +80,29 @@ pub fn shouldbefolded() -> u32 {
 //     return a + b + c;
 // }
 
-pub fn iota(usize n) -> usize[n] {
+fn iota(usize n) -> usize[n] {
     return { iv[[0usize]] | [0usize] <= iv < [n] };
 }
 
-pub fn my_add_after_iota(usize[d:shp] a, usize[d:shp] b) -> usize[d:shp] {
+fn my_add_after_iota(usize[d:shp] a, usize[d:shp] b) -> usize[d:shp] {
     return a + b;
 }
 
-pub fn arrays() -> u32[n] {
+fn arrays() -> u32[n] {
     a = [1u32,3u32,1u32,4u32,1u32];
     return a;
 }
 
-pub fn sel_demo() -> u32 {
+fn sel_demo() -> u32 {
     arr = [1u32,2u32,3u32,4u32,5u32];
     x = arr[[2usize]];
     return x;
 }
 
-pub fn scalar_or_array(usize[*] a) -> usize[*] {
+fn scalar_or_array(usize[*] a) -> usize[*] {
     return a;
 }
 
-pub fn add_dyn(usize[*] a, usize[*] b) -> usize[*] {
+fn add_dyn(usize[*] a, usize[*] b) -> usize[*] {
     return a + b;
 }

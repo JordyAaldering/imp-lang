@@ -45,10 +45,6 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
     fn visit_fundef(&mut self, fundef: &Fundef<'ast, Self::Ast>) {
         self.args = fundef.args.clone();
 
-        if fundef.is_public {
-            self.write("pub ");
-        }
-
         self.write(&format!("fn {}(", fundef.name));
         self.visit_fargs(&fundef.args);
         self.write(") -> ");

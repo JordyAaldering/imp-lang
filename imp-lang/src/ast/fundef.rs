@@ -2,7 +2,6 @@ use super::*;
 
 #[derive(Clone, Debug)]
 pub struct Fundef<'ast, Ast: AstConfig> {
-    pub is_public: bool,
     pub name: String,
     pub ret_type: Type,
     pub args: Vec<Farg>,

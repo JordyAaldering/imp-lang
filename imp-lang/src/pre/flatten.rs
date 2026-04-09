@@ -104,7 +104,6 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
         self.pop_env();
 
         Fundef {
-            is_public: fundef.is_public,
             name: fundef.name,
             args: fundef.args,
             decs: Vec::new(),
