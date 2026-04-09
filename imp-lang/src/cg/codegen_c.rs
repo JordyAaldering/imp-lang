@@ -260,6 +260,13 @@ impl<'ast> Visit<'ast> for CompileC {
             return;
         }
 
+        if let Expr::Fold(fold) = assign.expr {
+            self.lhs_target = Some((assign.lhs.name.clone(), assign.lhs.ty.clone()));
+            self.visit_fold(fold);
+            self.lhs_target = None;
+            return;
+        }
+
         if let Expr::Array(array) = assign.expr {
             self.lhs_target = Some((assign.lhs.name.clone(), assign.lhs.ty.clone()));
             self.visit_array(array);
@@ -328,10 +335,105 @@ impl<'ast> Visit<'ast> for CompileC {
         match expr {
             Call(n) => self.visit_call(n),
             PrfCall(n) => self.visit_prf_call(n),
+            Fold(n) => self.visit_fold(n),
             Tensor(n) => self.visit_tensor(n),
             Array(n) => self.visit_array(n),
             Id(n) => self.visit_id(n),
             Const(n) => self.visit_const(n),
+        }
+    }
+
+    fn visit_fold(&mut self, fold: &Fold<'ast, Self::Ast>) {
+        let (target_name, target_ty, push_result) = if let Some((name, ty)) = self.lhs_target.clone() {
+            (name, ty, false)
+        } else {
+            self.tensor_uid += 1;
+            (format!("_fold_{}", self.tensor_uid), self.id_type(&fold.neutral), true)
+        };
+
+        let iv_name = fold.selection.iv.name.clone();
+        let rank = fold.selection.iv.ty.rank()
+            .expect("fold selection iv must have a statically-known rank for C codegen") as usize;
+
+        self.tensor_uid += 1;
+        let t_uid = self.tensor_uid;
+
+        let neutral_expr = self.render_expr(&Expr::Id(fold.neutral));
+        self.push_line(&format!("{} {} = {};", full_ctype(&target_ty), target_name, neutral_expr));
+
+        let lb_name = self.nameof(&fold.selection.lb);
+        let ub_name = self.nameof(&fold.selection.ub);
+
+        for d in 0..rank {
+            self.push_line(&format!(
+                "size_t {iv_name}_lb{d}_{t_uid} = ((size_t *){lb_name}.data)[{d}];"
+            ));
+            self.push_line(&format!(
+                "size_t {iv_name}_ub{d}_{t_uid} = ((size_t *){ub_name}.data)[{d}];"
+            ));
+        }
+
+        for d in 0..rank {
+            self.push_line(&format!(
+                "for (size_t {iv_name}_{d}_{t_uid} = {iv_name}_lb{d}_{t_uid}; {iv_name}_{d}_{t_uid} < {iv_name}_ub{d}_{t_uid}; {iv_name}_{d}_{t_uid} += 1) {{"
+            ));
+            self.indent += 1;
+        }
+
+        let iv_elem = base_ctype(&fold.selection.iv.ty);
+        let iv_components: Vec<String> = (0..rank)
+            .map(|d| format!("({iv_elem}){iv_name}_{d}_{t_uid}"))
+            .collect();
+        self.push_line(&format!(
+            "{iv_elem} {iv_name}_data_{t_uid}[{rank}] = {{ {} }};",
+            iv_components.join(", ")
+        ));
+        self.push_line(&format!("size_t {iv_name}_shp_arr_{t_uid}[1] = {{ {rank} }};"));
+        self.push_line(&format!(
+            "ImpArrayRaw {iv_name} __attribute__((unused)) = (ImpArrayRaw) {{ .len = {rank}, .shp = {iv_name}_shp_arr_{t_uid}, .dim = 1, .data = (void *){iv_name}_data_{t_uid} }};"
+        ));
+
+        for stmt in &fold.selection.body {
+            self.visit_stmt(stmt);
+        }
+
+        let sel_expr = self.render_expr(&Expr::Id(fold.selection.ret));
+
+        let (fold_name, call_args) = match &fold.foldfun {
+            FoldFun::Name(id) => {
+                (Self::Ast::dispatch_name(id), vec![target_name.clone(), sel_expr])
+            }
+            FoldFun::Apply { id, args } => {
+                let mut hole = 0usize;
+                let mut out = Vec::with_capacity(args.len());
+                for arg in args {
+                    match arg {
+                        FoldFunArg::Placeholder => {
+                            hole += 1;
+                            if hole == 1 {
+                                out.push(target_name.clone());
+                            } else {
+                                out.push(sel_expr.clone());
+                            }
+                        }
+                        FoldFunArg::Bound(bound) => {
+                            out.push(self.render_expr(&Expr::Id(bound.clone())));
+                        }
+                    }
+                }
+                (Self::Ast::dispatch_name(id), out)
+            }
+        };
+
+        self.push_line(&format!("{} = IMP_{}({});", target_name, fold_name, call_args.join(", ")));
+
+        for _ in 0..rank {
+            self.indent -= 1;
+            self.push_line("}");
+        }
+
+        if push_result {
+            self.expr_stack.push(target_name);
         }
     }
 
@@ -541,6 +643,7 @@ impl<'ast> Visit<'ast> for CompileC {
     fn visit_const(&mut self, c: &Const) {
         use Const::*;
         match c {
+            Bool(v) => self.expr_stack.push(v.to_string()),
             I32(v) => self.expr_stack.push(v.to_string()),
             I64(v) => self.expr_stack.push(v.to_string()),
             U32(v) => self.expr_stack.push(v.to_string()),
@@ -548,7 +651,6 @@ impl<'ast> Visit<'ast> for CompileC {
             Usize(v) => self.expr_stack.push(v.to_string()),
             F32(v) => self.expr_stack.push(v.to_string()),
             F64(v) => self.expr_stack.push(v.to_string()),
-            Bool(v) => self.expr_stack.push(v.to_string()),
         }
     }
 }

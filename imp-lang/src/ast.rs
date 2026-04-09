@@ -11,6 +11,7 @@ mod expr;
 mod calltarget;
 mod call;
 mod prf;
+mod fold;
 mod tensor;
 mod array;
 // Terminals
@@ -31,6 +32,7 @@ pub use expr::*;
 pub use calltarget::*;
 pub use call::*;
 pub use prf::*;
+pub use fold::*;
 pub use tensor::*;
 pub use array::*;
 // Terminals

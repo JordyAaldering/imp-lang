@@ -15,6 +15,34 @@ fn zeros(usize n) -> usize[n] {
     return { 0usize | [0usize] <= iv < [n] };
 }
 
+fn zeros_i32(usize n) -> i32[n] {
+    return { 0i32 | [0usize] <= iv < [n] };
+}
+
+fn sum(i32[d:shp] arr) -> i32 {
+    lb = zeros(d);
+    return @fold(0i32, +, { arr[iv] | lb <= iv < shp });
+    //                 |     |
+    //                 |     Scalar selection (result is i32)
+    //                 Scalar-scalar addition
+}
+
+fn sumlast(i32[d:shp,n] arr) -> i32[n] {
+    lb = zeros(d);
+    return @fold(zeros_i32(n), +, { arr[iv] | lb <= iv < shp });
+    //                     |     |
+    //                     |     Planar selection (result is i32[n])
+    //                     Vector-vector addition
+}
+
+fn @add(i32 a, i32 b) -> i32 {
+    return @addSxS(a, b);
+}
+
+fn @add(i32[n] a, i32[n] b) -> i32[n] {
+    return { a[iv] + b[iv] | [0usize] <= iv < [n] };
+}
+
 fn @add(usize a, usize b) -> usize {
     return @addSxS(a, b);
 }
@@ -66,6 +94,18 @@ fn @sel(usize[n] idx, usize[n:shp] arr) -> usize {
 
 fn @sel(usize[n] idx, usize arr) -> usize {
     return arr;
+}
+
+fn @sel(usize[n] idx, i32[n:shp] arr) -> i32 {
+    return @selVxA(idx, arr);
+}
+
+fn @sel(usize[n] idx, i32 arr) -> i32 {
+    return arr;
+}
+
+fn @sel(usize[o] idx, i32[o:oshp,n] arr) -> i32[n] {
+    return { arr[idx][iv] | [0usize] <= iv < [n] };
 }
 
 fn @sel(usize[n] idx, u32[n:shp] arr) -> u32 {

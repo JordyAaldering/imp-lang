@@ -97,6 +97,29 @@ impl<'ast> Rewrite<'ast> for DeadCodeRemoval {
         Expr::Tensor(tensor)
     }
 
+    fn rewrite_fold(&mut self, mut fold: Fold<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
+        fold.neutral = self.rewrite_id(fold.neutral);
+
+        fold.foldfun = match fold.foldfun {
+            FoldFun::Name(id) => FoldFun::Name(id),
+            FoldFun::Apply { id, mut args } => {
+                for arg in &mut args {
+                    if let FoldFunArg::Bound(bound) = arg {
+                        *bound = self.rewrite_id(bound.clone());
+                    }
+                }
+                FoldFun::Apply { id, args }
+            }
+        };
+
+        fold.selection = match self.rewrite_tensor(fold.selection) {
+            Expr::Tensor(tensor) => tensor,
+            _ => unreachable!("rewrite_tensor must return Tensor"),
+        };
+
+        Expr::Fold(fold)
+    }
+
     fn rewrite_array(&mut self, mut array: Array<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
         for value in &mut array.elems {
             *value = self.rewrite_id(*value);

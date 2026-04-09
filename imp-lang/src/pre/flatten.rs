@@ -136,6 +136,7 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
         let expr = match expr {
             Call(n) => Call(self.trav_call(n)),
             PrfCall(n) => PrfCall(self.trav_prf_call(n)),
+            Fold(n) => Fold(self.trav_fold(n)),
             Tensor(n) => Tensor(self.trav_tensor(n)),
             Array(n) => Array(self.trav_array(n)),
             Id(n) => Id(self.trav_id(n)),
@@ -254,6 +255,34 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
         let iv = self.alloc_lvis(tensor.iv.name.clone(), tensor.iv.ty.clone());
 
         Tensor { body, ret, iv, lb, ub }
+    }
+
+    fn trav_fold(&mut self, fold: Fold<'ast, Self::InAst>) -> Self::FoldOut {
+        let neutral = self.trav_expr((*fold.neutral).clone());
+
+        let foldfun = match fold.foldfun {
+            FoldFun::Name(id) => FoldFun::Name(id),
+            FoldFun::Apply { id, args } => {
+                let args = args
+                    .into_iter()
+                    .map(|arg| match arg {
+                        FoldFunArg::Placeholder => FoldFunArg::Placeholder,
+                        FoldFunArg::Bound(bound) => {
+                            FoldFunArg::Bound(self.trav_expr((*bound).clone()))
+                        }
+                    })
+                    .collect();
+                FoldFun::Apply { id, args }
+            }
+        };
+
+        let selection = self.trav_tensor(fold.selection);
+
+        Fold {
+            neutral,
+            foldfun,
+            selection,
+        }
     }
 
     fn trav_array(&mut self, array: Array<'ast, Self::InAst>) -> Self::ArrayOut {

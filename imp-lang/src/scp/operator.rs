@@ -6,10 +6,25 @@ pub(super) enum Bop {
     Sub,
     Mul,
     Div,
+    Lt,
+    Le,
+    Gt,
+    Ge,
     Eq,
     Ne,
 }
 
+pub(super) struct PrecedenceFloor(pub usize);
+
+impl Operator for PrecedenceFloor {
+    fn precedence(&self) -> usize {
+        self.0
+    }
+
+    fn associativity(&self) -> Assoc {
+        Assoc::LeftToRight
+    }
+}
 impl Bop {
     pub(super) fn symbol(self) -> &'static str {
         match self {
@@ -17,6 +32,10 @@ impl Bop {
             Bop::Sub => "@sub",
             Bop::Mul => "@mul",
             Bop::Div => "@div",
+            Bop::Lt => "@lt",
+            Bop::Le => "@le",
+            Bop::Gt => "@gt",
+            Bop::Ge => "@ge",
             Bop::Eq => "@eq",
             Bop::Ne => "@ne",
         }
@@ -32,6 +51,10 @@ impl TryInto<Bop> for &Token {
             Token::Sub => Ok(Bop::Sub),
             Token::Mul => Ok(Bop::Mul),
             Token::Div => Ok(Bop::Div),
+            Token::Lt => Ok(Bop::Lt),
+            Token::Le => Ok(Bop::Le),
+            Token::Gt => Ok(Bop::Gt),
+            Token::Ge => Ok(Bop::Ge),
             Token::Eq => Ok(Bop::Eq),
             Token::Ne => Ok(Bop::Ne),
             _ => Err(()),
@@ -87,7 +110,7 @@ impl Operator for Bop {
     fn precedence(&self) -> usize {
         use Bop::*;
         match self {
-            Eq | Ne => 2,
+            Lt | Le | Gt | Ge | Eq | Ne => 2,
             Add | Sub => 4,
             Mul | Div => 5,
         }
@@ -97,7 +120,7 @@ impl Operator for Bop {
         use Bop::*;
         match self {
             Add | Sub | Mul | Div => Assoc::LeftToRight,
-            Eq | Ne => Assoc::NonAssoc,
+            Lt | Le | Gt | Ge | Eq | Ne => Assoc::NonAssoc,
         }
     }
 }

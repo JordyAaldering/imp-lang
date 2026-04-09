@@ -99,6 +99,7 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
         match expr {
             Call(n) => self.visit_call(n),
             PrfCall(n) => self.visit_prf_call(n),
+            Fold(n) => self.visit_fold(n),
             Tensor(n) => self.visit_tensor(n),
             Array(n) => self.visit_array(n),
             Id(n) => self.visit_id(n),
@@ -125,6 +126,30 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
             Self::Ast::visit_operand(self, arg);
             self.write(", ");
         }
+        self.write(")");
+    }
+
+    fn visit_fold(&mut self, fold: &Fold<'ast, Self::Ast>) {
+        self.write("@fold(");
+        Ast::visit_operand(self, &fold.neutral);
+        self.write(", ");
+        match &fold.foldfun {
+            FoldFun::Name(id) => self.write(&Self::Ast::dispatch_name(id)),
+            FoldFun::Apply { id, args } => {
+                self.write(&Self::Ast::dispatch_name(id));
+                self.write("(");
+                for arg in args {
+                    match arg {
+                        FoldFunArg::Placeholder => self.write("_"),
+                        FoldFunArg::Bound(bound) => Ast::visit_operand(self, bound),
+                    }
+                    self.write(", ");
+                }
+                self.write(")");
+            }
+        }
+        self.write(", ");
+        self.visit_tensor(&fold.selection);
         self.write(")");
     }
 
@@ -213,6 +238,7 @@ impl<'ast, Ast: AstConfig> Show<'ast, Ast> {
     fn write_basetype(&mut self, ty: &BaseType) {
         use BaseType::*;
         let ty_str = match ty {
+            Bool => "bool",
             I32 => "i32",
             I64 => "i64",
             U32 => "u32",
@@ -220,7 +246,6 @@ impl<'ast, Ast: AstConfig> Show<'ast, Ast> {
             Usize => "usize",
             F32 => "f32",
             F64 => "f64",
-            Bool => "bool",
             Udf(udf) => udf,
         };
         self.write(ty_str);

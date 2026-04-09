@@ -16,6 +16,7 @@ pub enum ParseError {
     MissingReturn,
     DuplicateFunctionSignature(String),
     UnknownPrimitive(String, Span),
+    FoldSelectionMustBeTensor,
     UnexpectedToken(String, Token, Span),
     UnexpectedEof,
 }
@@ -219,7 +220,7 @@ impl<'src> Parser<'src> {
 
         self.expect(Token::Bar)?;
 
-        let lb = self.parse_expr(None::<Bop>)?;
+        let lb = self.parse_expr(Some(PrecedenceFloor(2)))?;
 
         self.expect(Token::Le)?;
 
@@ -306,11 +307,13 @@ impl<'src> Parser<'src> {
     }
 
     fn parse_postfix(&mut self, operand: &'static Expr<'static, ParsedAst>) -> ParseResult<&'static Expr<'static, ParsedAst>> {
-        if let Some((Token::LSquare, _)) = self.lexer.peek() {
-            self.parse_sel(operand)
-        } else {
-            Ok(operand)
+        let mut expr = operand;
+
+        while let Some((Token::LSquare, _)) = self.lexer.peek() {
+            expr = self.parse_sel(expr)?;
         }
+
+        Ok(expr)
     }
 
     fn parse_unary(&mut self, op: Uop) -> ParseResult<&'static Expr<'static, ParsedAst>> {
@@ -349,6 +352,10 @@ impl<'src> Parser<'src> {
     }
 
     fn parse_prf_call(&mut self, id: String, span: Span) -> ParseResult<&'static Expr<'static, ParsedAst>> {
+        if id == "fold" {
+            return self.parse_fold();
+        }
+
         self.expect(Token::LParen)?;
 
         let mut args = Vec::new();
@@ -385,6 +392,77 @@ impl<'src> Parser<'src> {
         };
 
         Ok(self.alloc_expr(expr))
+    }
+
+    fn fold_dispatch_from_token(&self, token: Token, span: Span) -> ParseResult<String> {
+        let id = match token {
+            Token::Identifier(name) => name,
+            Token::Prf(name) => format!("@{name}"),
+            token => {
+                let op: Bop = (&token).try_into().map_err(|_| {
+                    ParseError::UnexpectedToken(
+                        "fold function".to_owned(),
+                        token.clone(),
+                        span,
+                    )
+                })?;
+                op.symbol().to_owned()
+            }
+        };
+        Ok(id)
+    }
+
+    fn parse_fold_fun_arg(&mut self) -> ParseResult<FoldFunArg<'static, ParsedAst>> {
+        let expr = self.parse_expr(None::<Bop>)?;
+        if matches!(expr, Expr::Id(Id::Var(name)) if name == "_") {
+            Ok(FoldFunArg::Placeholder)
+        } else {
+            Ok(FoldFunArg::Bound(expr))
+        }
+    }
+
+    fn parse_fold_fun(&mut self) -> ParseResult<FoldFun<'static, ParsedAst>> {
+        let (token, span) = self.next()?;
+        let id = self.fold_dispatch_from_token(token, span)?;
+
+        if self.matches(Token::LParen).is_none() {
+            return Ok(FoldFun::Name(id));
+        }
+
+        let mut args = Vec::new();
+        if self.matches(Token::RParen).is_none() {
+            args.push(self.parse_fold_fun_arg()?);
+            while self.matches(Token::Comma).is_some() {
+                args.push(self.parse_fold_fun_arg()?);
+            }
+            self.expect(Token::RParen)?;
+        }
+
+        Ok(FoldFun::Apply { id, args })
+    }
+
+    fn parse_fold(&mut self) -> ParseResult<&'static Expr<'static, ParsedAst>> {
+        self.expect(Token::LParen)?;
+
+        let neutral = self.parse_expr(None::<Bop>)?;
+        self.expect(Token::Comma)?;
+
+        let foldfun = self.parse_fold_fun()?;
+        self.expect(Token::Comma)?;
+
+        let selection_expr = self.parse_expr(None::<Bop>)?;
+        let selection = match selection_expr {
+            Expr::Tensor(tensor) => tensor.clone(),
+            _ => return Err(ParseError::FoldSelectionMustBeTensor),
+        };
+
+        self.expect(Token::RParen)?;
+
+        Ok(self.alloc_expr(Expr::Fold(Fold {
+            neutral,
+            foldfun,
+            selection,
+        })))
     }
 
     fn parse_array(&mut self) -> ParseResult<&'static Expr<'static, ParsedAst>> {
@@ -461,6 +539,7 @@ impl<'src> Parser<'src> {
         let (token, span) = self.next()?;
 
         let base = match token {
+            Token::BoolType => BaseType::Bool,
             Token::I32Type => BaseType::I32,
             Token::I64Type => BaseType::I64,
             Token::U32Type => BaseType::U32,
@@ -468,7 +547,6 @@ impl<'src> Parser<'src> {
             Token::UsizeType => BaseType::Usize,
             Token::F32Type => BaseType::F32,
             Token::F64Type => BaseType::F64,
-            Token::BoolType => BaseType::Bool,
             Token::Identifier(udf) => BaseType::Udf(udf),
             _ => return Err(ParseError::UnexpectedToken("base type".to_owned(), token, span)),
         };
