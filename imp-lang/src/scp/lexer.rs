@@ -23,12 +23,9 @@ pub enum Token {
     Bar,
     Comma,
     Colon,
-    ColonColon,
     Semicolon,
     Dot,
-    DotDot,
     // Keywords
-    Public,
     Fn,
     Return,
     // Arithmetic operators
@@ -179,8 +176,6 @@ impl<'source> Iterator for Lexer<'source> {
             BoolValue(true)
         } else if self.match_str("false") {
             BoolValue(false)
-        } else if self.match_str("pub") {
-            Public
         } else if self.match_str("fn") {
             Fn
         } else if self.match_str("return") {
@@ -196,7 +191,6 @@ impl<'source> Iterator for Lexer<'source> {
                 ']' => RSquare,
                 '|' => Bar,
                 ',' => Comma,
-                ':' if self.match_char(':') => ColonColon,
                 ':' => Colon,
                 ';' => Semicolon,
                 '-' if self.match_char('>') => Arrow,
@@ -215,7 +209,6 @@ impl<'source> Iterator for Lexer<'source> {
                 '!' => Not,
                 // Assignment
                 '=' => Assign,
-                '.' if self.match_char('.') => DotDot,
                 '.' => Dot,
                 // Primitive function calls
                 '@' => {

@@ -7,6 +7,6 @@ fn -(u32 a, u32 b) -> u32 { return @subSxS(a, b); }
 fn *(u32 a, u32 b) -> u32 { return @mulSxS(a, b); }
 fn /(u32 a, u32 b) -> u32 { return @divSxS(a, b); }
 
-pub fn hadamard_u32(u32[d:shp] xs, u32[d:shp] ys) -> u32[d:shp] {
+fn hadamard_u32(u32[d:shp] xs, u32[d:shp] ys) -> u32[d:shp] {
     return xs;
 }

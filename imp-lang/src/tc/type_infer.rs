@@ -14,7 +14,6 @@ pub fn type_infer<'ast>(program: Program<'ast, UntypedAst>) -> Result<Program<'a
     for key in &internal_keys {
         if let Some(fundef) = program.functions.get(key) {
             let stub = Box::leak(Box::new(Fundef {
-                is_public: fundef.is_public,
                 name: fundef.name.clone(),
                 ret_type: fundef.ret_type.clone(),
                 args: fundef.args.clone(),
@@ -354,7 +353,7 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
     // Declarations
 
     fn trav_fundef(&mut self, fundef: Fundef<'ast, Self::InAst>) -> Fundef<'ast, Self::OutAst> {
-        let Fundef { is_public, name, ret_type, args, body, decs: _ } = fundef;
+        let Fundef { name, ret_type, args, body, decs: _ } = fundef;
 
         self.args = args.clone();
 
@@ -367,7 +366,6 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
         }
 
         Fundef {
-            is_public,
             name,
             ret_type,
             args,

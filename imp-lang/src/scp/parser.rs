@@ -76,7 +76,7 @@ impl<'src> Parser<'src> {
 
         while self.lexer.peek().is_some() {
             match self.peek()?.0.clone() {
-                Token::Public | Token::Fn => {
+                Token::Fn => {
                     let fundef = self.parse_fundef()?;
                     if functions.values().any(|existing| {
                         existing.name == fundef.name && Self::same_farg_signature(&existing.args, &fundef.args)
@@ -111,8 +111,6 @@ impl<'src> Parser<'src> {
     }
 
     fn parse_fundef(&mut self) -> ParseResult<Fundef<'static, ParsedAst>> {
-        let is_public = self.matches(Token::Public).is_some();
-
         let _ = self.expect(Token::Fn)?;
         let name = self.parse_callable_name()?;
 
@@ -148,7 +146,6 @@ impl<'src> Parser<'src> {
         }
 
         Ok(Fundef {
-            is_public,
             name,
             args,
             decs: Vec::new(),
@@ -378,10 +375,6 @@ impl<'src> Parser<'src> {
             ("neSxS", [a, b]) => Expr::PrfCall(NeSxS(*a, *b)),
             ("negS", [a]) => Expr::PrfCall(NegS(*a)),
             ("notS", [a]) => Expr::PrfCall(NotS(*a)),
-            _ if id.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') => Expr::Call(Call {
-                id: format!("@{id}"),
-                args,
-            }),
             _ => {
                 return Err(ParseError::UnknownPrimitive(id.clone(), span));
             }

@@ -35,10 +35,6 @@ impl<'ast> Visit<'ast> for CompileFfi {
         let families = collect_public_families(program);
 
         for (_base_name, fundef) in program.functions.iter() {
-            if !fundef.is_public {
-                continue;
-            }
-
             self.push("unsafe extern \"C\" {\n");
             self.push(&format!("    fn IMP_{}(", fundef.name));
             self.push(&join_args(&fundef.args, rust_ffi_type));
@@ -143,9 +139,6 @@ fn collect_public_families<'prog, 'ast>(program: &'prog Program<'ast, TypedAst>)
     let mut families: Vec<PublicFamily<'prog, 'ast>> = Vec::new();
     for key in keys {
         let fundef = &program.functions[&key];
-        if !fundef.is_public {
-            continue;
-        }
 
         let root = key.split("__ovl").next().unwrap_or(&key).to_owned();
         if let Some(existing) = families.iter_mut().find(|family| family.root_name == root) {
