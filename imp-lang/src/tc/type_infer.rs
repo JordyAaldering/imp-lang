@@ -558,13 +558,13 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
         if !types_compatible(&neutral_ty, &selection_ty) || !types_compatible(&selection_ty, &neutral_ty) {
             self.errors.push(InferenceError::FoldSelectionTypeMismatch {
                 expected: neutral_ty.clone(),
-                found: selection_ty,
+                found: selection_ty.clone(),
             });
         }
 
         let (foldfun, ret_ty) = match fold.foldfun {
             FoldFun::Name(id) => {
-                let arg_types = vec![neutral_ty.clone(), neutral_ty.clone()];
+                let arg_types = vec![neutral_ty.clone(), selection_ty.clone()];
                 let (target, runtime_dispatch) = self.resolve_dispatch(&id, &arg_types);
                 let out_ty = if runtime_dispatch {
                     Type { ty: target.ret_type.ty.clone(), shape: TypePattern::Any }
@@ -573,46 +573,8 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
                 };
                 (FoldFun::Name(CallTarget::Function(target)), out_ty)
             }
-            FoldFun::Apply { id, args } => {
-                let mut placeholder_count = 0usize;
-                let mut typed_args = Vec::with_capacity(args.len());
-                let mut arg_types = Vec::with_capacity(args.len());
-
-                for arg in args {
-                    match arg {
-                        FoldFunArg::Placeholder => {
-                            placeholder_count += 1;
-                            typed_args.push(FoldFunArg::Placeholder);
-                            arg_types.push(neutral_ty.clone());
-                        }
-                        FoldFunArg::Bound(bound) => {
-                            let (bound, ty) = self.trav_id(bound);
-                            typed_args.push(FoldFunArg::Bound(bound));
-                            arg_types.push(ty);
-                        }
-                    }
-                }
-
-                if placeholder_count != 2 {
-                    self.errors.push(InferenceError::FoldFunPlaceholderCountMismatch {
-                        found: placeholder_count,
-                    });
-                }
-
-                let (target, runtime_dispatch) = self.resolve_dispatch(&id, &arg_types);
-                let out_ty = if runtime_dispatch {
-                    Type { ty: target.ret_type.ty.clone(), shape: TypePattern::Any }
-                } else {
-                    target.ret_type.clone()
-                };
-
-                (
-                    FoldFun::Apply {
-                        id: CallTarget::Function(target),
-                        args: typed_args,
-                    },
-                    out_ty,
-                )
+            FoldFun::Apply { .. } => {
+                unimplemented!("'partial application' fold not yet supported")
             }
         };
 
@@ -623,14 +585,7 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
             });
         }
 
-        (
-            Fold {
-                neutral,
-                foldfun,
-                selection,
-            },
-            neutral_ty,
-        )
+        (Fold { neutral, foldfun, selection }, neutral_ty)
     }
 
     type TensorOut = (Tensor<'ast, Self::OutAst>, Type);
@@ -929,6 +884,8 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
             F64(v) => (F64(v), Type::scalar(BaseType::F64)),
         }
     }
+
+    type TypeOut = Type;
 }
 
 /// Check if two types are compatible for parameter passing.

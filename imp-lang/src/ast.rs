@@ -8,6 +8,7 @@ mod assign;
 mod ret;
 // Expressions
 mod expr;
+mod cond;
 mod calltarget;
 mod call;
 mod prf;
@@ -29,6 +30,7 @@ pub use assign::*;
 pub use ret::*;
 // Expressions
 pub use expr::*;
+pub use cond::*;
 pub use calltarget::*;
 pub use call::*;
 pub use prf::*;

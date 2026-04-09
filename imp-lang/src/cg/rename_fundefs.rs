@@ -85,18 +85,19 @@ fn make_unique(mut candidate: String, used_names: &mut HashSet<String>) -> Strin
 }
 
 pub fn mangle_fundef_name(base_name: &str, args: &[Farg]) -> String {
+    let base_name = sanitize_symbol_name(base_name);
     let arg_suffix = mangle_arg_types(args.iter().map(|arg| &arg.ty));
     if base_name.ends_with(&format!("__{arg_suffix}")) {
-        return base_name.to_owned();
+        return base_name;
     }
-    format!("{}__{}", sanitize_symbol_name(base_name), arg_suffix)
+    format!("{}__{}", base_name, arg_suffix)
 }
 
 pub fn mangle_call_name(base_name: &str, arg_types: &[Type]) -> String {
     format!("{}__{}", sanitize_symbol_name(base_name), mangle_arg_types(arg_types.iter()))
 }
 
-fn sanitize_symbol_name(name: &str) -> String {
+pub fn sanitize_symbol_name(name: &str) -> String {
     name.strip_prefix('@').unwrap_or(name).to_owned()
 }
 

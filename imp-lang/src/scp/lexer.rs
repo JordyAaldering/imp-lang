@@ -28,6 +28,7 @@ pub enum Token {
     // Keywords
     Fn,
     Return,
+    If, Else,
     // Arithmetic operators
     Add, Sub, Mul, Div,
     // Comparison operators
@@ -180,6 +181,10 @@ impl<'source> Iterator for Lexer<'source> {
             Fn
         } else if self.match_str("return") {
             Return
+        } else if self.match_str("if") {
+            If
+        } else if self.match_str("else") {
+            Else
         } else {
             match self.next_char()? {
                 // Symbols

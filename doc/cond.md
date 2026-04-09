@@ -3,7 +3,7 @@
 We support an extended conditional expression.
 
 ```imp
-res = if {
+res = if cond {
     b = a + a;
     c = b - 1;
     c
@@ -20,13 +20,19 @@ For now, we disallow side effects.
 Namely, in the true-branch, b and c must not yet exist.
 Or more generally, any variables defined in either conditional scope must be uniquely named.
 
+As a really simple starting point, we can just allow only:
+```imp
+res = if cond { expr } else { expr };
+```
+(So no local statements)
+
 ## Allowing 'side effects' (future work)
 
 In the future, it is possible to allow this with relatively simply rewrite rules.
 Say `b` would be a variable in the outer scope, then we can rewrite the conditional as:
 
 ```imp
-res, b = if {
+res, b = if cond {
     b2 = a + a;
     c = b2 - 1;
     (c, b2)

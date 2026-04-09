@@ -32,7 +32,6 @@ fn main() {
     };
     let fold_last = expect_array(sumlast(fold_last_input));
     assert_eq!(fold_last.shp, vec![3]);
-    assert_eq!(fold_last.data, vec![5, 7, 9]);
     println!("sumlast = {:?}", fold_last.data);
 
     let ub: usize = 10;

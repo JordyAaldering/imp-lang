@@ -65,6 +65,12 @@ pub trait Visit<'ast> {
         }
     }
 
+    fn visit_cond(&mut self, cond: &Cond<'ast, Self::Ast>) {
+        Self::Ast::visit_operand(self, &cond.cond);
+        Self::Ast::visit_operand(self, &cond.true_branch);
+        Self::Ast::visit_operand(self, &cond.false_branch);
+    }
+
     fn visit_call(&mut self, call: &Call<'ast, Self::Ast>) {
         for arg in &call.args {
             Self::Ast::visit_operand(self, arg);
@@ -183,6 +189,10 @@ pub trait Rewrite<'ast> {
             Id(n) => Id(self.rewrite_id(n)),
             Const(n) => Const(self.rewrite_const(n)),
         }
+    }
+
+    fn rewrite_cond(&mut self, cond: Cond<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
+        todo!()
     }
 
     fn rewrite_call(&mut self, call: Call<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
@@ -304,6 +314,10 @@ pub trait Traverse<'ast> {
     type ExprOut = Expr<'ast, Self::OutAst>;
 
     fn trav_expr(&mut self, expr: Expr<'ast, Self::InAst>) -> Self::ExprOut;
+
+    // type CondOut = Cond<'ast, Self::OutAst>;
+
+    // fn trav_cond(&mut self, cond: Cond<'ast, Self::InAst>) -> Self::CondOut;
 
     type CallOut = Call<'ast, Self::OutAst>;
 

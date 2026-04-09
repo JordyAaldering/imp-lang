@@ -213,6 +213,29 @@ impl<'src> Parser<'src> {
         }
     }
 
+    fn parse_cond(&mut self) -> ParseResult<&'static Expr<'static, ParsedAst>> {
+        self.expect(Token::If)?;
+
+        let cond = self.parse_expr(None::<Bop>)?;
+
+        self.expect(Token::LBrace)?;
+
+        let true_branch = self.parse_expr(None::<Bop>)?;
+
+        self.expect(Token::RBrace)?;
+
+        self.expect(Token::Else)?;
+
+        self.expect(Token::LBrace)?;
+
+        let false_branch = self.parse_expr(None::<Bop>)?;
+
+        self.expect(Token::RBrace)?;
+
+        // Cond { cond, true_branch, false_branch };
+        todo!()
+    }
+
     fn parse_tensor(&mut self) -> ParseResult<&'static Expr<'static, ParsedAst>> {
         self.expect(Token::LBrace)?;
 

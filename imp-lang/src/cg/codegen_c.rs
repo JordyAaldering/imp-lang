@@ -401,9 +401,15 @@ impl<'ast> Visit<'ast> for CompileC {
 
         let (fold_name, call_args) = match &fold.foldfun {
             FoldFun::Name(id) => {
-                (Self::Ast::dispatch_name(id), vec![target_name.clone(), sel_expr])
+                let name = match id {
+                    CallTarget::Function(f) => rename_fundefs::mangle_fundef_name(&f.name, &f.args),
+                };
+                (name, vec![target_name.clone(), sel_expr])
             }
             FoldFun::Apply { id, args } => {
+                let name = match id {
+                    CallTarget::Function(f) => rename_fundefs::mangle_fundef_name(&f.name, &f.args),
+                };
                 let mut hole = 0usize;
                 let mut out = Vec::with_capacity(args.len());
                 for arg in args {
@@ -421,7 +427,7 @@ impl<'ast> Visit<'ast> for CompileC {
                         }
                     }
                 }
-                (Self::Ast::dispatch_name(id), out)
+                (name, out)
             }
         };
 
