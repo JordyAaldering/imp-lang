@@ -325,10 +325,10 @@ fn family_match_guard(args: &[Farg]) -> String {
                 }
                 AxisPattern::Dim(DimPattern::Var(extent)) => {
                     let expr = format!("arg{arg_index}.shp[{axis_index}]");
-                    if let Some((_, bound_expr)) = bound_dims.iter().find(|(name, _)| name == &extent.name) {
+                    if let Some((_, bound_expr)) = bound_dims.iter().find(|(name, _)| name == extent) {
                         checks.push(format!("{expr} == {bound_expr}"));
                     } else {
-                        bound_dims.push((extent.name.clone(), expr));
+                        bound_dims.push((extent.clone(), expr));
                     }
                 }
                 AxisPattern::Dim(DimPattern::Any) => {}
@@ -379,14 +379,14 @@ fn generate_shape_checks(args: &[Farg]) -> String {
                     ));
                 }
                 AxisPattern::Dim(DimPattern::Var(extent)) => {
-                    let binding = format!("__imp_extent_{}", sanitize_binding_name(&extent.name));
+                    let binding = format!("__imp_extent_{}", sanitize_binding_name(&extent));
                     if bound_dims.iter().any(|existing| existing == &binding) {
                         out.push_str(&format!(
                             "    assert_eq!({}.shp[{}], {}, \"extent {} mismatch\");\n",
                             arg.id,
                             idx,
                             binding,
-                            extent.name,
+                            extent,
                         ));
                     } else {
                         out.push_str(&format!("    let {} = {}.shp[{}];\n", binding, arg.id, idx));

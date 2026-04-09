@@ -80,18 +80,17 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
             self.bind_env(arg.id.clone(), Id::Arg(i));
         }
 
-        for (i, arg) in fundef.args.iter().enumerate() {
-            if let TypePattern::Axes(axes) = &arg.ty.shape {
-                for (k, axis) in axes.iter().enumerate() {
-                    if let AxisPattern::Rank(capture) = axis {
-                        self.bind_env(capture.dim_name.clone(), Id::Dim(i));
-                        self.bind_env(capture.shp_name.clone(), Id::Shp(i));
-                    } else if let AxisPattern::Dim(DimPattern::Var(var)) = axis
-                        && var.role == SymbolRole::Define {
-                        self.bind_env(var.name.clone(), Id::DimAt(i, k));
-                    }
+        let mut shape_prelude = Vec::new();
+        for assign in fundef.shape_prelude {
+            let assign = self.trav_assign(assign);
+            let new_assigns = mem::take(&mut self.new_assigns);
+            for stmt in new_assigns {
+                match stmt {
+                    Stmt::Assign(assign) => shape_prelude.push(assign),
+                    Stmt::Return(_) => unreachable!("shape prelude lowering emitted return"),
                 }
             }
+            shape_prelude.push(assign);
         }
 
         let mut body = Vec::new();
@@ -106,6 +105,8 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
         Fundef {
             name: fundef.name,
             args: fundef.args,
+            shape_prelude,
+            shape_facts: fundef.shape_facts.map_stage(),
             decs: Vec::new(),
             body,
             ret_type: fundef.ret_type,
@@ -155,6 +156,14 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
     fn trav_prf_call(&mut self, prf: PrfCall<'ast, Self::InAst>) -> Self::PrfCallOut {
         use PrfCall::*;
         match prf {
+            ShapeA(a) => {
+                let a = self.trav_expr(a.clone());
+                ShapeA(a)
+            }
+            DimA(a) => {
+                let a = self.trav_expr(a.clone());
+                DimA(a)
+            }
             AddSxS(l, r) => {
                 let l = self.trav_expr(l.clone());
                 let r = self.trav_expr(r.clone());
@@ -259,9 +268,6 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
         match id {
             Id::Arg(i) => Id::Arg(i),
             Id::Var(name) => self.lookup_env(&name).unwrap_or(Id::Var(name)),
-            Id::Dim(i) => Id::Dim(i),
-            Id::Shp(i) => Id::Shp(i),
-            Id::DimAt(i, k) => Id::DimAt(i, k),
         }
     }
 }

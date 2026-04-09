@@ -64,11 +64,6 @@ impl CompileC {
         match id {
             Id::Arg(i) => self.arg_types[*i].clone(),
             Id::Var(v) => v.ty.clone(),
-            Id::Dim(_) | Id::DimAt(_, _) => Type::scalar(BaseType::Usize),
-            Id::Shp(_) => Type {
-                ty: BaseType::Usize,
-                shape: TypePattern::Axes(vec![AxisPattern::Dim(DimPattern::Any)]),
-            },
         }
     }
 
@@ -76,9 +71,6 @@ impl CompileC {
         match id {
             Id::Arg(i) => self.arg_names[*i].clone(),
             Id::Var(v) => v.name.clone(),
-            Id::Dim(i) => format!("{}.dim", self.arg_names[*i]),
-            Id::DimAt(i, k) => format!("{}.shp[{k}]", self.arg_names[*i]),
-            Id::Shp(_) => panic!("nameof called on Id::Shp — use render_expr instead"),
         }
     }
 
@@ -247,6 +239,9 @@ impl<'ast> Visit<'ast> for CompileC {
         self.indent += 1;
         for arg in &fundef.args {
             self.push_line(&format!("(void){};", arg.id));
+        }
+        for assign in &fundef.shape_prelude {
+            self.visit_assign(assign);
         }
         for stmt in &fundef.body {
             self.visit_stmt(stmt);
@@ -470,12 +465,6 @@ impl<'ast> Visit<'ast> for CompileC {
         let arg_types: Vec<Type> = call.args.iter().map(|id| match id {
             Id::Arg(i) => self.arg_types[*i].clone(),
             Id::Var(v) => v.ty.clone(),
-            Id::Dim(_) => Type::scalar(BaseType::Usize),
-            Id::DimAt(_, _) => Type::scalar(BaseType::Usize),
-            Id::Shp(_) => Type {
-                ty: BaseType::Usize,
-                shape: TypePattern::Axes(vec![AxisPattern::Dim(DimPattern::Any)]),
-            },
         }).collect();
 
         let needs_runtime_wrapper = arg_types.iter().any(|t| matches!(t.shape, TypePattern::Any));
@@ -499,6 +488,26 @@ impl<'ast> Visit<'ast> for CompileC {
     fn visit_prf_call(&mut self, prf_call: &PrfCall<'ast, TypedAst>) {
         use PrfCall::*;
         let rendered = match prf_call {
+            ShapeA(arr) => {
+                let arg = self.render_expr(&Expr::Id(*arr));
+                self.shp_uid += 1;
+                let uid = self.shp_uid;
+                let meta = format!("_shp{uid}_meta");
+                let data = format!("_shp{uid}_data");
+                let wrap = format!("_shp{uid}");
+                self.push_line(&format!("size_t *{meta} = (size_t *)malloc(sizeof(size_t));"));
+                self.push_line(&format!("*{meta} = {arg}.dim;"));
+                self.push_line(&format!("size_t *{data} = (size_t *)malloc({arg}.dim * sizeof(size_t));"));
+                self.push_line(&format!("for (size_t _i = 0; _i < {arg}.dim; _i += 1) {{ {data}[_i] = {arg}.shp[_i]; }}"));
+                self.push_line(&format!(
+                    "ImpArrayRaw {wrap} = (ImpArrayRaw) {{ .len = {arg}.dim, .dim = 1, .shp = {meta}, .data = (void *){data} }};",
+                ));
+                wrap
+            }
+            DimA(arr) => {
+                let arg = self.render_expr(&Expr::Id(*arr));
+                format!("{arg}.dim")
+            }
             AddSxS(a, b) => format!("{} + {}", self.render_expr(&Expr::Id(*a)), self.render_expr(&Expr::Id(*b))),
             SubSxS(a, b) => format!("{} - {}", self.render_expr(&Expr::Id(*a)), self.render_expr(&Expr::Id(*b))),
             MulSxS(a, b) => format!("{} * {}", self.render_expr(&Expr::Id(*a)), self.render_expr(&Expr::Id(*b))),
@@ -526,30 +535,6 @@ impl<'ast> Visit<'ast> for CompileC {
         match id {
             Id::Arg(i) => self.expr_stack.push(self.arg_names[*i].clone()),
             Id::Var(lvis) => self.expr_stack.push(lvis.name.clone()),
-            Id::Dim(i) => {
-                let name = format!("{}.dim", self.arg_names[*i]);
-                self.expr_stack.push(name);
-            }
-            Id::DimAt(i, k) => {
-                let name = format!("{}.shp[{k}]", self.arg_names[*i]);
-                self.expr_stack.push(name);
-            }
-            Id::Shp(i) => {
-                let arg = self.arg_names[*i].clone();
-                self.shp_uid += 1;
-                let uid = self.shp_uid;
-                let meta = format!("_shp{uid}_meta");
-                let data = format!("_shp{uid}_data");
-                let wrap = format!("_shp{uid}");
-                self.push_line(&format!("size_t *{meta} = (size_t *)malloc(sizeof(size_t));"));
-                self.push_line(&format!("*{meta} = {arg}.dim;"));
-                self.push_line(&format!("size_t *{data} = (size_t *)malloc({arg}.dim * sizeof(size_t));"));
-                self.push_line(&format!("for (size_t _i = 0; _i < {arg}.dim; _i += 1) {{ {data}[_i] = {arg}.shp[_i]; }}"));
-                self.push_line(&format!(
-                    "ImpArrayRaw {wrap} = (ImpArrayRaw) {{ .len = {arg}.dim, .dim = 1, .shp = {meta}, .data = (void *){data} }};",
-                ));
-                self.expr_stack.push(wrap);
-            }
         }
     }
 
@@ -705,7 +690,6 @@ fn elem_ctype_of_id(id: &Id<'_, TypedAst>) -> String {
     match id {
         Id::Arg(_) => "uint32_t".to_owned(),  // args used directly as array bounds are uncommon
         Id::Var(v) => base_ctype(&v.ty),
-        Id::Dim(_) | Id::Shp(_) | Id::DimAt(_, _) => "size_t".to_owned(),
     }
 }
 
@@ -721,7 +705,6 @@ fn id_base_type(id: &Id<'_, TypedAst>) -> BaseType {
     match id {
         Id::Var(v) => v.ty.ty.clone(),
         Id::Arg(_) => BaseType::U32,
-        Id::Dim(_) | Id::Shp(_) | Id::DimAt(_, _) => BaseType::Usize,
     }
 }
 

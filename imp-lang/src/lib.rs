@@ -18,6 +18,7 @@ use crate::{ast::*, traverse::*};
 pub fn compile(src: &str) -> Program<'static, TypedAst> {
     let ast = scp::scanparse(src).unwrap();
     println!("{}", show::show(&ast));
+    let ast = tp::check_tp(ast).unwrap();
     let ast = tp::analyse_tp(ast);
     println!("{}", show::show(&ast));
     let ast = pre::flatten(ast);
@@ -66,6 +67,13 @@ mod tests {
     #[test]
     fn compile_stdlib_small_surface() {
         let src = include_str!("../../example/src/stdlib_small.imp");
+        let _ = compile(src);
+    }
+
+    #[test]
+    #[should_panic]
+    fn reject_invalid_type_patterns() {
+        let src = include_str!("../../example/src/tp_should_reject.imp");
         let _ = compile(src);
     }
 }

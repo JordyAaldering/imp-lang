@@ -1,6 +1,7 @@
 // Declarations
 mod program;
 mod fundef;
+mod shapefact;
 // Statements
 mod stmt;
 mod assign;
@@ -20,6 +21,7 @@ mod typ;
 // Declarations
 pub use program::*;
 pub use fundef::*;
+pub use shapefact::*;
 // Statements
 pub use stmt::*;
 pub use assign::*;

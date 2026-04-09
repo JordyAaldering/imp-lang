@@ -148,6 +148,8 @@ impl<'src> Parser<'src> {
         Ok(Fundef {
             name,
             args,
+            shape_prelude: Vec::new(),
+            shape_facts: ShapeFacts::default(),
             decs: Vec::new(),
             body,
             ret_type,
@@ -362,6 +364,8 @@ impl<'src> Parser<'src> {
 
         use PrfCall::*;
         let expr = match (id.as_str(), args.as_slice()) {
+            ("shapeA", [a]) => Expr::PrfCall(ShapeA(*a)),
+            ("dimA", [a]) => Expr::PrfCall(DimA(*a)),
             ("selVxA", [a, b]) => Expr::PrfCall(SelVxA(*a, *b)),
             ("addSxS", [a, b]) => Expr::PrfCall(AddSxS(*a, *b)),
             ("subSxS", [a, b]) => Expr::PrfCall(SubSxS(*a, *b)),
@@ -506,7 +510,6 @@ impl<'src> Parser<'src> {
                     Ok(AxisPattern::Rank(RankCapture {
                         dim_name: name,
                         shp_name,
-                        dim_role: SymbolRole::Define,
                     }))
                 } else if self.matches(Token::Colon).is_some() {
                     // `d:shp` rank-and-shape capture.
@@ -515,12 +518,10 @@ impl<'src> Parser<'src> {
                     Ok(AxisPattern::Rank(RankCapture {
                         dim_name: name,
                         shp_name,
-                        dim_role: SymbolRole::Define,
                     }))
                 } else {
                     // Plain dimension variable.
-                    // Role will be resolved by tp::analyse_tp.
-                    Ok(AxisPattern::Dim(DimPattern::Var(ExtentVar { name, role: SymbolRole::Define })))
+                    Ok(AxisPattern::Dim(DimPattern::Var(name)))
                 }
             }
             Token::Dot => Ok(AxisPattern::Dim(DimPattern::Any)),
@@ -556,7 +557,7 @@ fn axis_signature_eq(a: &AxisPattern, b: &AxisPattern) -> bool {
         (AxisPattern::Dim(da), AxisPattern::Dim(db)) => match (da, db) {
             (DimPattern::Any, DimPattern::Any) => true,
             (DimPattern::Known(x), DimPattern::Known(y)) => x == y,
-            (DimPattern::Var(x), DimPattern::Var(y)) => x.name == y.name,
+            (DimPattern::Var(x), DimPattern::Var(y)) => x == y,
             _ => false,
         },
         (AxisPattern::Rank(ra), AxisPattern::Rank(rb)) => ra.dim_name == rb.dim_name && ra.shp_name == rb.shp_name,

@@ -146,7 +146,7 @@ fn mangle_axis(axis: &AxisPattern) -> String {
         AxisPattern::Dim(dim) => match dim {
             DimPattern::Any => "any".to_owned(),
             DimPattern::Known(v) => v.to_string(),
-            DimPattern::Var(ext) => ext.name.clone(),
+            DimPattern::Var(ext) => ext.clone(),
         },
         AxisPattern::Rank(capture) => format!("{}_{}", capture.dim_name, capture.shp_name),
     }

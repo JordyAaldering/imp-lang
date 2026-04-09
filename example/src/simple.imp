@@ -6,6 +6,11 @@ fn shape(usize[d:shp] arr) -> usize[d] {
     return shp;
 }
 
+fn take(usize[o] sv, i32[o:oshp,i:ishp] arr) -> i32[o:sv,i:ishp] {
+    // Just returns arr for now, which only is correct for sv == []
+    return arr;
+}
+
 fn zeros(usize n) -> usize[n] {
     return { 0usize | [0usize] <= iv < [n] };
 }
