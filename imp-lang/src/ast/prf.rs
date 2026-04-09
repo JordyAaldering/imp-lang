@@ -3,6 +3,14 @@ use super::*;
 /// Primitive function call
 #[derive(Clone, Debug)]
 pub enum PrfCall<'ast, Ast: AstConfig> {
+    /// @shapeA
+    ///
+    /// Shape vector of an array.
+    ShapeA(Ast::Operand<'ast>),
+    /// @dimA
+    ///
+    /// Rank (dimension count) of an array.
+    DimA(Ast::Operand<'ast>),
     /// @selVxA
     ///
     /// Selection of a vector in an array, where the
@@ -69,6 +77,8 @@ impl<'ast, Ast: AstConfig> PrfCall<'ast, Ast> {
     pub fn nameof(&self) -> &'static str {
         use PrfCall::*;
         match self {
+            ShapeA(_) => "@shapeA",
+            DimA(_) => "@dimA",
             SelVxA(_, _) => "@selVxA",
             AddSxS(_, _) => "@addSxS",
             SubSxS(_, _) => "@subSxS",
@@ -88,6 +98,8 @@ impl<'ast, Ast: AstConfig> PrfCall<'ast, Ast> {
     pub fn args(&self) -> Vec<&Ast::Operand<'ast>> {
         use PrfCall::*;
         match self {
+            ShapeA(a) => vec![a],
+            DimA(a) => vec![a],
             SelVxA(a, b) => vec![a, b],
             AddSxS(a, b) => vec![a, b],
             SubSxS(a, b) => vec![a, b],
@@ -107,6 +119,8 @@ impl<'ast, Ast: AstConfig> PrfCall<'ast, Ast> {
     pub fn args_mut(&mut self) -> Vec<&mut Ast::Operand<'ast>> {
         use PrfCall::*;
         match self {
+            ShapeA(a) => vec![a],
+            DimA(a) => vec![a],
             SelVxA(a, b) => vec![a, b],
             AddSxS(a, b) => vec![a, b],
             SubSxS(a, b) => vec![a, b],

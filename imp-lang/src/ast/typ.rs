@@ -59,14 +59,7 @@ pub enum DimPattern {
     /// Named symbol
     ///
     /// Example: `u32[n]`, `u32[len]`
-    Var(ExtentVar),
-}
-
-/// A named dimension symbol with its binding role
-#[derive(Clone, Debug)]
-pub struct ExtentVar {
-    pub name: String,
-    pub role: SymbolRole,
+    Var(String),
 }
 
 /// A `d:shp` rank capture — binds the rank scalar (`d`) and the shape vector (`shp`) from
@@ -77,17 +70,6 @@ pub struct RankCapture {
     pub dim_name: String,
     /// Name bound to the array's shape vector (`arr.shp`) as a `usize[d]` array
     pub shp_name: String,
-    /// Whether `dim_name` is being introduced (Define) or must equal a prior symbol
-    pub dim_role: SymbolRole,
-}
-
-/// Whether a symbol is first introduced here or constrained to equal a prior definition
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum SymbolRole {
-    /// First occurrence, this site defines the symbol's value
-    Define,
-    /// Subsequent occurrence, must equal the defining occurrence
-    Use,
 }
 
 impl Type {
@@ -96,11 +78,7 @@ impl Type {
     }
 
     pub fn vector(ty: BaseType, extent: &str) -> Self {
-        let dim = if extent == "." {
-            DimPattern::Any
-        } else {
-            DimPattern::Var(ExtentVar { name: extent.to_owned(), role: SymbolRole::Use })
-        };
+        let dim = if extent == "." { DimPattern::Any } else { DimPattern::Var(extent.to_owned()) };
         Self::vector_dim(ty, dim)
     }
 

@@ -17,6 +17,8 @@ pub fn type_infer<'ast>(program: Program<'ast, UntypedAst>) -> Result<Program<'a
                 name: fundef.name.clone(),
                 ret_type: fundef.ret_type.clone(),
                 args: fundef.args.clone(),
+                shape_prelude: Vec::new(),
+                shape_facts: ShapeFacts::default(),
                 decs: Vec::new(),
                 body: Vec::new(),
             }));
@@ -246,15 +248,13 @@ impl<'ast> TypeInfer<'ast> {
     /// Try to extract one named/constant `AxisPattern` per element from `ub`'s SSA-defining
     /// array literal.  Returns `None` if `ub` is not a locally-defined array literal.
     ///
-    /// For `ub = [cols]` (arg) → `[Dim(Var("cols", Use))]`.
+    /// For `ub = [cols]` (arg) → `[Dim(Var("cols"))]`.
     /// For `ub = [3]`   (u32 literal absorbed into SSA) → `[Dim(Known(3))]`.
     /// For `ub = []`    → `[]` (execute-once case).
     fn extract_ub_axes(&self, ub: &Id<'ast, UntypedAst>) -> Option<Vec<AxisPattern>> {
         let lvis = match ub {
             Id::Var(v) => v,
             Id::Arg(_) => return None,
-            Id::Dim(_) | Id::Shp(_) => return None,
-            Id::DimAt(_, _) => return None,
         };
 
         let arr = match lvis.ssa? {
@@ -265,26 +265,11 @@ impl<'ast> TypeInfer<'ast> {
         let mut axes = Vec::with_capacity(arr.elems.len());
         for elem in &arr.elems {
             let dp = match elem {
-                Id::Arg(i) => DimPattern::Var(ExtentVar {
-                    name: self.args[*i].id.clone(),
-                    role: SymbolRole::Use,
-                }),
-                Id::Dim(i) => DimPattern::Var(ExtentVar {
-                    name: format!("{}.dim", self.args[*i].id),
-                    role: SymbolRole::Use,
-                }),
-                Id::Shp(_) => DimPattern::Any,
-                Id::DimAt(i, k) => DimPattern::Var(ExtentVar {
-                    name: format!("{}.shp[{k}]", self.args[*i].id),
-                    role: SymbolRole::Use,
-                }),
+                Id::Arg(i) => DimPattern::Var(self.args[*i].id.clone()),
                 Id::Var(v) => {
                     match v.ssa {
                         Some(Expr::Const(Const::Usize(val))) => DimPattern::Known(*val),
-                        _ => DimPattern::Var(ExtentVar {
-                            name: v.name.clone(),
-                            role: SymbolRole::Use,
-                        }),
+                        _ => DimPattern::Var(v.name.clone()),
                     }
                 }
             };
@@ -353,12 +338,17 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
     // Declarations
 
     fn trav_fundef(&mut self, fundef: Fundef<'ast, Self::InAst>) -> Fundef<'ast, Self::OutAst> {
-        let Fundef { name, ret_type, args, body, decs: _ } = fundef;
+        let Fundef { name, ret_type, args, shape_prelude, shape_facts, body, decs: _ } = fundef;
 
         self.args = args.clone();
 
         self.idmap.clear();
         self.new_ids.clear();
+
+        let mut new_shape_prelude = Vec::new();
+        for assign in shape_prelude {
+            new_shape_prelude.push(self.trav_assign(assign));
+        }
 
         let mut new_body = Vec::new();
         for stmt in body {
@@ -369,6 +359,8 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
             name,
             ret_type,
             args,
+            shape_prelude: new_shape_prelude,
+            shape_facts: shape_facts.map_stage(),
             decs: self.new_ids.clone(),
             body: new_body,
         }
@@ -519,6 +511,16 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
 
         use PrfCall::*;
         match prf {
+            ShapeA(arr) => {
+                let (arr, arr_ty) = self.trav_id(arr);
+                self.expect_array_prf_arg(prf_name, 0, &arr_ty);
+                (ShapeA(arr), Type::vector_dim(BaseType::Usize, DimPattern::Any))
+            }
+            DimA(arr) => {
+                let (arr, arr_ty) = self.trav_id(arr);
+                self.expect_array_prf_arg(prf_name, 0, &arr_ty);
+                (DimA(arr), Type::scalar(BaseType::Usize))
+            }
             SelVxA(idx, arr) => {
                 let (idx, idx_ty) = self.trav_id(idx);
                 self.expect_usize_vector_prf_arg(prf_name, 0, &idx_ty);
@@ -778,21 +780,6 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
                 let ty = new_id.ty.clone();
                 (Id::Var(*new_id), ty)
             },
-            Id::Dim(i) => {
-                (Id::Dim(i), Type::scalar(BaseType::Usize))
-            }
-            Id::Shp(i) => {
-                let dim_name = match &self.args[i].ty.shape {
-                    TypePattern::Axes(axes) => axes.iter().find_map(|a| {
-                        if let AxisPattern::Rank(cap) = a { Some(cap.dim_name.clone()) } else { None }
-                    }),
-                    _ => None,
-                }.expect("Shp(i) must come from an arg with a RankCapture");
-                (Id::Shp(i), Type::vector(BaseType::Usize, &dim_name))
-            }
-            Id::DimAt(i, k) => {
-                (Id::DimAt(i, k), Type::scalar(BaseType::Usize))
-            }
         }
     }
 
@@ -882,6 +869,7 @@ fn overload_key_for_call(name: &str, arg_types: &[Type]) -> OverloadKey {
         arg_bases: arg_types.iter().map(|t| t.ty.clone()).collect(),
     }
 }
+
 
 fn build_overload_families<'ast>(
     stubs_by_internal_key: &HashMap<String, &'ast Fundef<'ast, TypedAst>>,
@@ -1027,10 +1015,8 @@ fn dim_more_or_equal(a: &DimPattern, b: &DimPattern) -> bool {
         (DimPattern::Known(x), DimPattern::Known(y)) => x == y,
         (DimPattern::Known(_), DimPattern::Var(_)) => true,
         (DimPattern::Known(_), DimPattern::Any) => true,
-
-        (DimPattern::Var(x), DimPattern::Var(y)) => x.name == y.name,
+        (DimPattern::Var(x), DimPattern::Var(y)) => x == y,
         (DimPattern::Var(_), DimPattern::Any) => true,
-
         (DimPattern::Any, DimPattern::Any) => true,
         _ => false,
     }

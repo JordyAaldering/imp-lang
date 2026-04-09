@@ -27,7 +27,6 @@ impl ConstantFold {
         match id {
             Id::Var(lvis) => self.known.get(&Self::ptr(lvis)).copied(),
             Id::Arg(_) => None,
-            Id::Dim(_) | Id::Shp(_) | Id::DimAt(_, _) => None,
         }
     }
 }

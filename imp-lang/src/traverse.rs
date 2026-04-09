@@ -14,6 +14,10 @@ pub trait Visit<'ast> {
     fn visit_fundef(&mut self, fundef: &Fundef<'ast, Self::Ast>) {
         self.visit_fargs(&fundef.args);
 
+        for assign in &fundef.shape_prelude {
+            self.visit_assign(assign);
+        }
+
         for vardec in &fundef.decs {
             self.visit_vardec(vardec);
         }
@@ -116,6 +120,10 @@ pub trait Rewrite<'ast> {
 
         fundef.ret_type = self.rewrite_type(fundef.ret_type.clone());
 
+        for assign in &mut fundef.shape_prelude {
+            self.rewrite_assign(assign);
+        }
+
         for stmt in &mut fundef.body {
             self.rewrite_stmt(stmt);
         }
@@ -212,6 +220,11 @@ pub trait Traverse<'ast> {
     fn trav_fundef(&mut self, fundef: Fundef<'ast, Self::InAst>) -> Fundef<'ast, Self::OutAst> {
         let args = self.trav_fargs(fundef.args);
 
+        let mut shape_prelude = Vec::new();
+        for assign in fundef.shape_prelude {
+            shape_prelude.push(self.trav_assign(assign));
+        }
+
         let mut decs = Vec::new();
         for vardec in fundef.decs {
             decs.push(self.trav_vardec(vardec));
@@ -226,6 +239,8 @@ pub trait Traverse<'ast> {
             name: fundef.name,
             ret_type: fundef.ret_type,
             args,
+            shape_prelude,
+            shape_facts: ShapeFacts::default(),
             decs,
             body,
         }

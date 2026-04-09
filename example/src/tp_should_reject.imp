@@ -1,0 +1,14 @@
+// Multipe unconstrained variable-rank patterns
+fn should_be_rejected(i32[d:shp,d2:shp2] arr) -> i32 {
+    return 0i32;
+}
+
+// Unconstrained return type rank not allowed
+fn should_also_be_rejected(i32 a) -> i32[d:shp] {
+    return [a];
+}
+
+// The shape may be free though
+fn this_is_fine_however(usize n) -> i32[n:shp] {
+    return [0i32];
+}
