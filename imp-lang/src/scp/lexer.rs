@@ -3,6 +3,7 @@ use super::span::Span;
 #[derive(Clone, Debug, PartialEq)]
 pub enum Token {
     // Type names
+    BoolType,
     I32Type,
     I64Type,
     U32Type,
@@ -10,7 +11,6 @@ pub enum Token {
     UsizeType,
     F32Type,
     F64Type,
-    BoolType,
     // Symbols
     Arrow,
     Assign,
@@ -21,34 +21,34 @@ pub enum Token {
     LSquare,
     RSquare,
     Bar,
+    Dot,
     Comma,
     Colon,
     Semicolon,
-    Dot,
     // Keywords
     Fn,
     Return,
     If, Else,
-    // Arithmetic operators
+    // Operators
     Add, Sub, Mul, Div,
-    // Comparison operators
-    Not, Eq, Ne, Lt, Le, Gt, Ge,
+    Lt, Le, Gt, Ge,
+    Eq, Ne, Not,
     // Literals
-    NatValue(i32), // Unspecified natural number, this is assumed to be i32 by default (in future, we may want to try to derive this from context first)
+    BoolValue(bool),
+    NatValue(i32),
     I32Value(i32),
     I64Value(i64),
     U32Value(u32),
     U64Value(u64),
     UsizeValue(usize),
-    RealValue(f32), // Unspecified real number, this is assumed to be f32 by default (in future, we may want to try to derive this from context first)
+    RealValue(f32),
     F32Value(f32),
     F64Value(f64),
-    BoolValue(bool),
-    /// `@` is used as a prefix for primitive functions.
+    /// `@` is used as a prefix for primitive function calls
     Prf(String),
     Identifier(String),
-    /// Error: natural number specifier a real numbered value.
-    /// E.g. `42.0i32` or `3.14usize`.
+    /// Error: natural number specifier on a real numbered value
+    /// Example: `42.0i32`, `3.14usize`
     NotANaturalNumber(String),
     /// Error: unexpected token during lexing
     UnexpectedCharacter(char),
@@ -157,7 +157,13 @@ impl<'source> Iterator for Lexer<'source> {
         let start_col = self.col;
 
         // Keywords
-        let token = if self.match_str("i32") {
+        let token = if self.match_str("true") {
+            BoolValue(true)
+        } else if self.match_str("false") {
+            BoolValue(false)
+        } else if self.match_str("bool") {
+            BoolType
+        } else if self.match_str("i32") {
             I32Type
         } else if self.match_str("i64") {
             I64Type
@@ -171,12 +177,6 @@ impl<'source> Iterator for Lexer<'source> {
             F32Type
         } else if self.match_str("f64") {
             F64Type
-        } else if self.match_str("bool") {
-            BoolType
-        } else if self.match_str("true") {
-            BoolValue(true)
-        } else if self.match_str("false") {
-            BoolValue(false)
         } else if self.match_str("fn") {
             Fn
         } else if self.match_str("return") {
@@ -188,6 +188,7 @@ impl<'source> Iterator for Lexer<'source> {
         } else {
             match self.next_char()? {
                 // Symbols
+                '-' if self.match_char('>') => Arrow,
                 '{' => LBrace,
                 '}' => RBrace,
                 '(' => LParen,
@@ -195,27 +196,24 @@ impl<'source> Iterator for Lexer<'source> {
                 '[' => LSquare,
                 ']' => RSquare,
                 '|' => Bar,
+                '.' => Dot,
                 ',' => Comma,
                 ':' => Colon,
                 ';' => Semicolon,
-                '-' if self.match_char('>') => Arrow,
-                // Arithmetic operators
+                // Operators
                 '+' => Add,
                 '-' => Sub,
                 '*' => Mul,
                 '/' => Div,
-                // Comparison operators
-                '=' if self.match_char('=') => Eq,
-                '!' if self.match_char('=') => Ne,
                 '<' if self.match_char('=') => Le,
                 '<' => Lt,
                 '>' if self.match_char('=') => Ge,
                 '>' => Gt,
+                '=' if self.match_char('=') => Eq,
+                '!' if self.match_char('=') => Ne,
                 '!' => Not,
-                // Assignment
                 '=' => Assign,
-                '.' => Dot,
-                // Primitive function calls
+                // Primitive function call
                 '@' => {
                     while self.peek_char().is_some_and(|c| c.is_ascii_alphanumeric() || c == '_') {
                         self.current += 1;
