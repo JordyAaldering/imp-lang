@@ -93,13 +93,6 @@ impl<'src> Parser<'src> {
         Ok(Program { overloads })
     }
 
-    fn same_farg_signature(a: &[Farg], b: &[Farg]) -> bool {
-        if a.len() != b.len() {
-            return false;
-        }
-        a.iter().zip(b.iter()).all(|(l, r)| l.ty.ty == r.ty.ty && shape_signature_eq(&l.ty.shape, &r.ty.shape))
-    }
-
     fn parse_fundef(&mut self) -> ParseResult<Fundef<'static, ParsedAst>> {
         let _ = self.expect(Token::Fn)?;
         let name = self.parse_callable_name()?;
