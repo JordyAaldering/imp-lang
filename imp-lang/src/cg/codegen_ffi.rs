@@ -46,12 +46,12 @@ impl<'ast> Visit<'ast> for CompileFfi {
         let families = collect_public_families(program);
 
         for (_base_name, fundef) in program.functions.iter() {
+            self.push("\n");
             self.push("unsafe extern \"C\" {\n");
             self.push(&format!("    fn IMP_{}(", fundef.name));
             self.push(&join_args(&fundef.args, rust_ffi_type));
             self.push(&format!(") -> {};\n", rust_ffi_type(&fundef.ret_type)));
             self.push("}\n");
-
         }
 
         for family in families {
@@ -68,6 +68,7 @@ impl<'ast> Visit<'ast> for CompileFfi {
 
 impl CompileFfi {
     fn emit_direct_wrapper(&mut self, base_name: &str, fundef: &Fundef<'_, TypedAst>) {
+        self.push("\n");
         self.push(&format!("fn {}(", rust_wrapper_name(base_name)));
         self.push(&join_args(&fundef.args, rust_api_arg_type));
         self.push(&format!(") -> {} {{\n", rust_api_ret_type(&fundef.ret_type)));
@@ -79,12 +80,15 @@ impl CompileFfi {
 
         let call_args = emit_marshaled_call_args(&mut self.output, &fundef.args);
         self.push(&emit_return_conversion(&fundef.name, &fundef.ret_type, &call_args));
+        self.push("\n");
         self.push("}\n");
     }
 
     fn emit_family_wrapper(&mut self, family: &PublicFamily<'_, '_>) {
         let first = family.overloads[0].1;
         let arg_bases: Vec<String> = first.args.iter().map(|a| rust_base_type(&a.ty)).collect();
+
+        self.push("\n");
         self.push(&format!("fn {}(", rust_wrapper_name(&family.root_name)));
         self.push(
             &arg_bases
