@@ -1,8 +1,8 @@
 use std::{collections::HashMap, iter::Peekable};
 
-use crate::ast::*;
-
 use super::{lexer::*, operator::*, span::*};
+
+use crate::ast::*;
 
 pub struct Parser<'src> {
     lexer: Peekable<Lexer<'src>>,
@@ -78,7 +78,6 @@ impl<'src> Parser<'src> {
             match token {
                 Token::Fn => {
                     let fundef = self.parse_fundef()?;
-
                     let group = overloads.entry(fundef.name.clone()).or_insert(HashMap::new());
                     let fundefs = group.entry(fundef.signature()).or_insert(Vec::new());
                     fundefs.push(fundef);
@@ -164,9 +163,7 @@ impl<'src> Parser<'src> {
                         let ret_lvis = self.alloc_lvis(ret_name.clone(), None);
                         vec![
                             Stmt::Assign(Assign { lhs: ret_lvis, expr }),
-                            Stmt::Return(Return {
-                                id: Id::Var(ret_name),
-                            }),
+                            Stmt::Return(Return { id: Id::Var(ret_name) }),
                         ]
                     }
                 }
@@ -203,17 +200,13 @@ impl<'src> Parser<'src> {
         let cond = self.parse_expr(None::<Bop>)?;
 
         self.expect(Token::LBrace)?;
-
         let then_branch = self.parse_expr(None::<Bop>)?;
-
         self.expect(Token::RBrace)?;
 
         self.expect(Token::Else)?;
 
         self.expect(Token::LBrace)?;
-
         let else_branch = self.parse_expr(None::<Bop>)?;
-
         self.expect(Token::RBrace)?;
 
         Ok(self.alloc_expr(Expr::Cond(Cond { cond, then_branch, else_branch })))
@@ -227,13 +220,9 @@ impl<'src> Parser<'src> {
         self.expect(Token::Bar)?;
 
         let lb = self.parse_expr(Some(PrecedenceFloor(2)))?;
-
         self.expect(Token::Le)?;
-
         let (iv, _) = self.parse_id()?;
-
         self.expect(Token::Lt)?;
-
         let ub = self.parse_expr(None::<Bop>)?;
 
         self.expect(Token::RBrace)?;
@@ -252,14 +241,20 @@ impl<'src> Parser<'src> {
         let (token, span_start) = self.next()?;
 
         let mut left = match token {
-            Token::Prf(id) => self.parse_prf_call(id, span_start)?,
+            Token::Prf(id) => {
+                if id == "fold" {
+                    self.parse_fold()?
+                } else {
+                    self.parse_prf_call(id, span_start)?
+                }
+            }
             Token::Identifier(id) => {
                 if let Some((Token::LParen, _)) = self.lexer.peek() {
                     self.parse_call(id)?
                 } else {
                     self.alloc_expr(Expr::Id(Id::Var(id)))
                 }
-            },
+            }
             Token::BoolValue(v) => self.alloc_expr(Expr::Const(Const::Bool(v))),
             Token::NatValue(v) => self.alloc_expr(Expr::Const(Const::I32(v))),
             Token::I32Value(v) => self.alloc_expr(Expr::Const(Const::I32(v))),
@@ -358,13 +353,9 @@ impl<'src> Parser<'src> {
     }
 
     fn parse_prf_call(&mut self, id: String, span: Span) -> ParseResult<&'static Expr<'static, ParsedAst>> {
-        if id == "fold" {
-            return self.parse_fold();
-        }
+        let mut args = Vec::new();
 
         self.expect(Token::LParen)?;
-
-        let mut args = Vec::new();
         if self.matches(Token::RParen).is_none() {
             args.push(self.parse_expr(None::<Bop>)?);
 
@@ -376,28 +367,28 @@ impl<'src> Parser<'src> {
         }
 
         use PrfCall::*;
-        let expr = match (id.as_str(), args.as_slice()) {
-            ("shapeA", [a]) => Expr::PrfCall(ShapeA(*a)),
-            ("dimA", [a]) => Expr::PrfCall(DimA(*a)),
-            ("selVxA", [a, b]) => Expr::PrfCall(SelVxA(*a, *b)),
-            ("addSxS", [a, b]) => Expr::PrfCall(AddSxS(*a, *b)),
-            ("subSxS", [a, b]) => Expr::PrfCall(SubSxS(*a, *b)),
-            ("mulSxS", [a, b]) => Expr::PrfCall(MulSxS(*a, *b)),
-            ("divSxS", [a, b]) => Expr::PrfCall(DivSxS(*a, *b)),
-            ("ltSxS", [a, b]) => Expr::PrfCall(LtSxS(*a, *b)),
-            ("leSxS", [a, b]) => Expr::PrfCall(LeSxS(*a, *b)),
-            ("gtSxS", [a, b]) => Expr::PrfCall(GtSxS(*a, *b)),
-            ("geSxS", [a, b]) => Expr::PrfCall(GeSxS(*a, *b)),
-            ("eqSxS", [a, b]) => Expr::PrfCall(EqSxS(*a, *b)),
-            ("neSxS", [a, b]) => Expr::PrfCall(NeSxS(*a, *b)),
-            ("negS", [a]) => Expr::PrfCall(NegS(*a)),
-            ("notS", [a]) => Expr::PrfCall(NotS(*a)),
+        let call = match (id.as_str(), args.as_slice()) {
+            ("dimA", [a]) => DimA(*a),
+            ("shapeA", [a]) => ShapeA(*a),
+            ("selVxA", [a, b]) => SelVxA(*a, *b),
+            ("addSxS", [a, b]) => AddSxS(*a, *b),
+            ("subSxS", [a, b]) => SubSxS(*a, *b),
+            ("mulSxS", [a, b]) => MulSxS(*a, *b),
+            ("divSxS", [a, b]) => DivSxS(*a, *b),
+            ("ltSxS", [a, b]) => LtSxS(*a, *b),
+            ("leSxS", [a, b]) => LeSxS(*a, *b),
+            ("gtSxS", [a, b]) => GtSxS(*a, *b),
+            ("geSxS", [a, b]) => GeSxS(*a, *b),
+            ("eqSxS", [a, b]) => EqSxS(*a, *b),
+            ("neSxS", [a, b]) => NeSxS(*a, *b),
+            ("negS", [a]) => NegS(*a),
+            ("notS", [a]) => NotS(*a),
             _ => {
                 return Err(ParseError::UnknownPrimitive(id.clone(), span));
             }
         };
 
-        Ok(self.alloc_expr(expr))
+        Ok(self.alloc_expr(Expr::PrfCall(call)))
     }
 
     fn fold_dispatch_from_token(&self, token: Token, span: Span) -> ParseResult<String> {
@@ -472,10 +463,9 @@ impl<'src> Parser<'src> {
     }
 
     fn parse_array(&mut self) -> ParseResult<&'static Expr<'static, ParsedAst>> {
-        self.expect(Token::LSquare)?;
-
         let mut values = Vec::new();
 
+        self.expect(Token::LSquare)?;
         if self.matches(Token::RSquare).is_none() {
             values.push(self.parse_expr(None::<Bop>)?);
 
@@ -492,7 +482,6 @@ impl<'src> Parser<'src> {
 
     fn parse_sel(&mut self, arr: &'static Expr<'static, ParsedAst>) -> ParseResult<&'static Expr<'static, ParsedAst>> {
         self.expect(Token::LSquare)?;
-
         let idx = self.parse_expr(None::<Bop>)?;
         self.expect(Token::RSquare)?;
 
@@ -502,38 +491,31 @@ impl<'src> Parser<'src> {
         })))
     }
 
-
     fn parse_binary_operator(&mut self, previous: &Option<impl Operator>) -> ParseResult<Option<(Bop, Span)>> {
         if let Some((token, _)) = self.lexer.peek()
             && let Ok(op) = token.try_into()
-            && precedes(previous, &op)? {
+            && precedes(previous, &op)?
+        {
             let (_, span) = self.lexer.next().unwrap();
-            return Ok(Some((op, span)));
+            Ok(Some((op, span)))
+        } else {
+            Ok(None)
         }
-
-        Ok(None)
     }
 
     fn parse_type(&mut self) -> ParseResult<(Type, Span)> {
         let (base, span) = self.parse_basetype()?;
 
         let ty = if self.matches(Token::LSquare).is_some() {
-            if self.matches(Token::Mul).is_some() {
-                // u32[*] — shape fully unconstrained
-                self.expect(Token::RSquare)?;
-                Type {
-                    ty: base,
-                    shape: TypePattern::Any,
-                }
+            let shape = if self.matches(Token::Mul).is_some() {
+                TypePattern::Any
             } else {
                 let axes = self.parse_axes()?;
-                self.expect(Token::RSquare)?;
-                // Knowledge and symbol roles are resolved later by tp::analyse_tp.
-                Type {
-                    ty: base,
-                    shape: TypePattern::Axes(axes),
-                }
-            }
+                TypePattern::Axes(axes)
+            };
+
+            self.expect(Token::RSquare)?;
+            Type { ty: base, shape }
         } else {
             Type::scalar(base)
         };
@@ -543,16 +525,15 @@ impl<'src> Parser<'src> {
 
     fn parse_basetype(&mut self) -> ParseResult<(BaseType, Span)> {
         let (token, span) = self.next()?;
-
         let base = match token {
-            Token::BoolType => BaseType::Bool,
-            Token::I32Type => BaseType::I32,
-            Token::I64Type => BaseType::I64,
-            Token::U32Type => BaseType::U32,
-            Token::U64Type => BaseType::U64,
+            Token::BoolType  => BaseType::Bool,
+            Token::I32Type   => BaseType::I32,
+            Token::I64Type   => BaseType::I64,
+            Token::U32Type   => BaseType::U32,
+            Token::U64Type   => BaseType::U64,
             Token::UsizeType => BaseType::Usize,
-            Token::F32Type => BaseType::F32,
-            Token::F64Type => BaseType::F64,
+            Token::F32Type   => BaseType::F32,
+            Token::F64Type   => BaseType::F64,
             Token::Identifier(udf) => BaseType::Udf(udf),
             _ => return Err(ParseError::UnexpectedToken("base type".to_owned(), token, span)),
         };
@@ -577,8 +558,6 @@ impl<'src> Parser<'src> {
                 if name == "_" {
                     Ok(AxisPattern::Dim(DimPattern::Any))
                 } else if self.matches(Token::Gt).is_some() || self.matches(Token::Ge).is_some() {
-                    // Constrained rank-and-shape capture like `m>0:ishp`.
-                    // The lower-bound is currently syntax-only and not stored in the AST.
                     match self.next()? {
                         (Token::NatValue(_), _) => {}
                         (token, span) => {
@@ -596,15 +575,12 @@ impl<'src> Parser<'src> {
                         shp_name,
                     }))
                 } else if self.matches(Token::Colon).is_some() {
-                    // `d:shp` rank-and-shape capture.
-                    // Roles will be resolved by tp::analyse_tp.
                     let (shp_name, _) = self.parse_id()?;
                     Ok(AxisPattern::Rank(RankCapture {
                         dim_name: name,
                         shp_name,
                     }))
                 } else {
-                    // Plain dimension variable.
                     Ok(AxisPattern::Dim(DimPattern::Var(name)))
                 }
             }
