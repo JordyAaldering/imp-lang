@@ -1,47 +1,82 @@
+use core::panic;
 use std::collections::HashMap;
 
 use crate::{ast::*, traverse::Traverse};
 
 pub fn type_infer<'ast>(program: Program<'ast, UntypedAst>) -> Result<Program<'ast, TypedAst>, InferenceError> {
-    let mut typed_functions: HashMap<String, Fundef<'ast, TypedAst>> = HashMap::new();
+    validate_overload_families(&program.overloads)?;
 
-    let mut internal_keys: Vec<_> = program.overloads.keys().cloned().collect();
+    // First pass: create stub signatures for all functions to enable forward references
+    let mut stubs: HashMap<String, HashMap<BaseSignature, Vec<&'ast Fundef<'ast, TypedAst>>>> = HashMap::new();
 
-    // First pass: create stub signatures for all functions to enable forward references.
-    let mut stubs_by_internal_key: HashMap<String, &'ast Fundef<'ast, TypedAst>> = HashMap::new();
-    for key in &internal_keys {
-        if let Some(fundef) = program.overloads.get(key) {
-            let stub = Box::leak(Box::new(Fundef {
-                name: fundef.name.clone(),
-                ret_type: fundef.ret_type.clone(),
-                args: fundef.args.clone(),
-                shape_prelude: Vec::new(),
-                shape_facts: ShapeFacts::default(),
-                decs: Vec::new(),
-                body: Vec::new(),
-            }));
-            stubs_by_internal_key.insert(key.clone(), stub);
-        }
-    }
+    for (name, overloads) in &program.overloads {
+        let mut stub_groups = HashMap::new();
+        for (sig, fundefs) in overloads {
+            let mut stub_fundefs = Vec::new();
+            for fundef in fundefs {
+                let stub: &Fundef<'_, _> = Box::leak(Box::new(Fundef {
+                    name: fundef.name.clone(),
+                    ret_type: fundef.ret_type.clone(),
+                    args: fundef.args.clone(),
+                    shape_prelude: Vec::new(),
+                    shape_facts: ShapeFacts::default(),
+                    decs: Vec::new(),
+                    body: Vec::new(),
+                }));
+                stub_fundefs.push(stub);
+            }
 
-    let overloads = build_overload_families(&stubs_by_internal_key);
-    if let Some(err) = validate_overload_families(&overloads) {
-        return Err(err);
-    }
-
-    // Second pass: type-check each function with all overload signatures available.
-    for key in &internal_keys {
-        let fundef = program.overloads.get(key).unwrap();
-        let mut infer = TypeInfer::new(&overloads);
-        let typed = infer.trav_fundef(fundef.clone());
-        if let Some(err) = infer.errors.into_iter().next() {
-            return Err(err);
+            stub_groups.insert(sig.clone(), stub_fundefs);
         }
 
-        typed_functions.insert(key.clone(), typed);
+        stubs.insert(name.clone(), stub_groups);
     }
 
-    Ok(Program { overloads: typed_functions })
+    // Second pass: type-check each function with all overload signatures available
+    let mut overloads = HashMap::new();
+
+    for (name, groups) in program.overloads {
+        let mut new_groups = HashMap::new();
+        for (sig, fundefs) in groups {
+            let mut new_fundefs = Vec::new();
+            for fundef in fundefs {
+                let mut infer = TypeInfer::new(stubs.clone());
+                let fundef = infer.trav_fundef(fundef.clone());
+
+                if let Some(err) = infer.errors.into_iter().next() {
+                    return Err(err);
+                }
+
+                new_fundefs.push(fundef);
+            }
+
+            new_groups.insert(sig, new_fundefs);
+        }
+
+        overloads.insert(name, new_groups);
+    }
+
+    Ok(Program { overloads })
+}
+
+fn validate_overload_families(overloads: &HashMap<String, HashMap<BaseSignature, Vec<Fundef<'_, UntypedAst>>>>) -> Result<(), InferenceError> {
+    for (name, group) in overloads {
+        for (sig, fundefs) in group {
+            let (first, fundefs) = fundefs.split_first().unwrap();
+            let expected_ret_ty = &first.ret_type.ty;
+            for fundef in fundefs {
+                if &fundef.ret_type.ty != expected_ret_ty {
+                    return Err(InferenceError::InconsistentOverloadReturnBase {
+                        name: name.clone(),
+                        arg_bases: sig.clone(),
+                        expected: expected_ret_ty.clone(),
+                        found: fundef.ret_type.ty.clone(),
+                    });
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 pub struct TypeInfer<'ast> {
@@ -49,6 +84,7 @@ pub struct TypeInfer<'ast> {
     idmap: HashMap<*const VarInfo<'ast, UntypedAst>, &'ast VarInfo<'ast, TypedAst>>,
     new_ids: Vec<&'ast VarInfo<'ast, TypedAst>>,
     errors: Vec<InferenceError>,
+    stubs: HashMap<String, HashMap<BaseSignature, Vec<&'ast Fundef<'ast, TypedAst>>>>,
 }
 
 #[derive(Debug)]
@@ -77,7 +113,6 @@ pub enum InferenceError {
     /// Function exists, but no overload matches argument base types and count.
     NoMatchingOverload {
         name: String,
-        arity: usize,
         arg_bases: BaseSignature,
     },
     /// Call argument type mismatch.
@@ -89,7 +124,6 @@ pub enum InferenceError {
     },
     AmbiguousOverload {
         name: String,
-        arity: usize,
         arg_bases: BaseSignature,
     },
     PrimitiveArgumentKindMismatch {
@@ -118,12 +152,13 @@ pub enum InferenceError {
 }
 
 impl<'ast> TypeInfer<'ast> {
-    fn new() -> Self {
+    fn new(overloads: HashMap<String, HashMap<BaseSignature, Vec<&'ast Fundef<'ast, TypedAst>>>>) -> Self {
         Self {
             args: Vec::new(),
             idmap: HashMap::new(),
             new_ids: Vec::new(),
             errors: Vec::new(),
+            stubs: overloads,
         }
     }
 
@@ -355,66 +390,60 @@ impl<'ast> TypeInfer<'ast> {
     }
 
     fn resolve_dispatch(&mut self, func_name: &str, arg_types: &[Type]) -> (&'ast Fundef<'ast, TypedAst>, bool) {
-        let key = overload_key_for_call(func_name, arg_types);
-        let Some(candidates) = self.overloads.get(&key) else {
-            let function_exists = self.overloads.keys().any(|k| k.name == func_name);
-            if function_exists {
-                self.errors.push(InferenceError::NoMatchingOverload {
+        let Some(group) = self.stubs.get(func_name) else {
+            self.errors.push(InferenceError::UndefinedFunction {
                     name: func_name.to_owned(),
-                    arity: arg_types.len(),
-                    arg_bases: arg_types.iter().map(|ty| ty.ty.clone()).collect(),
-                });
-            } else {
-                self.errors.push(InferenceError::UndefinedFunction {
-                    name: func_name.to_owned(),
-                });
-            }
-
-            let stub_target = self
-                .overloads
-                .values()
-                .find_map(|family| family.first().copied())
-                .expect("at least one function must be defined");
-            return (stub_target, false);
+            });
+            panic!("undefined function: {}", func_name);
         };
 
-        let mut matching = Vec::new();
+        let base_types = arg_types.iter().map(|t| t.ty.clone()).collect();
+        let key = BaseSignature { base_types };
+
+        let Some(candidates) = group.get(&key) else {
+            self.errors.push(InferenceError::NoMatchingOverload {
+                name: func_name.to_owned(),
+                arg_bases: key.clone(),
+            });
+            panic!("no matching overload for function: {} with arg bases {:?}", func_name, key);
+        };
+
+        let mut matches = Vec::new();
         for target in candidates {
             let mut is_match = true;
             for (expected, provided) in target.args.iter().zip(arg_types.iter()) {
                 if !types_compatible(&expected.ty, provided) {
                     is_match = false;
+                    break;
                 }
             }
 
             if is_match {
-                matching.push(*target);
+                matches.push(*target);
             }
         }
 
-        if matching.is_empty() {
+        if matches.is_empty() {
             self.errors.push(InferenceError::NoMatchingOverload {
                 name: func_name.to_owned(),
-                arity: arg_types.len(),
-                arg_bases: arg_types.iter().map(|ty| ty.ty.clone()).collect(),
+                arg_bases: key.clone(),
             });
-            return (candidates[0], false);
+            panic!("no matching overload for function: {} with arg bases {:?}", func_name, key);
         }
 
-        let maximal = maximal_candidates(&matching);
-        let runtime_dispatch = maximal.len() > 1 && arg_types.iter().any(type_requires_runtime_dispatch);
+        let best_matches = maximal_candidates(&matches);
+        let needs_runtime_dispatch = best_matches.len() > 1;
+        let runtime_dispatch_allowed = arg_types.iter().any(type_requires_runtime_dispatch);
 
-        if maximal.len() > 1 && !runtime_dispatch {
+        if needs_runtime_dispatch && !runtime_dispatch_allowed {
             self.errors.push(InferenceError::AmbiguousOverload {
                 name: func_name.to_owned(),
-                arity: arg_types.len(),
-                arg_bases: arg_types.iter().map(|ty| ty.ty.clone()).collect(),
+                arg_bases: key.clone(),
             });
         }
 
-        (maximal[0], runtime_dispatch)
+        (best_matches[0], needs_runtime_dispatch)
     }
-
 }
 
 impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
@@ -950,26 +979,6 @@ fn dims_compatible(expected: &DimPattern, provided: &DimPattern) -> bool {
         (DimPattern::Known(_), DimPattern::Var(_)) => true,
         (DimPattern::Var(_), DimPattern::Var(_)) => true,
     }
-}
-
-fn validate_overload_families(overloads: &HashMap<String, HashMap<BaseSignature, Vec<Fundef<'_, TypedAst>>>>) -> Option<InferenceError> {
-    for (name, group) in overloads {
-        for (sig, fundefs) in group {
-            let (first, fundefs) = fundefs.split_first().unwrap();
-            let expected_ret_ty = &first.ret_type.ty;
-            for fundef in fundefs {
-                if &fundef.ret_type.ty != expected_ret_ty {
-                    return Some(InferenceError::InconsistentOverloadReturnBase {
-                        name: name.clone(),
-                        arg_bases: sig.clone(),
-                        expected: expected_ret_ty.clone(),
-                        found: fundef.ret_type.ty.clone(),
-                    });
-                }
-            }
-        }
-    }
-    None
 }
 
 fn maximal_candidates<'ast>(candidates: &[&'ast Fundef<'ast, TypedAst>]) -> Vec<&'ast Fundef<'ast, TypedAst>> {

@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use crate::{ast::*, cg::rename_fundefs, Visit};
 
 pub fn emit_c(ast: &mut Program<'static, TypedAst>, module_name: String) -> String {
@@ -81,29 +79,30 @@ impl CompileC {
     }
 
     fn emit_wrapper_prototype(&mut self, base_name: &str, sig: &BaseSignature, ret_ty: &BaseType) {
-        let args: Vec<String> = sig.base_types
+        let sig_str = sig.base_types.iter().map(base_rstype).collect::<Vec<_>>();
+        let fargs: Vec<String> = sig.base_types
             .iter()
             .enumerate()
             .map(|(i, base)| format!("{} arg{i}", dyn_ctype(base)))
             .collect();
-        self.output.push_str(&format!("{} IMP_{}({});\n",
-            dyn_ctype(ret_ty), base_name, args.join(", ")));
+        self.push_line(&format!("{} IMP_{}_{}({});",
+            dyn_ctype(ret_ty), base_name, sig_str.join("_"), fargs.join(", ")));
     }
 
     fn emit_wrapper_function(&mut self, base_name: &str, sig: &BaseSignature, family: &Vec<Fundef<'_, TypedAst>>) {
-        let args: Vec<String> = sig.base_types
+        let sig_str = sig.base_types.iter().map(base_rstype).collect::<Vec<_>>();
+        let fargs: Vec<String> = sig.base_types
             .iter()
             .enumerate()
             .map(|(i, base)| format!("{} arg{i}", dyn_ctype(base)))
             .collect();
 
-        self.push_line(&format!("{} IMP_{}({}) {{",
-            dyn_ctype(&family[0].ret_type.ty), base_name, args.join(", ")));
+        self.push_line(&format!("{} IMP_{}_{}({}) {{",
+            dyn_ctype(&family[0].ret_type.ty), base_name, sig_str.join("_"), fargs.join(", ")));
 
         self.indent += 1;
         for (idx, fundef) in family.iter().enumerate() {
-            let condition = fundef
-                .args
+            let condition = fundef.args
                 .iter()
                 .enumerate()
                 .map(|(i, arg)| shape_match_condition(&arg.ty.shape, &format!("arg{i}")))
@@ -111,7 +110,7 @@ impl CompileC {
                 .join(" && ");
 
             if idx > 0 {
-                self.push_line("else {");
+                self.push_line("else ");
             }
             self.push_line(&format!("if ({condition}) {{"));
             self.indent += 1;
@@ -188,8 +187,11 @@ impl<'ast> Visit<'ast> for CompileC {
         }
 
         for (name, overloads) in &program.overloads {
+            let name = name.strip_prefix('@').unwrap_or(name).to_owned();
             for (sig, fundefs) in overloads {
-                self.emit_wrapper_prototype(name, sig, &fundefs[0].ret_type.ty);
+                if overloads.len() > 1 || fundefs.len() > 1 {
+                    self.emit_wrapper_prototype(&name, sig, &fundefs[0].ret_type.ty);
+                }
             }
         }
 
@@ -205,9 +207,12 @@ impl<'ast> Visit<'ast> for CompileC {
         }
 
         for (name, overloads) in &program.overloads {
+            let name = name.strip_prefix('@').unwrap_or(name).to_owned();
             for (sig, fundefs) in overloads {
-                self.emit_wrapper_function(name, sig, fundefs);
-                self.output.push('\n');
+                if overloads.len() > 1 || fundefs.len() > 1 {
+                    self.emit_wrapper_function(&name, sig, fundefs);
+                    self.output.push('\n');
+                }
             }
         }
     }
@@ -658,6 +663,21 @@ impl<'ast> Visit<'ast> for CompileC {
     }
 }
 
+fn base_rstype(ty: &BaseType) -> String {
+    use BaseType::*;
+    match ty {
+        Bool => "bool".to_owned(),
+        I32 => "i32".to_owned(),
+        I64 => "i64".to_owned(),
+        U32 => "u32".to_owned(),
+        U64 => "u64".to_owned(),
+        Usize => "usize".to_owned(),
+        F32 => "f32".to_owned(),
+        F64 => "f64".to_owned(),
+        Udf(udf) => udf.to_owned(),
+    }
+}
+
 fn base_ctype(ty: &Type) -> String {
     use BaseType::*;
     match &ty.ty {
@@ -686,10 +706,8 @@ fn full_ctype(ty: &Type) -> String {
             F64 => "ImpDynF64".to_owned(),
             Bool => "ImpDynBool".to_owned(),
             Udf(udf) => format!("ImpDyn{}", udf),
-        };
-    }
-
-    if ty.is_array() {
+        }
+    } else if ty.is_array() {
         "ImpArrayRaw".to_owned()
     } else {
         base_ctype(ty).to_owned()
@@ -701,10 +719,6 @@ fn dyn_ctype(base: &BaseType) -> String {
         ty: base.clone(),
         shape: TypePattern::Any,
     })
-}
-
-fn supports_dyn_base(base: &BaseType) -> bool {
-    matches!(base, BaseType::U32 | BaseType::Usize | BaseType::Bool)
 }
 
 fn shape_match_condition(shape: &TypePattern, arg: &str) -> String {
@@ -760,5 +774,3 @@ fn id_base_type(id: &Id<'_, TypedAst>) -> BaseType {
         Id::Arg(_) => BaseType::U32,
     }
 }
-
-

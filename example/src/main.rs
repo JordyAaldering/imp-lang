@@ -64,13 +64,13 @@ fn main() {
     let res: ImpArray<usize> = expect_array(my_add_after_iota(arr1, arr2));
     println!("iota + iota = {:?}", res.data);
 
-    let overldemo = expect_scalar(overload_demo(4usize, 5usize));
+    let overldemo = expect_scalar(overload_demo_usize_usize(ImpArrayOrScalar::Scalar(4usize), ImpArrayOrScalar::Scalar(5usize)));
     println!("overload_demo scalar = {:?}", overldemo);
 
     // Obviously, we should not have to write 'ovl' (overload).
     // We should generate each variant with a unique name, and then a wrapper with the original
     // name that dispatches to the correct variant based on argument types and shapes
-    let overldemo: ImpArray<usize> = expect_array(overload_demo_ovl1(expect_array(four()), expect_array(four())));
+    let overldemo: ImpArray<usize> = expect_array(overload_demo_usize_usize(ImpArrayOrScalar::Array(expect_array(four())), ImpArrayOrScalar::Array(expect_array(four()))));
     println!("overload_demo vector = {:?}", overldemo.data);
 
     let panic_hook = std::panic::take_hook();
@@ -91,14 +91,8 @@ fn main() {
 
     println!("scalar_add_demo = {}", expect_scalar(scalar_add_demo()));
 
-    let dyn_sum = add_dyn(
-        ImpArrayOrScalar::Array(expect_array(iota(4))),
-        ImpArrayOrScalar::Array(expect_array(iota(4))),
-    );
+    let dyn_sum = add_dyn(expect_array(iota(4)), expect_array(iota(4)));
     println!("add_dyn = {:?}", dyn_sum);
-
-    let arr = scalar_or_array(ImpArrayOrScalar::Scalar(37));
-    println!("scalar_or_array = {:?}", arr);
 
     // double free detected
     // let arr = scalar_or_array(ImpArrayOrScalar::Array(ImpArray { shp: vec![6], data: vec![1,2,3,4,5,6] }));

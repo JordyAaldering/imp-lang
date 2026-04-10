@@ -152,10 +152,10 @@ fn sel_demo() -> u32 {
     return x;
 }
 
-fn scalar_or_array(usize[*] a) -> usize[*] {
+fn scalar_or_array(usize[d:shp] a) -> usize[d:shp] {
     return a;
 }
 
-fn add_dyn(usize[*] a, usize[*] b) -> usize[*] {
+fn add_dyn(usize[d:shp] a, usize[d:shp] b) -> usize[d:shp] {
     return a + b;
 }

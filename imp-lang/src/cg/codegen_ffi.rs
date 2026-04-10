@@ -47,12 +47,13 @@ impl<'ast> Visit<'ast> for CompileFfi {
         }
 
         for (name, overloads) in &program.overloads {
+            let name = name.strip_prefix('@').unwrap_or(name).to_owned();
             for (sig, fundefs) in overloads {
                 self.push("\n");
-                if fundefs.len() == 1 {
-                    self.emit_direct_wrapper(name, &fundefs[0]);
+                if overloads.len() > 1 || fundefs.len() > 1 {
+                    self.emit_family_wrapper(&name, sig, fundefs);
                 } else {
-                    self.emit_family_wrapper(name, sig, fundefs);
+                    self.emit_direct_wrapper(&name, &fundefs[0]);
                 }
             }
         }
@@ -77,12 +78,14 @@ impl CompileFfi {
     }
 
     fn emit_family_wrapper(&mut self, base_name: &str, sig: &BaseSignature, fundefs: &Vec<Fundef<'_, TypedAst>>) {
+        let sig_str = sig.base_types.iter().map(rust_base_type).collect::<Vec<_>>();
         let fargs = sig.base_types.iter()
             .enumerate()
             .map(|(i, base)| format!("arg{}: imp_core::ImpArrayOrScalar<{}>", i, rust_base_type(base)))
             .collect::<Vec<_>>()
             .join(", ");
-        self.push(&format!("fn {}(", rust_wrapper_name(base_name)));
+
+        self.push(&format!("fn {}_{}(", rust_wrapper_name(base_name), sig_str.join("_")));
         self.push(&fargs);
         self.push(&format!(") -> {} {{\n", rust_api_ret_type(&fundefs[0].ret_type)));
 
