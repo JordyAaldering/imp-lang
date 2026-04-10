@@ -87,6 +87,7 @@ pub struct TypeInfer<'ast> {
     stubs: HashMap<String, HashMap<BaseSignature, Vec<&'ast Fundef<'ast, TypedAst>>>>,
 }
 
+#[allow(unused)]
 #[derive(Debug)]
 pub enum InferenceError {
     SelectionIndexNotVector {

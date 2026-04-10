@@ -628,30 +628,3 @@ impl<'src> Parser<'src> {
         }
     }
 }
-
-fn shape_signature_eq(a: &TypePattern, b: &TypePattern) -> bool {
-    match (a, b) {
-        (TypePattern::Scalar, TypePattern::Scalar) => true,
-        (TypePattern::Any, TypePattern::Any) => true,
-        (TypePattern::Axes(ax), TypePattern::Axes(bx)) => {
-            if ax.len() != bx.len() {
-                return false;
-            }
-            ax.iter().zip(bx.iter()).all(|(l, r)| axis_signature_eq(l, r))
-        }
-        _ => false,
-    }
-}
-
-fn axis_signature_eq(a: &AxisPattern, b: &AxisPattern) -> bool {
-    match (a, b) {
-        (AxisPattern::Dim(da), AxisPattern::Dim(db)) => match (da, db) {
-            (DimPattern::Any, DimPattern::Any) => true,
-            (DimPattern::Known(x), DimPattern::Known(y)) => x == y,
-            (DimPattern::Var(x), DimPattern::Var(y)) => x == y,
-            _ => false,
-        },
-        (AxisPattern::Rank(ra), AxisPattern::Rank(rb)) => ra.dim_name == rb.dim_name && ra.shp_name == rb.shp_name,
-        _ => false,
-    }
-}
