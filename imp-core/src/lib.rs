@@ -47,9 +47,14 @@ where
     pub data: ImpDynData<T>,
 }
 
-pub type ImpDynU32 = ImpDyn<u32>;
-pub type ImpDynUsize = ImpDyn<usize>;
 pub type ImpDynBool = ImpDyn<bool>;
+pub type ImpDynI32 = ImpDyn<i32>;
+pub type ImpDynI64 = ImpDyn<i64>;
+pub type ImpDynU32 = ImpDyn<u32>;
+pub type ImpDynU64 = ImpDyn<u64>;
+pub type ImpDynUsize = ImpDyn<usize>;
+pub type ImpDynF32 = ImpDyn<f32>;
+pub type ImpDynF64 = ImpDyn<f64>;
 
 unsafe extern "C" {
     fn free(ptr: *mut c_void);
@@ -68,15 +73,6 @@ where
         }
     }
 
-    /// # Safety
-    ///
-    /// `raw` must originate from this runtime's allocation conventions:
-    /// - `raw.shp` points to a heap allocation with exactly `raw.dim` `usize` elements
-    /// - `raw.data` points to a heap allocation with exactly `raw.len` `T` elements
-    /// - both pointers are either null or valid for reads of those lengths
-    /// - both pointers were allocated with a compatible allocator for `free`
-    ///
-    /// This function takes ownership of both buffers and frees them exactly once.
     pub unsafe fn from_raw(raw: ImpArrayRaw) -> Self {
         let shp = if raw.shp.is_null() {
             Vec::new()
@@ -116,9 +112,6 @@ where
         }
     }
 
-    /// # Safety
-    ///
-    /// If `is_array` is true, `data.array` must satisfy `ImpArray::<T>::from_raw` safety.
     pub unsafe fn into_array_or_scalar(self) -> ImpArrayOrScalar<T> {
         if self.is_array {
             let raw = unsafe { self.data.array };
