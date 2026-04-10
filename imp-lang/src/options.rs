@@ -69,10 +69,10 @@ pub enum Phase {
     DCR,
     /// Rename fundefs
     RNF,
+    /// C code generation
+    CGC,
     /// C header code generation
     CGH,
-    /// C code generation
-    CGI,
     /// Rust FFI code generation
-    CGR,
+    CGRS,
 }

@@ -1,14 +1,9 @@
-use std::path::PathBuf;
-
 use crate::{ast::*, Visit};
 
-pub fn emit_h(ast: &mut Program<'static, TypedAst>, outfile: Option<PathBuf>) {
+pub fn emit_h(ast: &mut Program<'static, TypedAst>) -> String {
     let mut cg = CompileH::new();
     cg.visit_program(ast);
-
-    if let Some(outfile) = outfile {
-        std::fs::write(outfile, cg.finish()).unwrap();
-    }
+    cg.finish()
 }
 
 pub struct CompileH {
@@ -30,7 +25,6 @@ impl<'ast> Visit<'ast> for CompileH {
 
     fn visit_program(&mut self, program: &Program<'ast, TypedAst>) {
         self.output.push_str("#pragma once\n");
-        self.output.push('\n');
         self.output.push_str("#include <stdlib.h>\n");
         self.output.push_str("#include <stdbool.h>\n");
         self.output.push_str("#include <stdint.h>\n");
@@ -46,6 +40,7 @@ impl<'ast> Visit<'ast> for CompileH {
         self.output.push_str("    uint32_t scalar;\n");
         self.output.push_str("    ImpArrayRaw array;\n");
         self.output.push_str("} ImpDynDataU32;\n");
+        self.output.push('\n');
         self.output.push_str("typedef struct {\n");
         self.output.push_str("    bool is_array;\n");
         self.output.push_str("    ImpDynDataU32 data;\n");
@@ -55,6 +50,7 @@ impl<'ast> Visit<'ast> for CompileH {
         self.output.push_str("    size_t scalar;\n");
         self.output.push_str("    ImpArrayRaw array;\n");
         self.output.push_str("} ImpDynDataUsize;\n");
+        self.output.push('\n');
         self.output.push_str("typedef struct {\n");
         self.output.push_str("    bool is_array;\n");
         self.output.push_str("    ImpDynDataUsize data;\n");
@@ -64,6 +60,7 @@ impl<'ast> Visit<'ast> for CompileH {
         self.output.push_str("    bool scalar;\n");
         self.output.push_str("    ImpArrayRaw array;\n");
         self.output.push_str("} ImpDynDataBool;\n");
+        self.output.push('\n');
         self.output.push_str("typedef struct {\n");
         self.output.push_str("    bool is_array;\n");
         self.output.push_str("    ImpDynDataBool data;\n");
@@ -80,11 +77,11 @@ impl<'ast> Visit<'ast> for CompileH {
 
     fn visit_fundef(&mut self, fundef: &Fundef<'ast, TypedAst>) {
         let args: Vec<String> = fundef.args.iter()
-            .map(|arg| format!("{} {}", full_ctype(&arg.ty), arg.id))
+            .map(|arg| format!("{} {}", dyn_ctype(&arg.ty), arg.id))
             .collect();
         self.output.push_str(&format!(
             "{} IMP_{}({});\n",
-            full_ctype(&fundef.ret_type), fundef.name, args.join(", ")
+            dyn_ctype(&fundef.ret_type), fundef.name, args.join(", ")
         ));
     }
 }
@@ -104,10 +101,10 @@ fn base_ctype(ty: &Type) -> String {
     }
 }
 
-fn full_ctype(ty: &Type) -> String {
+fn dyn_ctype(ty: &Type) -> String {
     if matches!(ty.shape, TypePattern::Any) {
         use BaseType::*;
-        return match &ty.ty {
+        match &ty.ty {
             Bool => "ImpDynBool".to_owned(),
             I32 => "ImpDynI32".to_owned(),
             I64 => "ImpDynI64".to_owned(),
@@ -117,12 +114,10 @@ fn full_ctype(ty: &Type) -> String {
             F32 => "ImpDynF32".to_owned(),
             F64 => "ImpDynF64".to_owned(),
             Udf(udf) => format!("ImpDyn{}", udf),
-        };
-    }
-
-    if ty.is_array() {
+        }
+    } else if ty.is_array() {
         "ImpArrayRaw".to_owned()
     } else {
-        base_ctype(ty).to_owned()
+        base_ctype(ty)
     }
 }

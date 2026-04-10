@@ -21,65 +21,87 @@ pub use crate::options::*;
 pub fn compile(options: Options) {
     let src = fs::read_to_string(&options.infile).unwrap();
     if matches!(options.b, Some(Phase::RD)) {
-        println!("{src}");
+        println!("{}", src.trim_end_matches('\n'));
         return;
     }
 
     let ast = scp::scanparse(&src).unwrap();
     if matches!(options.b, Some(Phase::SCP)) {
-        println!("{}", show::show(&ast));
+        print!("{}", show::show(&ast));
         return;
     }
 
     let ast = tp::check_tp(ast).unwrap();
     if matches!(options.b, Some(Phase::CTP)) {
-        println!("{}", show::show(&ast));
+        print!("{}", show::show(&ast));
         return;
     }
 
     let ast = tp::analyse_tp(ast);
     if matches!(options.b, Some(Phase::ATP)) {
-        println!("{}", show::show(&ast));
+        print!("{}", show::show(&ast));
         return;
     }
 
     let ast = pre::flatten(ast);
     if matches!(options.b, Some(Phase::FLT)) {
-        println!("{}", show::show(&ast));
+        print!("{}", show::show(&ast));
         return;
     }
 
     let ast = pre::to_ssa(ast);
     if matches!(options.b, Some(Phase::SSA)) {
-        println!("{}", show::show(&ast));
+        print!("{}", show::show(&ast));
         return;
     }
 
     let ast = tc::type_infer(ast).unwrap();
     if matches!(options.b, Some(Phase::TI)) {
-        println!("{}", show::show(&ast));
+        print!("{}", show::show(&ast));
         return;
     }
 
     let ast = opt::constant_fold(ast);
     if matches!(options.b, Some(Phase::CF)) {
-        println!("{}", show::show(&ast));
+        print!("{}", show::show(&ast));
         return;
     }
 
     let ast = opt::dead_code_removal(ast);
     if matches!(options.b, Some(Phase::DCR)) {
-        println!("{}", show::show(&ast));
+        print!("{}", show::show(&ast));
         return;
     }
 
     let mut ast = cg::rename_fundefs(ast);
     if matches!(options.b, Some(Phase::RNF)) {
-        println!("{}", show::show(&ast));
+        print!("{}", show::show(&ast));
         return;
     }
 
-    cg::emit_c(&mut ast, options.module_name(), options.c_path());
-    cg::emit_h(&mut ast, options.h_path());
-    cg::emit_ffi(&mut ast, options.rs_path());
+    let c_str = cg::emit_c(&mut ast, options.module_name());
+    if matches!(options.b, Some(Phase::CGC)) {
+        print!("{}", c_str);
+        return;
+    }
+
+    let h_str = cg::emit_h(&mut ast);
+    if matches!(options.b, Some(Phase::CGH)) {
+        print!("{}", h_str);
+        return;
+    }
+
+    let rs_str = cg::emit_ffi(&mut ast);
+    if matches!(options.b, Some(Phase::CGRS)) {
+        print!("{}", rs_str);
+        return;
+    }
+
+    if let Some(c_path) = options.c_path() {
+        let h_path = options.h_path().unwrap();
+        let rs_path = options.rs_path().unwrap();
+        fs::write(c_path, c_str).unwrap();
+        fs::write(h_path, h_str).unwrap();
+        fs::write(rs_path, rs_str).unwrap();
+    }
 }

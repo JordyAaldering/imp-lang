@@ -1,14 +1,11 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::collections::HashMap;
 
 use crate::{ast::*, cg::rename_fundefs, Visit};
 
-pub fn emit_c(ast: &mut Program<'static, TypedAst>, module_name: String, outfile: Option<PathBuf>) {
+pub fn emit_c(ast: &mut Program<'static, TypedAst>, module_name: String) -> String {
     let mut cg = CompileC::new(module_name);
     cg.visit_program(ast);
-
-    if let Some(outfile) = outfile {
-        std::fs::write(outfile, cg.finish()).unwrap();
-    }
+    cg.finish()
 }
 
 pub struct CompileC {

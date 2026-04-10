@@ -1,6 +1,13 @@
-fn @sel() -> u32 {
+fn @sel(usize[n] _, i32[n:shp] _) -> i32 {
     arr = [1,2,3,4,5];
-    idx = [@negS(@negS(2))];
+    idx = [@negS(@negS(2usize))];
+    x = @negS(@selVxA(idx, arr));
+    return x;
+}
+
+fn sel(usize[n] _, i32[n:shp] _) -> i32 {
+    arr = [1,2,3,4,5];
+    idx = [@negS(@negS(2usize))];
     x = @negS(@selVxA(idx, arr));
     return x;
 }

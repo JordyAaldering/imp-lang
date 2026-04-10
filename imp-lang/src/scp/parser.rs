@@ -75,8 +75,8 @@ impl<'src> Parser<'src> {
         let mut functions: HashMap<String, Fundef<'static, ParsedAst>> = HashMap::new();
         let mut overload_counts: HashMap<String, usize> = HashMap::new();
 
-        while self.lexer.peek().is_some() {
-            match self.peek()?.0.clone() {
+        while let Some((token, _)) = self.lexer.peek() {
+            match token {
                 Token::Fn => {
                     let fundef = self.parse_fundef()?;
                     if functions.values().any(|existing| {
@@ -89,7 +89,7 @@ impl<'src> Parser<'src> {
                     let key = if *idx == 0 {
                         fundef.name.clone()
                     } else {
-                        format!("{}__ovl{}", fundef.name, *idx)
+                        format!("{}_ovl{}", fundef.name, *idx)
                     };
                     *idx += 1;
                     functions.insert(key, fundef);
