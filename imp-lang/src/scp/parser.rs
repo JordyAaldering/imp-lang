@@ -220,10 +220,26 @@ impl<'src> Parser<'src> {
         self.expect(Token::Bar)?;
 
         let lb = self.parse_expr(Some(PrecedenceFloor(2)))?;
-        self.expect(Token::Le)?;
-        let (iv, _) = self.parse_id()?;
-        self.expect(Token::Lt)?;
-        let ub = self.parse_expr(None::<Bop>)?;
+
+        let (token, span) = self.next()?;
+        let (lb, iv, ub) = match token {
+            Token::Le => {
+                let (iv, _) = self.parse_id()?;
+                self.expect(Token::Lt)?;
+                let ub = self.parse_expr(Some(PrecedenceFloor(2)))?;
+                (Some(lb), iv, ub)
+            }
+            Token::Lt => {
+                let Expr::Id(Id::Var(iv)) = lb else {
+                    return Err(ParseError::UnexpectedToken("iteration variable".to_owned(), token, span));
+                };
+                let ub = self.parse_expr(Some(PrecedenceFloor(2)))?;
+                (None, iv.clone(), ub)
+            }
+            _ => {
+                return Err(ParseError::UnexpectedToken("expected '<' or '<='".to_owned(), token, span));
+            }
+        };
 
         self.expect(Token::RBrace)?;
 

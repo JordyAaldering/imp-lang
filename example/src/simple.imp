@@ -12,11 +12,11 @@ fn take(usize[o] sv, i32[o:oshp,i:ishp] arr) -> i32[o:sv,i:ishp] {
 }
 
 fn zeros(usize n) -> usize[n] {
-    return { 0usize | [0usize] <= iv < [n] };
+    return { 0usize | iv < [n] };
 }
 
 fn zeros_i32(usize n) -> i32[n] {
-    return { 0i32 | [0usize] <= iv < [n] };
+    return { 0i32 | iv < [n] };
 }
 
 fn @add(i32 a, i32 b) -> i32 {
@@ -24,8 +24,7 @@ fn @add(i32 a, i32 b) -> i32 {
 }
 
 fn @add(i32[d:shp] a, i32[d:shp] b) -> i32[d:shp] {
-    lb = { 0usize | [0usize] <= iv < [d] };
-    return { @selVxA(iv, a) + @selVxA(iv, b) | lb <= iv < shp };
+    return { @selVxA(iv, a) + @selVxA(iv, b) | iv < shp };
 }
 
 fn @add(usize a, usize b) -> usize {
@@ -34,7 +33,7 @@ fn @add(usize a, usize b) -> usize {
 
 fn @add(usize a, usize[d>0:shp] b) -> usize[d>0:shp] {
     lb = zeros(d);
-    return { a + b[iv] | lb <= iv < shp };
+    return { a + b[iv] | iv < shp };
 }
 
 fn @add(usize[d>0:shp] a, usize b) -> usize[d>0:shp] {
@@ -49,7 +48,7 @@ fn @add(usize[d>0:shp] a, usize[d>0:shp] b) -> usize[d>0:shp] {
 
 fn sum(i32[d:shp] arr) -> i32 {
     lb = { 0usize | [0usize] <= iv < [d] };
-    return @fold(0i32, +, { @selVxA(iv, arr) | lb <= iv < shp });
+    return @fold(0i32, +, { @selVxA(iv, arr) | iv < shp });
 }
 
 fn cat(usize[n] a, usize[m] b) -> usize[nm] {

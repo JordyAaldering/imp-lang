@@ -363,13 +363,19 @@ impl<'ast> TypeInfer<'ast> {
     }
 
     fn trav_fold_selection(&mut self, tensor: Tensor<'ast, UntypedAst>) -> (Tensor<'ast, TypedAst>, Type) {
-        let (lb, _lb_ty) = self.trav_id(tensor.lb);
+        let lb = if let Some(lb) = tensor.lb {
+            let (lb, _lb_ty) = self.trav_id(lb);
+            Some(lb)
+        } else {
+            None
+        };
+
         let (ub, ub_ty) = self.trav_id(tensor.ub);
 
         let (iv_ty, _leading_k) = Self::tensor_iv_and_dims(&ub_ty);
-        let iv_new = self.alloc_lvis(tensor.iv.name.clone(), iv_ty, None);
-        self.idmap.insert(tensor.iv as *const _, iv_new);
-        self.new_ids.push(iv_new);
+        let iv = self.alloc_lvis(tensor.iv.name.clone(), iv_ty, None);
+        self.idmap.insert(tensor.iv as *const _, iv);
+        self.new_ids.push(iv);
 
         let mut body = Vec::new();
         for stmt in tensor.body {
@@ -380,7 +386,7 @@ impl<'ast> TypeInfer<'ast> {
 
         (
             Tensor {
-                iv: iv_new,
+                iv,
                 lb,
                 ub,
                 ret,
@@ -843,7 +849,13 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
         // Inspect ub's SSA expression *before* traversal so we can extract named extents.
         let ub_named_axes = self.extract_ub_axes(&tensor.ub);
 
-        let (lb, _lb_ty) = self.trav_id(tensor.lb);
+        let lb = if let Some(lb) = tensor.lb {
+            let (lb, _lb_ty) = self.trav_id(lb);
+            Some(lb)
+        } else {
+            None
+        };
+
         let (ub, ub_ty) = self.trav_id(tensor.ub);
 
         // Determine iv's type using the typed ub shape (gives the rank / iv length).

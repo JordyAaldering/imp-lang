@@ -244,7 +244,12 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
     }
 
     fn trav_tensor(&mut self, tensor: Tensor<'ast, Self::InAst>) -> Self::TensorOut {
-        let lb = self.trav_expr((*tensor.lb).clone());
+        let lb = if let Some(lb) = tensor.lb {
+            Some(self.trav_expr(lb.clone()))
+        } else {
+            None
+        };
+
         let ub = self.trav_expr((*tensor.ub).clone());
 
         self.push_env();

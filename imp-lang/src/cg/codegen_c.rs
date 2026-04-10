@@ -363,22 +363,21 @@ impl<'ast> Visit<'ast> for CompileC {
         let neutral_expr = self.render_expr(&Expr::Id(fold.neutral));
         self.push_line(&format!("{} {} = {};", full_ctype(&target_ty), target_name, neutral_expr));
 
-        let lb_name = self.nameof(&fold.selection.lb);
-        let ub_name = self.nameof(&fold.selection.ub);
-
         for d in 0..rank {
-            self.push_line(&format!(
-                "size_t {iv_name}_lb{d}_{t_uid} = ((size_t *){lb_name}.data)[{d}];"
-            ));
-            self.push_line(&format!(
-                "size_t {iv_name}_ub{d}_{t_uid} = ((size_t *){ub_name}.data)[{d}];"
-            ));
+            if let Some(lb) = &fold.selection.lb {
+                let lb_name = self.nameof(lb);
+                self.push_line(&format!("size_t {iv_name}_lb{d}_{t_uid} = ((size_t *){lb_name}.data)[{d}];"));
+            }
+            let ub_name = self.nameof(&fold.selection.ub);
+            self.push_line(&format!("size_t {iv_name}_ub{d}_{t_uid} = ((size_t *){ub_name}.data)[{d}];"));
         }
 
         for d in 0..rank {
-            self.push_line(&format!(
-                "for (size_t {iv_name}_{d}_{t_uid} = {iv_name}_lb{d}_{t_uid}; {iv_name}_{d}_{t_uid} < {iv_name}_ub{d}_{t_uid}; {iv_name}_{d}_{t_uid} += 1) {{"
-            ));
+            if fold.selection.lb.is_some() {
+                self.push_line(&format!("for (size_t {iv_name}_{d}_{t_uid} = {iv_name}_lb{d}_{t_uid}; {iv_name}_{d}_{t_uid} < {iv_name}_ub{d}_{t_uid}; {iv_name}_{d}_{t_uid} += 1) {{"));
+            } else {
+                self.push_line(&format!("for (size_t {iv_name}_{d}_{t_uid} = 0; {iv_name}_{d}_{t_uid} < {iv_name}_ub{d}_{t_uid}; {iv_name}_{d}_{t_uid} += 1) {{"));
+            }
             self.indent += 1;
         }
 
@@ -456,17 +455,14 @@ impl<'ast> Visit<'ast> for CompileC {
         self.tensor_uid += 1;
         let t_uid = self.tensor_uid;
 
-        let lb_name = self.nameof(&tensor.lb);
-        let ub_name = self.nameof(&tensor.ub);
-
         // Extract scalar lower/upper bound per dimension.
         for d in 0..rank {
-            self.push_line(&format!(
-                "size_t {iv_name}_lb{d}_{t_uid} = ((size_t *){lb_name}.data)[{d}];"
-            ));
-            self.push_line(&format!(
-                "size_t {iv_name}_ub{d}_{t_uid} = ((size_t *){ub_name}.data)[{d}];"
-            ));
+            if let Some(lb) = &tensor.lb {
+                let lb_name = self.nameof(lb);
+                self.push_line(&format!("size_t {iv_name}_lb{d}_{t_uid} = ((size_t *){lb_name}.data)[{d}];"));
+            }
+            let ub_name = self.nameof(&tensor.ub);
+            self.push_line(&format!("size_t {iv_name}_ub{d}_{t_uid} = ((size_t *){ub_name}.data)[{d}];"));
         }
 
         // Total element count in the result (product of extents).
@@ -474,7 +470,13 @@ impl<'ast> Visit<'ast> for CompileC {
         let data_name = format!("{target_name}_data");
         let shp_name  = format!("{target_name}_shp");
         let extents: Vec<String> = (0..rank)
-            .map(|d| format!("({iv_name}_ub{d}_{t_uid} - {iv_name}_lb{d}_{t_uid})"))
+            .map(|d| {
+                if tensor.lb.is_some() {
+                    format!("({iv_name}_ub{d}_{t_uid} - {iv_name}_lb{d}_{t_uid})")
+                } else {
+                    format!("{iv_name}_ub{d}_{t_uid}")
+                }
+            })
             .collect();
         let total_len = if extents.is_empty() { "1".to_owned() } else { extents.join(" * ") };
         self.push_line(&format!("size_t {len_name} = {total_len};"));
@@ -483,14 +485,20 @@ impl<'ast> Visit<'ast> for CompileC {
         // Heap-allocate the result shape array.
         self.push_line(&format!("size_t *{shp_name} = (size_t *)malloc({rank} * sizeof(size_t));"));
         for d in 0..rank {
-            self.push_line(&format!("{shp_name}[{d}] = {iv_name}_ub{d}_{t_uid} - {iv_name}_lb{d}_{t_uid};"));
+            if tensor.lb.is_some() {
+                self.push_line(&format!("{shp_name}[{d}] = {iv_name}_ub{d}_{t_uid} - {iv_name}_lb{d}_{t_uid};"));
+            } else {
+                self.push_line(&format!("{shp_name}[{d}] = {iv_name}_ub{d}_{t_uid};"));
+            }
         }
 
         // Generate k nested for-loops.
         for d in 0..rank {
-            self.push_line(&format!(
-                "for (size_t {iv_name}_{d}_{t_uid} = {iv_name}_lb{d}_{t_uid}; {iv_name}_{d}_{t_uid} < {iv_name}_ub{d}_{t_uid}; {iv_name}_{d}_{t_uid} += 1) {{"
-            ));
+            if tensor.lb.is_some() {
+                self.push_line(&format!("for (size_t {iv_name}_{d}_{t_uid} = {iv_name}_lb{d}_{t_uid}; {iv_name}_{d}_{t_uid} < {iv_name}_ub{d}_{t_uid}; {iv_name}_{d}_{t_uid} += 1) {{"));
+            } else {
+                self.push_line(&format!("for (size_t {iv_name}_{d}_{t_uid} = 0; {iv_name}_{d}_{t_uid} < {iv_name}_ub{d}_{t_uid}; {iv_name}_{d}_{t_uid} += 1) {{"));
+            }
             self.indent += 1;
         }
 
@@ -511,10 +519,22 @@ impl<'ast> Visit<'ast> for CompileC {
         // Row-major flat index: Σ (iv_d - lb_d) * stride_d
         let flat_terms: Vec<String> = (0..rank).map(|d| {
             let stride: Vec<String> = (d + 1..rank)
-                .map(|j| format!("({iv_name}_ub{j}_{t_uid} - {iv_name}_lb{j}_{t_uid})"))
+                .map(|j| {
+                    if tensor.lb.is_some() {
+                        format!("({iv_name}_ub{j}_{t_uid} - {iv_name}_lb{j}_{t_uid})")
+                    } else {
+                        format!("{iv_name}_ub{j}_{t_uid}")
+                    }
+                })
                 .collect();
+
             let stride_expr = if stride.is_empty() { "1".to_owned() } else { stride.join(" * ") };
-            format!("({iv_name}_{d}_{t_uid} - {iv_name}_lb{d}_{t_uid}) * {stride_expr}")
+
+            if tensor.lb.is_some() {
+                format!("({iv_name}_{d}_{t_uid} - {iv_name}_lb{d}_{t_uid}) * {stride_expr}")
+            } else {
+                format!("{iv_name}_{d}_{t_uid} * {stride_expr}")
+            }
         }).collect();
         let flat_expr = if flat_terms.is_empty() { "0".to_owned() } else { flat_terms.join(" + ") };
         self.push_line(&format!("size_t {iv_name}_flat = {flat_expr};"));

@@ -228,7 +228,11 @@ impl<'ast> Traverse<'ast> for ToSsa<'ast> {
     }
 
     fn trav_tensor(&mut self, tensor: Tensor<'ast, Self::InAst>) -> Self::TensorOut {
-        let lb = self.trav_id(tensor.lb);
+        let lb = if let Some(lb) = tensor.lb {
+            Some(self.trav_id(lb))
+        } else {
+            None
+        };
         let ub = self.trav_id(tensor.ub);
 
         let iv_lvis = self.alloc_lvis(tensor.iv.name.clone(), None);

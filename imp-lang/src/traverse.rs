@@ -108,7 +108,9 @@ pub trait Visit<'ast> {
     }
 
     fn visit_tensor(&mut self, tensor: &Tensor<'ast, Self::Ast>) {
-        Self::Ast::visit_operand(self, &tensor.lb);
+        if let Some(lb) = &tensor.lb {
+            Self::Ast::visit_operand(self, lb);
+        }
         Self::Ast::visit_operand(self, &tensor.ub);
 
         for stmt in &tensor.body {

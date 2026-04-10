@@ -159,8 +159,12 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
 
         self.indent();
         self.write("| ");
-        Ast::visit_operand(self, &tensor.lb);
-        self.write(" <= ");
+
+        if let Some(lb) = &tensor.lb {
+            Ast::visit_operand(self, lb);
+            self.write(" <= ");
+        }
+
         self.write(&tensor.iv.name);
         self.write(" < ");
         Ast::visit_operand(self, &tensor.ub);

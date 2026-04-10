@@ -77,7 +77,9 @@ impl<'ast> Rewrite<'ast> for DeadCodeRemoval {
 
         self.rewrite_id(Id::Var(tensor.iv));
         self.rewrite_id(tensor.ret);
-        self.rewrite_id(tensor.lb);
+        if let Some(lb) = tensor.lb {
+            self.rewrite_id(lb);
+        }
         self.rewrite_id(tensor.ub);
 
         let mut kept_rev = Vec::with_capacity(tensor.body.len());
@@ -99,7 +101,9 @@ impl<'ast> Rewrite<'ast> for DeadCodeRemoval {
         tensor.body = kept_rev;
 
         self.used = outer_used;
-        tensor.lb = self.rewrite_id(tensor.lb);
+        if let Some(lb) = &mut tensor.lb {
+            *lb = self.rewrite_id(*lb);
+        }
         tensor.ub = self.rewrite_id(tensor.ub);
         Expr::Tensor(tensor)
     }
