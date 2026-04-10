@@ -6,11 +6,6 @@ pub fn emit_ffi(ast: &mut Program<'static, TypedAst>) -> String {
     cg.finish()
 }
 
-struct PublicFamily<'prog, 'ast> {
-    root_name: String,
-    overloads: Vec<(String, &'prog Fundef<'ast, TypedAst>)>,
-}
-
 pub struct CompileFfi {
     output: String,
 }
@@ -38,23 +33,26 @@ impl<'ast> Visit<'ast> for CompileFfi {
         self.push("#[allow(unused_imports)]\n");
         self.push("use imp_core::*;\n");
 
-        let families = collect_public_families(program);
-
-        for (_base_name, fundef) in program.functions.iter() {
-            self.push("\n");
-            self.push("unsafe extern \"C\" {\n");
-            self.push(&format!("    fn IMP_{}(", fundef.name));
-            self.push(&join_args(&fundef.args, rust_ffi_type));
-            self.push(&format!(") -> {};\n", rust_ffi_type(&fundef.ret_type)));
-            self.push("}\n");
+        for (_name, overloads) in &program.overloads {
+            for (_sig, fundefs) in overloads {
+                for fundef in fundefs {
+                    self.push("\n");
+                    self.push("unsafe extern \"C\" {\n");
+                    self.push(&format!("    fn IMP_{}(", fundef.name));
+                    self.push(&join_args(&fundef.args, rust_ffi_type));
+                    self.push(&format!(") -> {};\n", rust_ffi_type(&fundef.ret_type)));
+                    self.push("}\n");
+                }
+            }
         }
 
-        for family in families {
-            if can_emit_family_wrapper(&family) {
-                self.emit_family_wrapper(&family);
-            } else {
-                for (base_name, fundef) in family.overloads {
-                    self.emit_direct_wrapper(&base_name, fundef);
+        for (name, overloads) in &program.overloads {
+            for (sig, fundefs) in overloads {
+                self.push("\n");
+                if fundefs.len() == 1 {
+                    self.emit_direct_wrapper(name, &fundefs[0]);
+                } else {
+                    self.emit_family_wrapper(name, sig, fundefs);
                 }
             }
         }
@@ -63,7 +61,6 @@ impl<'ast> Visit<'ast> for CompileFfi {
 
 impl CompileFfi {
     fn emit_direct_wrapper(&mut self, base_name: &str, fundef: &Fundef<'_, TypedAst>) {
-        self.push("\n");
         self.push(&format!("fn {}(", rust_wrapper_name(base_name)));
         self.push(&join_args(&fundef.args, rust_api_arg_type));
         self.push(&format!(") -> {} {{\n", rust_api_ret_type(&fundef.ret_type)));
@@ -79,33 +76,26 @@ impl CompileFfi {
         self.push("}\n");
     }
 
-    fn emit_family_wrapper(&mut self, family: &PublicFamily<'_, '_>) {
-        let first = family.overloads[0].1;
-        let arg_bases: Vec<String> = first.args.iter().map(|a| rust_base_type(&a.ty)).collect();
+    fn emit_family_wrapper(&mut self, base_name: &str, sig: &BaseSignature, fundefs: &Vec<Fundef<'_, TypedAst>>) {
+        let fargs = sig.base_types.iter()
+            .enumerate()
+            .map(|(i, base)| format!("arg{}: imp_core::ImpArrayOrScalar<{}>", i, rust_base_type(base)))
+            .collect::<Vec<_>>()
+            .join(", ");
+        self.push(&format!("fn {}(", rust_wrapper_name(base_name)));
+        self.push(&fargs);
+        self.push(&format!(") -> {} {{\n", rust_api_ret_type(&fundefs[0].ret_type)));
 
-        self.push("\n");
-        self.push(&format!("fn {}(", rust_wrapper_name(&family.root_name)));
-        self.push(
-            &arg_bases
-                .iter()
-                .enumerate()
-                .map(|(i, base)| format!("arg{i}: imp_core::ImpArrayOrScalar<{base}>"))
-                .collect::<Vec<_>>()
-                .join(", "),
-        );
-        self.push(&format!(") -> {} {{\n", rust_api_ret_type(&first.ret_type)));
+        let match_args = &(0..sig.base_types.len())
+            .map(|i| format!("arg{i}"))
+            .collect::<Vec<_>>()
+            .join(", ");
         self.push("    match (");
-        self.push(
-            &(0..arg_bases.len())
-                .map(|i| format!("arg{i}"))
-                .collect::<Vec<_>>()
-                .join(", "),
-        );
+        self.push(&match_args);
         self.push(") {\n");
 
-        for (_base_name, fundef) in &family.overloads {
-            let pattern = fundef
-                .args
+        for fundef in fundefs {
+            let pattern = fundef.args
                 .iter()
                 .enumerate()
                 .map(|(i, arg)| family_match_pattern(i, &arg.ty))
@@ -115,13 +105,14 @@ impl CompileFfi {
             self.push("        (");
             self.push(&pattern);
             self.push(")");
+
             if !guard.is_empty() {
                 self.push(" if ");
                 self.push(&guard);
             }
             self.push(" => {\n");
 
-            let branch_args = fundef.args.iter().enumerate().map(|(i, _)| format!("arg{i}" )).collect::<Vec<_>>();
+            let branch_args = fundef.args.iter().enumerate().map(|(i, _)| format!("arg{i}")).collect::<Vec<_>>();
             let marshaled = emit_marshaled_branch_args(&mut self.output, &fundef.args, &branch_args, 3);
             let ret = emit_return_conversion(&fundef.name, &fundef.ret_type, &marshaled);
             for line in ret.lines() {
@@ -142,41 +133,6 @@ fn is_static_array(ty: &Type) -> bool {
     ty.is_array() && !matches!(ty.shape, TypePattern::Any)
 }
 
-fn collect_public_families<'prog, 'ast>(program: &'prog Program<'ast, TypedAst>) -> Vec<PublicFamily<'prog, 'ast>> {
-    let mut keys: Vec<_> = program.functions.keys().cloned().collect();
-    keys.sort();
-
-    let mut families: Vec<PublicFamily<'prog, 'ast>> = Vec::new();
-    for key in keys {
-        let fundef = &program.functions[&key];
-
-        let root = key.split("__ovl").next().unwrap_or(&key).to_owned();
-        if let Some(existing) = families.iter_mut().find(|family| family.root_name == root) {
-            existing.overloads.push((key, fundef));
-        } else {
-            families.push(PublicFamily {
-                root_name: root,
-                overloads: vec![(key, fundef)],
-            });
-        }
-    }
-
-    families
-}
-
-fn can_emit_family_wrapper(family: &PublicFamily<'_, '_>) -> bool {
-    if family.overloads.len() < 2 {
-        return false;
-    }
-
-    let first = family.overloads[0].1;
-    family.overloads.iter().all(|(_, fundef)| {
-        fundef.args.len() == first.args.len()
-            && fundef.ret_type.ty == first.ret_type.ty
-            && fundef.args.iter().zip(first.args.iter()).all(|(a, b)| a.ty.ty == b.ty.ty)
-    })
-}
-
 fn join_args(args: &[Farg], map_ty: fn(&Type) -> String) -> String {
     args.iter()
         .map(|arg| format!("{}: {}", arg.id, map_ty(&arg.ty)))
@@ -186,45 +142,39 @@ fn join_args(args: &[Farg], map_ty: fn(&Type) -> String) -> String {
 
 fn rust_api_type(ty: &Type) -> String {
     if matches!(ty.shape, TypePattern::Any) {
-        return format!("imp_core::ImpDyn<{}>", rust_base_type(ty));
-    }
-
-    let base = rust_base_type(ty);
-
-    if ty.is_array() {
-        format!("imp_core::ImpArray<{}>", base)
+        format!("imp_core::ImpDyn<{}>", rust_base_type(&ty.ty))
+    } else if ty.is_array() {
+        format!("imp_core::ImpArray<{}>", rust_base_type(&ty.ty))
     } else {
-        base.to_owned()
+        rust_base_type(&ty.ty)
     }
 }
 
 fn rust_api_arg_type(ty: &Type) -> String {
     if matches!(ty.shape, TypePattern::Any) {
-        format!("imp_core::ImpArrayOrScalar<{}>", rust_base_type(ty))
+        format!("imp_core::ImpArrayOrScalar<{}>", rust_base_type(&ty.ty))
     } else {
         rust_api_type(ty)
     }
 }
 
 fn rust_api_ret_type(ty: &Type) -> String {
-    format!("imp_core::ImpArrayOrScalar<{}>", rust_base_type(ty))
+    format!("imp_core::ImpArrayOrScalar<{}>", rust_base_type(&ty.ty))
 }
 
 fn rust_ffi_type(ty: &Type) -> String {
     if matches!(ty.shape, TypePattern::Any) {
-        return format!("imp_core::ImpDyn<{}>", rust_base_type(ty));
-    }
-
-    if ty.is_array() {
+        format!("imp_core::ImpDyn<{}>", rust_base_type(&ty.ty))
+    } else if ty.is_array() {
         "imp_core::ImpArrayRaw".to_owned()
     } else {
-        rust_base_type(ty).to_owned()
+        rust_base_type(&ty.ty).to_owned()
     }
 }
 
-fn rust_base_type(ty: &Type) -> String {
+fn rust_base_type(ty: &BaseType) -> String {
     use BaseType::*;
-    match &ty.ty {
+    match ty {
         Bool => "bool".to_owned(),
         I32 => "i32".to_owned(),
         I64 => "i64".to_owned(),
@@ -235,10 +185,6 @@ fn rust_base_type(ty: &Type) -> String {
         F64 => "f64".to_owned(),
         Udf(udf) => udf.to_owned(),
     }
-}
-
-fn rust_wrapper_name(name: &str) -> String {
-    name.strip_prefix('@').unwrap_or(name).to_owned()
 }
 
 fn emit_marshaled_call_args(out: &mut String, args: &[Farg]) -> Vec<String> {
@@ -296,7 +242,7 @@ fn emit_return_conversion(symbol_name: &str, ret_type: &Type, call_args: &[Strin
             "    let __raw = unsafe {{ IMP_{}({}) }};\n    imp_core::ImpArrayOrScalar::Array(unsafe {{ imp_core::ImpArray::<{}>::from_raw(__raw) }})",
             symbol_name,
             call_args.join(", "),
-            rust_base_type(ret_type)
+            rust_base_type(&ret_type.ty)
         )
     } else {
         format!(
@@ -429,4 +375,8 @@ fn sanitize_binding_name(name: &str) -> String {
     name.chars()
         .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '_' })
         .collect()
+}
+
+fn rust_wrapper_name(name: &str) -> String {
+    name.strip_prefix('@').unwrap_or(name).to_owned()
 }

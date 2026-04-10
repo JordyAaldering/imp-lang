@@ -72,27 +72,16 @@ impl<'src> Parser<'src> {
 
 impl<'src> Parser<'src> {
     pub fn parse_program(&mut self) -> ParseResult<Program<'static, ParsedAst>> {
-        let mut functions: HashMap<String, Fundef<'static, ParsedAst>> = HashMap::new();
-        let mut overload_counts: HashMap<String, usize> = HashMap::new();
+        let mut overloads = HashMap::new();
 
         while let Some((token, _)) = self.lexer.peek() {
             match token {
                 Token::Fn => {
                     let fundef = self.parse_fundef()?;
-                    if functions.values().any(|existing| {
-                        existing.name == fundef.name && Self::same_farg_signature(&existing.args, &fundef.args)
-                    }) {
-                        return Err(ParseError::DuplicateFunctionSignature(fundef.name.clone()));
-                    }
 
-                    let idx = overload_counts.entry(fundef.name.clone()).or_insert(0);
-                    let key = if *idx == 0 {
-                        fundef.name.clone()
-                    } else {
-                        format!("{}_ovl{}", fundef.name, *idx)
-                    };
-                    *idx += 1;
-                    functions.insert(key, fundef);
+                    let group = overloads.entry(fundef.name.clone()).or_insert(HashMap::new());
+                    let fundefs = group.entry(fundef.signature()).or_insert(Vec::new());
+                    fundefs.push(fundef);
                 }
                 _ => {
                     let (token, span) = self.next()?;
@@ -101,7 +90,7 @@ impl<'src> Parser<'src> {
             }
         }
 
-        Ok(Program { functions })
+        Ok(Program { overloads })
     }
 
     fn same_farg_signature(a: &[Farg], b: &[Farg]) -> bool {

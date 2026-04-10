@@ -18,9 +18,13 @@ impl CheckTypePatterns {
 	}
 
 	fn run(mut self, program: Program<'static, ParsedAst>) -> Result<Program<'static, ParsedAst>, String> {
-		for fundef in program.functions.values() {
-			self.check_fundef(fundef);
-		}
+        for (_, groups) in &program.overloads {
+            for (_, fundefs) in groups {
+                for fundef in fundefs {
+                    self.check_fundef(fundef);
+                }
+            }
+        }
 
 		if self.errors.is_empty() {
 			Ok(program)

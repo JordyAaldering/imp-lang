@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::ast::*;
 
 pub trait Visit<'ast> {
@@ -6,8 +8,12 @@ pub trait Visit<'ast> {
     // Declarations
 
     fn visit_program(&mut self, program: &Program<'ast, Self::Ast>) {
-        for fundef in program.functions.values() {
-            self.visit_fundef(fundef);
+        for (_, groups) in &program.overloads {
+            for (_, fundefs) in groups {
+                for fundef in fundefs {
+                    self.visit_fundef(&fundef);
+                }
+            }
         }
     }
 
@@ -133,8 +139,12 @@ pub trait Rewrite<'ast> {
     // Declarations
 
     fn rewrite_program(&mut self, program: &mut Program<'ast, Self::Ast>) {
-        for fundef in program.functions.values_mut() {
-            self.rewrite_fundef(fundef);
+        for groups in program.overloads.values_mut() {
+            for fundefs in groups.values_mut() {
+                for fundef in fundefs {
+                    self.rewrite_fundef(fundef);
+                }
+            }
         }
     }
 
@@ -244,12 +254,25 @@ pub trait Traverse<'ast> {
     // Declarations
 
     fn trav_program(&mut self, program: Program<'ast, Self::InAst>) -> Program<'ast, Self::OutAst> {
-        let mut functions = std::collections::HashMap::new();
-        for (name, fundef) in program.functions {
-            functions.insert(name, self.trav_fundef(fundef));
+        let mut overloads = HashMap::new();
+
+        for (name, groups) in program.overloads {
+            let mut new_groups = HashMap::new();
+
+            for (sig, fundefs) in groups {
+                let mut new_fundefs = Vec::new();
+
+                for fundef in fundefs {
+                    new_fundefs.push(self.trav_fundef(fundef));
+                }
+
+                new_groups.insert(sig, new_fundefs);
+            }
+
+            overloads.insert(name, new_groups);
         }
 
-        Program { functions }
+        Program { overloads }
     }
 
     fn trav_fundef(&mut self, fundef: Fundef<'ast, Self::InAst>) -> Fundef<'ast, Self::OutAst> {

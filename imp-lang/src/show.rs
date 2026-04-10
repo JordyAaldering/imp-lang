@@ -35,13 +35,6 @@ impl<'ast, Ast: AstConfig> Show<'ast, Ast> {
 impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
     type Ast = Ast;
 
-    fn visit_program(&mut self, program: &Program<'ast, Self::Ast>) {
-        for fundef in program.functions.values() {
-            self.visit_fundef(fundef);
-            self.write("\n");
-        }
-    }
-
     fn visit_fundef(&mut self, fundef: &Fundef<'ast, Self::Ast>) {
         self.args = fundef.args.clone();
 
@@ -65,6 +58,7 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
         self.depth -= 1;
 
         self.write("}");
+        self.write("\n");
     }
 
     fn visit_farg(&mut self, arg: &Farg) {

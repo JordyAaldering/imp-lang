@@ -20,58 +20,63 @@ impl CompileH {
     }
 }
 
+const HEADER: &str =
+r#"#pragma once
+#include <stdlib.h>
+#include <stdbool.h>
+#include <stdint.h>
+
+typedef struct {
+    size_t len;
+    size_t dim;
+    size_t *shp;
+    void *data;
+} ImpArrayRaw;
+
+typedef union {
+    uint32_t scalar;
+    ImpArrayRaw array;
+} ImpDynDataU32;
+
+typedef struct {
+    bool is_array;
+    ImpDynDataU32 data;
+} ImpDynU32;
+
+typedef union {
+    size_t scalar;
+    ImpArrayRaw array;
+} ImpDynDataUsize;
+
+typedef struct {
+    bool is_array;
+    ImpDynDataUsize data;
+} ImpDynUsize;
+
+typedef union {
+    bool scalar;
+    ImpArrayRaw array;
+} ImpDynDataBool;
+
+typedef struct {
+    bool is_array;
+    ImpDynDataBool data;
+} ImpDynBool;
+"#;
+
 impl<'ast> Visit<'ast> for CompileH {
     type Ast = TypedAst;
 
     fn visit_program(&mut self, program: &Program<'ast, TypedAst>) {
-        self.output.push_str("#pragma once\n");
-        self.output.push_str("#include <stdlib.h>\n");
-        self.output.push_str("#include <stdbool.h>\n");
-        self.output.push_str("#include <stdint.h>\n");
-        self.output.push('\n');
-        self.output.push_str("typedef struct {\n");
-        self.output.push_str("    size_t len;\n");
-        self.output.push_str("    size_t dim;\n");
-        self.output.push_str("    size_t *shp;\n");
-        self.output.push_str("    void *data;\n");
-        self.output.push_str("} ImpArrayRaw;\n");
-        self.output.push('\n');
-        self.output.push_str("typedef union {\n");
-        self.output.push_str("    uint32_t scalar;\n");
-        self.output.push_str("    ImpArrayRaw array;\n");
-        self.output.push_str("} ImpDynDataU32;\n");
-        self.output.push('\n');
-        self.output.push_str("typedef struct {\n");
-        self.output.push_str("    bool is_array;\n");
-        self.output.push_str("    ImpDynDataU32 data;\n");
-        self.output.push_str("} ImpDynU32;\n");
-        self.output.push('\n');
-        self.output.push_str("typedef union {\n");
-        self.output.push_str("    size_t scalar;\n");
-        self.output.push_str("    ImpArrayRaw array;\n");
-        self.output.push_str("} ImpDynDataUsize;\n");
-        self.output.push('\n');
-        self.output.push_str("typedef struct {\n");
-        self.output.push_str("    bool is_array;\n");
-        self.output.push_str("    ImpDynDataUsize data;\n");
-        self.output.push_str("} ImpDynUsize;\n");
-        self.output.push('\n');
-        self.output.push_str("typedef union {\n");
-        self.output.push_str("    bool scalar;\n");
-        self.output.push_str("    ImpArrayRaw array;\n");
-        self.output.push_str("} ImpDynDataBool;\n");
-        self.output.push('\n');
-        self.output.push_str("typedef struct {\n");
-        self.output.push_str("    bool is_array;\n");
-        self.output.push_str("    ImpDynDataBool data;\n");
-        self.output.push_str("} ImpDynBool;\n");
+        self.output.push_str(HEADER);
 
-        let mut func_names: Vec<&str> = program.functions.keys().map(String::as_str).collect();
-        func_names.sort();
-        for name in func_names {
-            let fundef = &program.functions[name];
-            self.output.push('\n');
-            self.visit_fundef(fundef);
+        for (_name, overloads) in &program.overloads {
+            for (_sig, fundefs) in overloads {
+                for fundef in fundefs {
+                    self.output.push('\n');
+                    self.visit_fundef(fundef);
+                }
+            }
         }
     }
 
@@ -79,8 +84,7 @@ impl<'ast> Visit<'ast> for CompileH {
         let args: Vec<String> = fundef.args.iter()
             .map(|arg| format!("{} {}", dyn_ctype(&arg.ty), arg.id))
             .collect();
-        self.output.push_str(&format!(
-            "{} IMP_{}({});\n",
+        self.output.push_str(&format!("{} IMP_{}({});\n",
             dyn_ctype(&fundef.ret_type), fundef.name, args.join(", ")
         ));
     }

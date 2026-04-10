@@ -5,14 +5,12 @@ use crate::{ast::*, traverse::Traverse};
 pub fn type_infer<'ast>(program: Program<'ast, UntypedAst>) -> Result<Program<'ast, TypedAst>, InferenceError> {
     let mut typed_functions: HashMap<String, Fundef<'ast, TypedAst>> = HashMap::new();
 
-    // Collect and sort internal function keys to ensure deterministic ordering.
-    let mut internal_keys: Vec<_> = program.functions.keys().cloned().collect();
-    internal_keys.sort();
+    let mut internal_keys: Vec<_> = program.overloads.keys().cloned().collect();
 
     // First pass: create stub signatures for all functions to enable forward references.
     let mut stubs_by_internal_key: HashMap<String, &'ast Fundef<'ast, TypedAst>> = HashMap::new();
     for key in &internal_keys {
-        if let Some(fundef) = program.functions.get(key) {
+        if let Some(fundef) = program.overloads.get(key) {
             let stub = Box::leak(Box::new(Fundef {
                 name: fundef.name.clone(),
                 ret_type: fundef.ret_type.clone(),
@@ -33,7 +31,7 @@ pub fn type_infer<'ast>(program: Program<'ast, UntypedAst>) -> Result<Program<'a
 
     // Second pass: type-check each function with all overload signatures available.
     for key in &internal_keys {
-        let fundef = program.functions.get(key).unwrap();
+        let fundef = program.overloads.get(key).unwrap();
         let mut infer = TypeInfer::new(&overloads);
         let typed = infer.trav_fundef(fundef.clone());
         if let Some(err) = infer.errors.into_iter().next() {
@@ -43,14 +41,7 @@ pub fn type_infer<'ast>(program: Program<'ast, UntypedAst>) -> Result<Program<'a
         typed_functions.insert(key.clone(), typed);
     }
 
-    Ok(Program { functions: typed_functions })
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-struct OverloadKey {
-    name: String,
-    arity: usize,
-    arg_bases: Vec<BaseType>,
+    Ok(Program { overloads: typed_functions })
 }
 
 pub struct TypeInfer<'ast> {
@@ -58,11 +49,8 @@ pub struct TypeInfer<'ast> {
     idmap: HashMap<*const VarInfo<'ast, UntypedAst>, &'ast VarInfo<'ast, TypedAst>>,
     new_ids: Vec<&'ast VarInfo<'ast, TypedAst>>,
     errors: Vec<InferenceError>,
-    /// Overload families keyed by function name + arity + argument base types.
-    overloads: HashMap<OverloadKey, Vec<&'ast Fundef<'ast, TypedAst>>>,
 }
 
-#[allow(dead_code)]
 #[derive(Debug)]
 pub enum InferenceError {
     SelectionIndexNotVector {
@@ -90,7 +78,7 @@ pub enum InferenceError {
     NoMatchingOverload {
         name: String,
         arity: usize,
-        arg_bases: Vec<BaseType>,
+        arg_bases: BaseSignature,
     },
     /// Call argument type mismatch.
     CallArgumentTypeMismatch {
@@ -102,7 +90,7 @@ pub enum InferenceError {
     AmbiguousOverload {
         name: String,
         arity: usize,
-        arg_bases: Vec<BaseType>,
+        arg_bases: BaseSignature,
     },
     PrimitiveArgumentKindMismatch {
         primitive: String,
@@ -112,7 +100,7 @@ pub enum InferenceError {
     },
     InconsistentOverloadReturnBase {
         name: String,
-        arg_bases: Vec<BaseType>,
+        arg_bases: BaseSignature,
         expected: BaseType,
         found: BaseType,
     },
@@ -130,13 +118,12 @@ pub enum InferenceError {
 }
 
 impl<'ast> TypeInfer<'ast> {
-    fn new(overloads: &HashMap<OverloadKey, Vec<&'ast Fundef<'ast, TypedAst>>>) -> Self {
+    fn new() -> Self {
         Self {
             args: Vec::new(),
             idmap: HashMap::new(),
             new_ids: Vec::new(),
             errors: Vec::new(),
-            overloads: overloads.clone(),
         }
     }
 
@@ -965,51 +952,20 @@ fn dims_compatible(expected: &DimPattern, provided: &DimPattern) -> bool {
     }
 }
 
-fn overload_key_from_sig(name: &str, args: &[Farg]) -> OverloadKey {
-    OverloadKey {
-        name: name.to_owned(),
-        arity: args.len(),
-        arg_bases: args.iter().map(|a| a.ty.ty.clone()).collect(),
-    }
-}
-
-fn overload_key_for_call(name: &str, arg_types: &[Type]) -> OverloadKey {
-    OverloadKey {
-        name: name.to_owned(),
-        arity: arg_types.len(),
-        arg_bases: arg_types.iter().map(|t| t.ty.clone()).collect(),
-    }
-}
-
-
-fn build_overload_families<'ast>(
-    stubs_by_internal_key: &HashMap<String, &'ast Fundef<'ast, TypedAst>>,
-) -> HashMap<OverloadKey, Vec<&'ast Fundef<'ast, TypedAst>>> {
-    let mut internal_keys: Vec<_> = stubs_by_internal_key.keys().cloned().collect();
-    internal_keys.sort();
-
-    let mut overloads: HashMap<OverloadKey, Vec<&'ast Fundef<'ast, TypedAst>>> = HashMap::new();
-    for key in internal_keys {
-        let f = stubs_by_internal_key[&key];
-        let ov_key = overload_key_from_sig(&f.name, &f.args);
-        overloads.entry(ov_key).or_default().push(f);
-    }
-    overloads
-}
-
-fn validate_overload_families(
-    overloads: &HashMap<OverloadKey, Vec<&Fundef<'_, TypedAst>>>,
-) -> Option<InferenceError> {
-    for (k, family) in overloads {
-        let expected = &family[0].ret_type.ty;
-        for f in family.iter().skip(1) {
-            if &f.ret_type.ty != expected {
-                return Some(InferenceError::InconsistentOverloadReturnBase {
-                    name: k.name.clone(),
-                    arg_bases: k.arg_bases.clone(),
-                    expected: expected.clone(),
-                    found: f.ret_type.ty.clone(),
-                });
+fn validate_overload_families(overloads: &HashMap<String, HashMap<BaseSignature, Vec<Fundef<'_, TypedAst>>>>) -> Option<InferenceError> {
+    for (name, group) in overloads {
+        for (sig, fundefs) in group {
+            let (first, fundefs) = fundefs.split_first().unwrap();
+            let expected_ret_ty = &first.ret_type.ty;
+            for fundef in fundefs {
+                if &fundef.ret_type.ty != expected_ret_ty {
+                    return Some(InferenceError::InconsistentOverloadReturnBase {
+                        name: name.clone(),
+                        arg_bases: sig.clone(),
+                        expected: expected_ret_ty.clone(),
+                        found: fundef.ret_type.ty.clone(),
+                    });
+                }
             }
         }
     }

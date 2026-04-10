@@ -21,20 +21,6 @@ pub struct CompileC {
     tensor_uid: usize,
 }
 
-struct WrapperFamily {
-    wrapper_name: String,
-    base_name: String,
-    arg_bases: Vec<BaseType>,
-    ret_base: BaseType,
-    overloads: Vec<WrapperCase>,
-}
-
-struct WrapperCase {
-    name: String,
-    args: Vec<Type>,
-    ret_type: Type,
-}
-
 impl CompileC {
     pub fn new(module_name: String) -> Self {
         Self {
@@ -94,72 +80,60 @@ impl CompileC {
         ));
     }
 
-    fn emit_wrapper_prototype(&mut self, family: &WrapperFamily) {
-        let args: Vec<String> = family
-            .arg_bases
+    fn emit_wrapper_prototype(&mut self, base_name: &str, sig: &BaseSignature, ret_ty: &BaseType) {
+        let args: Vec<String> = sig.base_types
             .iter()
             .enumerate()
             .map(|(i, base)| format!("{} arg{i}", dyn_ctype(base)))
             .collect();
-        self.output.push_str(&format!(
-            "{} IMP_{}({});\n",
-            dyn_ctype(&family.ret_base),
-            family.wrapper_name,
-            args.join(", ")
-        ));
+        self.output.push_str(&format!("{} IMP_{}({});\n",
+            dyn_ctype(ret_ty), base_name, args.join(", ")));
     }
 
-    fn emit_wrapper_function(&mut self, family: &WrapperFamily) {
-        let args: Vec<String> = family
-            .arg_bases
+    fn emit_wrapper_function(&mut self, base_name: &str, sig: &BaseSignature, family: &Vec<Fundef<'_, TypedAst>>) {
+        let args: Vec<String> = sig.base_types
             .iter()
             .enumerate()
             .map(|(i, base)| format!("{} arg{i}", dyn_ctype(base)))
             .collect();
 
-        self.push_line(&format!(
-            "{} IMP_{}({}) {{",
-            dyn_ctype(&family.ret_base),
-            family.wrapper_name,
-            args.join(", ")
-        ));
+        self.push_line(&format!("{} IMP_{}({}) {{",
+            dyn_ctype(&family[0].ret_type.ty), base_name, args.join(", ")));
 
         self.indent += 1;
-        for (idx, overload) in family.overloads.iter().enumerate() {
-            let condition = overload
+        for (idx, fundef) in family.iter().enumerate() {
+            let condition = fundef
                 .args
                 .iter()
                 .enumerate()
-                .map(|(i, arg)| shape_match_condition(&arg.shape, &format!("arg{i}")))
+                .map(|(i, arg)| shape_match_condition(&arg.ty.shape, &format!("arg{i}")))
                 .collect::<Vec<_>>()
                 .join(" && ");
 
-            if idx == 0 {
-                self.push_line(&format!("if ({condition}) {{"));
-            } else {
-                self.push_line(&format!("else if ({condition}) {{"));
+            if idx > 0 {
+                self.push_line("else {");
             }
+            self.push_line(&format!("if ({condition}) {{"));
             self.indent += 1;
 
-            let call_args: Vec<String> = overload
-                .args
+            let call_args: Vec<String> = fundef.args
                 .iter()
                 .enumerate()
-                .map(|(i, arg)| wrapper_call_arg(&arg.shape, &format!("arg{i}")))
+                .map(|(i, arg)| wrapper_call_arg(&arg.ty.shape, &format!("arg{i}")))
                 .collect();
-            let call_expr = format!("IMP_{}({})", overload.name, call_args.join(", "));
+            let call_expr = format!("IMP_{}({})", fundef.name, call_args.join(", "));
 
-            if matches!(overload.ret_type.shape, TypePattern::Any) {
+            if matches!(fundef.ret_type.shape, TypePattern::Any) {
                 self.push_line(&format!("return {call_expr};"));
-            } else if overload.ret_type.is_array() {
-                let dyn_ty = dyn_ctype(&overload.ret_type.ty);
+            } else if fundef.ret_type.is_array() {
+                let dyn_ty = dyn_ctype(&fundef.ret_type.ty);
                 self.push_line(&format!("ImpArrayRaw __ret = {call_expr};"));
                 self.push_line(&format!(
                     "return ({dyn_ty}) {{ .is_array = true, .data.array = __ret }};"
                 ));
             } else {
-                let dyn_ty = dyn_ctype(&overload.ret_type.ty);
-                self.push_line(&format!("{} __ret = {call_expr};", base_ctype(&overload.ret_type)));
+                let dyn_ty = dyn_ctype(&fundef.ret_type.ty);
+                self.push_line(&format!("{} __ret = {call_expr};", base_ctype(&fundef.ret_type)));
                 self.push_line(&format!(
                     "return ({dyn_ty}) {{ .is_array = false, .data.scalar = __ret }};"
                 ));
@@ -169,10 +143,7 @@ impl CompileC {
             self.push_line("}");
         }
 
-        self.push_line(&format!(
-            "fprintf(stderr, \"runtime overload dispatch failed: {}\\n\");",
-            family.base_name
-        ));
+        self.push_line(&format!("fprintf(stderr, \"runtime overload dispatch failed: {}\\n\");", base_name));
         self.push_line("abort();");
 
         self.indent -= 1;
@@ -208,28 +179,36 @@ impl<'ast> Visit<'ast> for CompileC {
         self.output.push_str("}\n");
         self.output.push('\n');
 
-        let mut func_names: Vec<&str> = program.functions.keys().map(String::as_str).collect();
-        func_names.sort();
-        let wrapper_families = collect_wrapper_families(program);
+        for (_name, overloads) in &program.overloads {
+            for (_sig, fundefs) in overloads {
+                for fundef in fundefs {
+                    self.emit_function_prototype(fundef);
+                }
+            }
+        }
 
-        for name in &func_names {
-            let fundef = &program.functions[*name];
-            self.emit_function_prototype(fundef);
+        for (name, overloads) in &program.overloads {
+            for (sig, fundefs) in overloads {
+                self.emit_wrapper_prototype(name, sig, &fundefs[0].ret_type.ty);
+            }
         }
-        for family in &wrapper_families {
-            self.emit_wrapper_prototype(family);
-        }
+
         self.output.push('\n');
 
-        for name in &func_names {
-            let fundef = &program.functions[*name];
-            self.visit_fundef(fundef);
-            self.output.push('\n');
+        for (_name, overloads) in &program.overloads {
+            for (_sig, fundefs) in overloads {
+                for fundef in fundefs {
+                    self.visit_fundef(fundef);
+                    self.output.push('\n');
+                }
+            }
         }
 
-        for family in &wrapper_families {
-            self.emit_wrapper_function(family);
-            self.output.push('\n');
+        for (name, overloads) in &program.overloads {
+            for (sig, fundefs) in overloads {
+                self.emit_wrapper_function(name, sig, fundefs);
+                self.output.push('\n');
+            }
         }
     }
 
@@ -726,58 +705,6 @@ fn dyn_ctype(base: &BaseType) -> String {
 
 fn supports_dyn_base(base: &BaseType) -> bool {
     matches!(base, BaseType::U32 | BaseType::Usize | BaseType::Bool)
-}
-
-fn collect_wrapper_families(program: &Program<'_, TypedAst>) -> Vec<WrapperFamily> {
-    let mut grouped: HashMap<(String, usize, Vec<BaseType>), Vec<WrapperCase>> = HashMap::new();
-
-    let mut names: Vec<&str> = program.functions.keys().map(String::as_str).collect();
-    names.sort();
-    for name in names {
-        let fundef = &program.functions[name];
-        let Some((base_name, _)) = fundef.name.split_once("__") else {
-            continue;
-        };
-
-        let arg_bases: Vec<BaseType> = fundef.args.iter().map(|a| a.ty.ty.clone()).collect();
-        let key = (base_name.to_owned(), fundef.args.len(), arg_bases);
-        grouped.entry(key).or_default().push(WrapperCase {
-            name: fundef.name.clone(),
-            args: fundef.args.iter().map(|a| a.ty.clone()).collect(),
-            ret_type: fundef.ret_type.clone(),
-        });
-    }
-
-    let mut families = Vec::new();
-    for ((base_name, _arity, arg_bases), mut overloads) in grouped {
-        if overloads.len() < 2 {
-            continue;
-        }
-
-        let ret_base = overloads[0].ret_type.ty.clone();
-        if !supports_dyn_base(&ret_base) || arg_bases.iter().any(|b| !supports_dyn_base(b)) {
-            continue;
-        }
-
-        overloads.sort_by(|a, b| a.name.cmp(&b.name));
-        let any_types: Vec<Type> = arg_bases
-            .iter()
-            .cloned()
-            .map(|ty| Type { ty, shape: TypePattern::Any })
-            .collect();
-        let wrapper_name = rename_fundefs::mangle_call_name(&base_name, &any_types);
-
-        families.push(WrapperFamily {
-            wrapper_name,
-            base_name,
-            arg_bases,
-            ret_base,
-            overloads,
-        });
-    }
-
-    families.sort_by(|a, b| a.wrapper_name.cmp(&b.wrapper_name));
-    families
 }
 
 fn shape_match_condition(shape: &TypePattern, arg: &str) -> String {

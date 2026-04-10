@@ -52,36 +52,23 @@ pub fn rename_fundefs<'ast>(mut program: Program<'ast, TypedAst>) -> Program<'as
 
 impl RenameFundefs {
     fn rename<'ast>(&self, program: &mut Program<'ast, TypedAst>) {
-        let mut used_names = HashSet::new();
+        #[cfg(debug_assertions)]
+        let mut used = HashSet::new();
 
-        let mut internal_keys: Vec<String> = program.functions.keys().cloned().collect();
-        internal_keys.sort();
+        for (_name, overloads) in &mut program.overloads {
+            for (_sig, fundefs) in overloads {
+                for fundef in fundefs {
+                    let name = mangle_fundef_name(&fundef.name, &fundef.args);
 
-        for key in internal_keys {
-            let Some(fundef) = program.functions.get_mut(&key) else {
-                continue;
-            };
+                    #[cfg(debug_assertions)]
+                    if !used.insert(name.clone()) {
+                        panic!("name collision: {}", name);
+                    }
 
-            let base_name = mangle_fundef_name(&fundef.name, &fundef.args);
-            let unique_name = make_unique(base_name, &mut used_names);
-            fundef.name = unique_name;
+                    fundef.name = name;
+                }
+            }
         }
-    }
-}
-
-fn make_unique(mut candidate: String, used_names: &mut HashSet<String>) -> String {
-    if used_names.insert(candidate.clone()) {
-        return candidate;
-    }
-
-    let root = candidate;
-    let mut i = 1usize;
-    loop {
-        candidate = format!("{}__alt{}", root, i);
-        if used_names.insert(candidate.clone()) {
-            return candidate;
-        }
-        i += 1;
     }
 }
 
