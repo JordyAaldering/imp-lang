@@ -909,8 +909,6 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
             F64(v) => (F64(v), Type::scalar(BaseType::F64)),
         }
     }
-
-    type TypeOut = Type;
 }
 
 /// Check if two types are compatible for parameter passing.

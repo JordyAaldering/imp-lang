@@ -77,11 +77,6 @@ impl Type {
         Self { ty, shape: TypePattern::Scalar }
     }
 
-    pub fn vector(ty: BaseType, extent: &str) -> Self {
-        let dim = if extent == "." { DimPattern::Any } else { DimPattern::Var(extent.to_owned()) };
-        Self::vector_dim(ty, dim)
-    }
-
     pub fn vector_dim(ty: BaseType, dim: DimPattern) -> Self {
         Self { ty, shape: TypePattern::Axes(vec![AxisPattern::Dim(dim)]) }
     }

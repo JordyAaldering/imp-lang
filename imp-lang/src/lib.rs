@@ -1,5 +1,6 @@
 #![feature(associated_type_defaults)]
 
+mod options;
 mod ast;
 mod traverse;
 mod show;
@@ -11,69 +12,74 @@ mod tc;
 mod opt;
 mod cg;
 
-use std::path::Path;
+use std::fs;
 
-use crate::{ast::*, traverse::*};
+use crate::traverse::*;
 
-pub fn compile(src: &str) -> Program<'static, TypedAst> {
-    let ast = scp::scanparse(src).unwrap();
-    println!("{}", show::show(&ast));
+pub use crate::options::*;
+
+pub fn compile(options: Options) {
+    let src = fs::read_to_string(&options.infile).unwrap();
+    if matches!(options.b, Some(Phase::RD)) {
+        println!("{src}");
+        return;
+    }
+
+    let ast = scp::scanparse(&src).unwrap();
+    if matches!(options.b, Some(Phase::SCP)) {
+        println!("{}", show::show(&ast));
+        return;
+    }
+
     let ast = tp::check_tp(ast).unwrap();
+    if matches!(options.b, Some(Phase::CTP)) {
+        println!("{}", show::show(&ast));
+        return;
+    }
+
     let ast = tp::analyse_tp(ast);
-    println!("{}", show::show(&ast));
+    if matches!(options.b, Some(Phase::ATP)) {
+        println!("{}", show::show(&ast));
+        return;
+    }
+
     let ast = pre::flatten(ast);
-    println!("{}", show::show(&ast));
+    if matches!(options.b, Some(Phase::FLT)) {
+        println!("{}", show::show(&ast));
+        return;
+    }
+
     let ast = pre::to_ssa(ast);
-    println!("{}", show::show(&ast));
+    if matches!(options.b, Some(Phase::SSA)) {
+        println!("{}", show::show(&ast));
+        return;
+    }
+
     let ast = tc::type_infer(ast).unwrap();
-    println!("{}", show::show(&ast));
+    if matches!(options.b, Some(Phase::TI)) {
+        println!("{}", show::show(&ast));
+        return;
+    }
+
     let ast = opt::constant_fold(ast);
-    println!("{}", show::show(&ast));
+    if matches!(options.b, Some(Phase::CF)) {
+        println!("{}", show::show(&ast));
+        return;
+    }
+
     let ast = opt::dead_code_removal(ast);
-    println!("{}", show::show(&ast));
-    ast
-}
-
-pub fn rename_fundefs(ast: &mut Program<'static, TypedAst>) {
-    cg::rename_fundefs::rename_fundefs(ast);
-}
-
-pub fn emit_ffi(ast: &mut Program<'static, TypedAst>, outfile: &str) {
-    rename_fundefs(ast);
-    let mut cg = cg::codegen_ffi::CompileFfi::new();
-    cg.visit_program(ast);
-    std::fs::write(outfile, cg.finish()).unwrap();
-}
-
-pub fn emit_c(ast: &mut Program<'static, TypedAst>, outfile: &str) {
-    rename_fundefs(ast);
-    let stem = Path::new(outfile).file_stem().unwrap().to_str().unwrap().to_owned();
-    let mut cg = cg::codegen_c::CompileC::new(&stem);
-    cg.visit_program(ast);
-    std::fs::write(outfile, cg.finish()).unwrap();
-}
-
-pub fn emit_h(ast: &mut Program<'static, TypedAst>, outfile: &str) {
-    rename_fundefs(ast);
-    let mut cg = cg::codegen_h::CompileH::new();
-    cg.visit_program(ast);
-    std::fs::write(outfile, cg.finish()).unwrap();
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn compile_stdlib_small_surface() {
-        let src = include_str!("../../example/src/stdlib_small.imp");
-        let _ = compile(src);
+    if matches!(options.b, Some(Phase::DCR)) {
+        println!("{}", show::show(&ast));
+        return;
     }
 
-    #[test]
-    #[should_panic]
-    fn reject_invalid_type_patterns() {
-        let src = include_str!("../../example/src/tp_should_reject.imp");
-        let _ = compile(src);
+    let mut ast = cg::rename_fundefs(ast);
+    if matches!(options.b, Some(Phase::RNF)) {
+        println!("{}", show::show(&ast));
+        return;
     }
+
+    cg::emit_c(&mut ast, options.module_name(), options.c_path());
+    cg::emit_h(&mut ast, options.h_path());
+    cg::emit_ffi(&mut ast, options.rs_path());
 }

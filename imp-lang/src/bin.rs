@@ -1,17 +1,7 @@
-use std::{fs, path::PathBuf};
-
 use clap::Parser;
-
-#[derive(Parser)]
-struct Args {
-    file: PathBuf,
-}
+use imp_lang::Options;
 
 fn main() {
-    let Args {
-        file,
-    } = Args::parse();
-
-    let src = fs::read_to_string(file).unwrap();
-    let _ = imp_lang::compile(&src);
+    let options = Options::parse();
+    imp_lang::compile(options);
 }

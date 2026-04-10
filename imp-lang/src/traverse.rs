@@ -354,10 +354,4 @@ pub trait Traverse<'ast> {
     fn trav_const(&mut self, _c: Const) -> Self::ConstOut {
         unimplemented!()
     }
-
-    type TypeOut = Type;
-
-    fn trav_type(&mut self, _ty: Type) -> Self::TypeOut {
-        unimplemented!()
-    }
 }

@@ -44,9 +44,10 @@ use crate::ast::*;
 /// Namely, there must be a clear ordering
 pub struct RenameFundefs;
 
-pub fn rename_fundefs<'ast>(program: &mut Program<'ast, TypedAst>) {
-    let pass = RenameFundefs;
-    pass.rename(program);
+pub fn rename_fundefs<'ast>(mut program: Program<'ast, TypedAst>) -> Program<'ast, TypedAst> {
+    let rf = RenameFundefs;
+    rf.rename(&mut program);
+    program
 }
 
 impl RenameFundefs {

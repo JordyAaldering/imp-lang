@@ -1,4 +1,15 @@
+use std::path::PathBuf;
+
 use crate::{ast::*, Visit};
+
+pub fn emit_h(ast: &mut Program<'static, TypedAst>, outfile: Option<PathBuf>) {
+    let mut cg = CompileH::new();
+    cg.visit_program(ast);
+
+    if let Some(outfile) = outfile {
+        std::fs::write(outfile, cg.finish()).unwrap();
+    }
+}
 
 pub struct CompileH {
     output: String,

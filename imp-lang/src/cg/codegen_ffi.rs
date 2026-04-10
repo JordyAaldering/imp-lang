@@ -1,4 +1,15 @@
+use std::path::PathBuf;
+
 use crate::{ast::*, traverse::Visit};
+
+pub fn emit_ffi(ast: &mut Program<'static, TypedAst>, outfile: Option<PathBuf>) {
+    let mut cg = CompileFfi::new();
+    cg.visit_program(ast);
+
+    if let Some(outfile) = outfile {
+        std::fs::write(outfile, cg.finish()).unwrap();
+    }
+}
 
 struct PublicFamily<'prog, 'ast> {
     root_name: String,
