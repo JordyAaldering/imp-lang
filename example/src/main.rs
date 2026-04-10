@@ -1,4 +1,4 @@
-include!(concat!(env!("OUT_DIR"), "/simple.rs"));
+include!(concat!(env!("OUT_DIR"), "/IMPsimple.rs"));
 
 use imp_core::*;
 

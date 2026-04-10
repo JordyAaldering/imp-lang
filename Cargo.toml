@@ -4,4 +4,5 @@ members = [
     "imp-lang",
     "imp-core",
     "example",
+    "stdlib",
 ]

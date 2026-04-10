@@ -23,15 +23,13 @@ impl Options {
         }
     }
 
-    pub fn module_name(&self) -> &str {
-        self.infile.file_stem().unwrap().to_str().unwrap()
+    pub fn module_name(&self) -> String {
+        format!("IMP{}", self.infile.file_stem().unwrap().to_str().unwrap())
     }
 
     pub fn c_path(&self) -> Option<PathBuf> {
         self.outdir.as_ref().map(|outdir| {
-            let s = outdir.join(self.module_name()).with_extension("c");
-            println!("C path: {s:?}");
-            s
+            outdir.join(self.module_name()).with_extension("c")
         })
     }
 

@@ -1,0 +1,150 @@
+//
+// Helper functions
+//
+
+fn zeros(usize d) -> usize[d] {
+    return { 0usize | [0usize] <= iv < [d] };
+}
+
+//fn cat(usize[n] a, usize[m] b) -> usize[nm] {
+//    return { if @ltSxS(iv[[0usize]], n) {
+//                 a[iv]
+//             } else {
+//                 b[[@subSxS(iv[[0usize]],n)]]
+//             }
+//           | [0usize] <= iv < [n+m] };
+//}
+
+//
+// Selection
+//
+
+// i32
+
+fn @sel(usize[n] idx, i32[n:shp] arr) -> i32 {
+    return @selVxA(idx, arr);
+}
+
+//fn @sel(usize[n] idx, i32[n:shp,i>0:ishp] arr) -> i32[i>0:ishp] {
+//    return { @selVxA(cat(idx, iv), arr) | zeros(i) <= iv < ishp };
+//}
+
+// usize
+
+fn @sel(usize[n] idx, usize[n:shp] arr) -> usize {
+    return @selVxA(idx, arr);
+}
+
+//fn @sel(usize[n] idx, usize[n:shp,i>0:ishp] arr) -> usize[i>0:ishp] {
+//    return { @selVxA(cat(idx, iv), arr) | zeros(i) <= iv < ishp };
+//}
+
+//
+// Addition
+//
+
+// i32
+
+fn @add(i32 a, i32 b) -> i32 {
+    return @addSxS(a, b);
+}
+
+fn @add(i32 a, i32[d>0:shp] b) -> i32[d>0:shp] {
+    return { a + b[iv] | zeros(d) <= iv < shp };
+}
+
+fn @add(i32[d>0:shp] a, i32 b) -> i32[d>0:shp] {
+    return { a[iv] + b | zeros(d) <= iv < shp };
+}
+
+fn @add(i32[d>0:shp] a, i32[d>0:shp] b) -> i32[d>0:shp] {
+    return { a[iv] + b[iv] | zeros(d) <= iv < shp };
+}
+
+// usize
+
+fn @add(usize a, usize b) -> usize {
+    return @addSxS(a, b);
+}
+
+fn @add(usize a, usize[d>0:shp] b) -> usize[d>0:shp] {
+    return { a + b[iv] | zeros(d) <= iv < shp };
+}
+
+fn @add(usize[d>0:shp] a, usize b) -> usize[d>0:shp] {
+    return { a[iv] + b | zeros(d) <= iv < shp };
+}
+
+fn @add(usize[d>0:shp] a, usize[d>0:shp] b) -> usize[d>0:shp] {
+    return { a[iv] + b[iv] | zeros(d) <= iv < shp };
+}
+
+//
+// Multiplication
+//
+
+// i32
+
+fn @mul(i32 a, i32 b) -> i32 {
+    return @mulSxS(a, b);
+}
+
+fn @mul(i32 a, i32[d>0:shp] b) -> i32[d>0:shp] {
+    return { a * b[iv] | zeros(d) <= iv < shp };
+}
+
+fn @mul(i32[d>0:shp] a, i32 b) -> i32[d>0:shp] {
+    return { a[iv] * b | zeros(d) <= iv < shp };
+}
+
+fn @admuld(i32[d>0:shp] a, i32[d>0:shp] b) -> i32[d>0:shp] {
+    return { a[iv] * b[iv] | zeros(d) <= iv < shp };
+}
+
+// usize
+
+fn @mul(usize a, usize b) -> usize {
+    return @mulSxS(a, b);
+}
+
+fn @mul(usize a, usize[d>0:shp] b) -> usize[d>0:shp] {
+    return { a * b[iv] | zeros(d) <= iv < shp };
+}
+
+fn @mul(usize[d>0:shp] a, usize b) -> usize[d>0:shp] {
+    return { a[iv] * b | zeros(d) <= iv < shp };
+}
+
+fn @mul(usize[d>0:shp] a, usize[d>0:shp] b) -> usize[d>0:shp] {
+    return { a[iv] * b[iv] | zeros(d) <= iv < shp };
+}
+
+//
+// Array operations
+//
+
+//fn genarray(usize[n] shp, i32[i:ishp] v) -> i32[n:shp,i:ishp] {
+//    return { v | zeros(n) <= iv < shp };
+//}
+
+//fn genarray(usize[n] shp, usize[i:ishp] v) -> usize[n:shp,i:ishp] {
+//    return { v | zeros(n) <= iv < shp };
+//}
+
+// Array reductions
+
+fn sum(i32[d:shp] arr) -> i32 {
+    return @fold(0i32, +, { arr[iv] | zeros(d) <= iv < shp });
+}
+
+fn sum(usize[d:shp] arr) -> usize {
+    return @fold(0usize, +, { arr[iv] | zeros(d) <= iv < shp });
+}
+
+fn prod(i32[d:shp] arr) -> i32 {
+    return @fold(1i32, *, { arr[iv] | zeros(d) <= iv < shp });
+}
+
+fn prod(usize[d:shp] arr) -> usize {
+    return @fold(1usize, *, { arr[iv] | zeros(d) <= iv < shp });
+}

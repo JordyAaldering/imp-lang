@@ -2,7 +2,7 @@ use std::{collections::HashMap, path::PathBuf};
 
 use crate::{ast::*, cg::rename_fundefs, Visit};
 
-pub fn emit_c(ast: &mut Program<'static, TypedAst>, module_name: &str, outfile: Option<PathBuf>) {
+pub fn emit_c(ast: &mut Program<'static, TypedAst>, module_name: String, outfile: Option<PathBuf>) {
     let mut cg = CompileC::new(module_name);
     cg.visit_program(ast);
 
@@ -13,7 +13,7 @@ pub fn emit_c(ast: &mut Program<'static, TypedAst>, module_name: &str, outfile: 
 
 pub struct CompileC {
     output: String,
-    stem: String,
+    module_name: String,
     arg_names: Vec<String>,
     arg_types: Vec<Type>,
     ret_type: Option<Type>,
@@ -39,10 +39,10 @@ struct WrapperCase {
 }
 
 impl CompileC {
-    pub fn new(stem: &str) -> Self {
+    pub fn new(module_name: String) -> Self {
         Self {
             output: String::new(),
-            stem: stem.to_owned(),
+            module_name,
             arg_names: Vec::new(),
             arg_types: Vec::new(),
             ret_type: None,
@@ -188,9 +188,11 @@ impl<'ast> Visit<'ast> for CompileC {
     type Ast = TypedAst;
 
     fn visit_program(&mut self, program: &Program<'ast, TypedAst>) {
-        self.output.push_str(&format!("#include \"{}.h\"\n", self.stem));
-        self.output.push_str("#include <stdio.h>\n\n");
-        self.output.push_str("#include <string.h>\n\n");
+        self.output.push_str(&format!("#include \"{}.h\"\n", self.module_name));
+        self.output.push('\n');
+        self.output.push_str("#include <stdio.h>\n");
+        self.output.push_str("#include <string.h>\n");
+        self.output.push('\n');
         self.output.push_str("static size_t imp_flat_index(ImpArrayRaw arr, ImpArrayRaw idx) {\n");
         self.output.push_str("    size_t flat = 0;\n");
         self.output.push_str("    size_t *idx_data = (size_t *)idx.data;\n");
@@ -198,14 +200,16 @@ impl<'ast> Visit<'ast> for CompileC {
         self.output.push_str("        flat = flat * arr.shp[d] + idx_data[d];\n");
         self.output.push_str("    }\n");
         self.output.push_str("    return flat;\n");
-        self.output.push_str("}\n\n");
+        self.output.push_str("}\n");
+        self.output.push('\n');
         self.output.push_str("static ImpArrayRaw imp_clone_array_raw(ImpArrayRaw src, size_t elem_size) {\n");
         self.output.push_str("    size_t *shp = src.dim == 0 ? NULL : (size_t *)malloc(src.dim * sizeof(size_t));\n");
         self.output.push_str("    if (src.dim > 0) { memcpy(shp, src.shp, src.dim * sizeof(size_t)); }\n");
         self.output.push_str("    void *data = src.len == 0 ? NULL : malloc(src.len * elem_size);\n");
         self.output.push_str("    if (src.len > 0) { memcpy(data, src.data, src.len * elem_size); }\n");
         self.output.push_str("    return (ImpArrayRaw) { .len = src.len, .dim = src.dim, .shp = shp, .data = data };\n");
-        self.output.push_str("}\n\n");
+        self.output.push_str("}\n");
+        self.output.push('\n');
 
         let mut func_names: Vec<&str> = program.functions.keys().map(String::as_str).collect();
         func_names.sort();

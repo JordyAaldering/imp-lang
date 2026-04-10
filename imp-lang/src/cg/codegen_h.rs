@@ -30,6 +30,7 @@ impl<'ast> Visit<'ast> for CompileH {
 
     fn visit_program(&mut self, program: &Program<'ast, TypedAst>) {
         self.output.push_str("#pragma once\n");
+        self.output.push('\n');
         self.output.push_str("#include <stdlib.h>\n");
         self.output.push_str("#include <stdbool.h>\n");
         self.output.push_str("#include <stdint.h>\n");
