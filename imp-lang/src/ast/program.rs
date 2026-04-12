@@ -11,7 +11,7 @@ pub struct Program<'ast, Ast: AstConfig> {
     /// to a list of fundefs with that base signature (differing in argument shapes).
     ///
     /// Example:
-    /// ```
+    /// ```json
     /// {
     ///   "id": {
     ///     (i32) => [ (i32) -> i32 ],

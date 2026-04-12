@@ -9,3 +9,6 @@ imp_core = { path = "../imp-core" }
 [build-dependencies]
 cc = "1.2.60"
 imp_lang = { path = "../imp-lang" }
+
+[dev-dependencies]
+parameterized = "2.1.0"

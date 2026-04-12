@@ -121,3 +121,17 @@ where
         }
     }
 }
+
+pub fn expect_scalar<T: Copy>(value: ImpArrayOrScalar<T>) -> T {
+    match value {
+        ImpArrayOrScalar::Scalar(v) => v,
+        ImpArrayOrScalar::Array(_) => panic!("expected a scalar"),
+    }
+}
+
+pub fn expect_array<T: Copy>(value: ImpArrayOrScalar<T>) -> ImpArray<T> {
+    match value {
+        ImpArrayOrScalar::Array(v) => v,
+        ImpArrayOrScalar::Scalar(_) => panic!("expected an array"),
+    }
+}

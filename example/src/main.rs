@@ -4,20 +4,6 @@ include!(concat!(env!("OUT_DIR"), "/IMPsimple.rs"));
 
 use imp_core::*;
 
-fn expect_scalar<T: Copy>(value: ImpArrayOrScalar<T>) -> T {
-    match value {
-        ImpArrayOrScalar::Scalar(v) => v,
-        ImpArrayOrScalar::Array(_) => panic!("expected scalar result"),
-    }
-}
-
-fn expect_array<T: Copy>(value: ImpArrayOrScalar<T>) -> ImpArray<T> {
-    match value {
-        ImpArrayOrScalar::Array(v) => v,
-        ImpArrayOrScalar::Scalar(_) => panic!("expected array result"),
-    }
-}
-
 fn main() {
     let folded = expect_scalar(shouldbefolded());
     println!("shouldbefolded = {}", folded);

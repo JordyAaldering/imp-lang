@@ -2,17 +2,16 @@
 #![allow(unused_parens)]
 include!(concat!(env!("OUT_DIR"), "/IMPstdlib.rs"));
 
-pub fn addd(left: u64, right: u64) -> u64 {
-    left + right
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use imp_core::*;
+    use parameterized::parameterized;
 
-    #[test]
-    fn it_works() {
-        let result = addd(2, 2);
-        assert_eq!(result, 4);
+    #[parameterized(n = { 0, 1, 10 })]
+    fn test_iota(n: usize) {
+        let arr = expect_array(iota(n));
+        assert_eq!(arr.shp, vec![n]);
+        assert_eq!(arr.data, (0..n).collect::<Vec<_>>());
     }
 }

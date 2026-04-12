@@ -4,7 +4,7 @@ use crate::ast::*;
 
 /// Functions may be overloaded, e.g.
 ///
-/// ```
+/// ```imp
 /// foo(u32 x) -> u32
 ///
 /// foo(u32[n] x) -> u32[n]
@@ -22,7 +22,7 @@ use crate::ast::*;
 ///
 /// Not only the base type, but also the type pattern.
 ///
-/// ```
+/// ```imp
 /// foo__u32_0(u32 x) -> u32
 ///
 /// foo__u32_n(u32[n] x) -> u32[n]
