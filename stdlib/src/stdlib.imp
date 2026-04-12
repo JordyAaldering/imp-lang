@@ -2,14 +2,14 @@
 // Helper functions
 //
 
-//fn cat(usize[n] a, usize[m] b) -> usize[nm] {
-//    { if @ltSxS(iv[[0usize]], n) {
-//          a[iv]
-//      } else {
-//          b[[@subSxS(iv[[0usize]],n)]]
-//      }
-//    | iv < [n+m] };
-//}
+fn cat(usize[n] a, usize[m] b) -> usize[nm] {
+    { if @ltSxS(iv[[0usize]], n) {
+          a[iv]
+      } else {
+          b[[@subSxS(iv[[0usize]],n)]]
+      }
+    | iv < [n+m] }
+}
 
 //
 // Selection
@@ -127,9 +127,17 @@ fn iota(usize n) -> usize[n] {
 //    { iv | iv < shp }
 //}
 
+fn genarray(usize[n] shp, i32 v) -> i32[n:shp] {
+    { v | iv < shp }
+}
+
 //fn genarray(usize[n] shp, i32[i:ishp] v) -> i32[n:shp,i:ishp] {
 //    { v | iv < shp }
 //}
+
+fn genarray(usize[n] shp, usize v) -> usize[n:shp] {
+    { v | iv < shp }
+}
 
 //fn genarray(usize[n] shp, usize[i:ishp] v) -> usize[n:shp,i:ishp] {
 //    { v | iv < shp }

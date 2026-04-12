@@ -198,13 +198,13 @@ fn emit_marshaled_call_args(out: &mut String, args: &[Farg]) -> Vec<String> {
     let mut call_args = Vec::with_capacity(args.len());
     for arg in args {
         if is_static_array(&arg.ty) {
-            out.push_str(&format!("    let {}_raw = {}.as_raw();\n", arg.id, arg.id));
+            out.push_str(&format!("    let {}_raw = {}.into_raw();\n", arg.id, arg.id));
             call_args.push(format!("{}_raw", arg.id));
         } else if matches!(arg.ty.shape, TypePattern::Any) {
             out.push_str(&format!("    let mut {}_dyn = {};\n", arg.id, arg.id));
             out.push_str(&format!("    let {}_ffi = match &mut {}_dyn {{\n", arg.id, arg.id));
             out.push_str("        ImpArrayOrScalar::Scalar(v) => ImpDyn::from_scalar(*v),\n");
-            out.push_str("        ImpArrayOrScalar::Array(a) => ImpDyn::from_array_raw(a.as_raw()),\n");
+            out.push_str("        ImpArrayOrScalar::Array(a) => ImpDyn::from_array_raw(a.into_raw()),\n");
             out.push_str("    };\n");
             call_args.push(format!("{}_ffi", arg.id));
         } else {
@@ -219,13 +219,13 @@ fn emit_marshaled_branch_args(out: &mut String, args: &[Farg], branch_names: &[S
     let mut call_args = Vec::with_capacity(args.len());
     for (arg, branch_name) in args.iter().zip(branch_names.iter()) {
         if is_static_array(&arg.ty) {
-            out.push_str(&format!("{pad}let {}_raw = {}.as_raw();\n", branch_name, branch_name));
+            out.push_str(&format!("{pad}let {}_raw = {}.into_raw();\n", branch_name, branch_name));
             call_args.push(format!("{}_raw", branch_name));
         } else if matches!(arg.ty.shape, TypePattern::Any) {
             out.push_str(&format!("{pad}let mut {}_dyn = {};\n", branch_name, branch_name));
             out.push_str(&format!("{pad}let {}_ffi = match &mut {}_dyn {{\n", branch_name, branch_name));
             out.push_str(&format!("{pad}    ImpArrayOrScalar::Scalar(v) => ImpDyn::from_scalar(*v),\n"));
-            out.push_str(&format!("{pad}    ImpArrayOrScalar::Array(a) => ImpDyn::from_array_raw(a.as_raw()),\n"));
+            out.push_str(&format!("{pad}    ImpArrayOrScalar::Array(a) => ImpDyn::from_array_raw(a.into_raw()),\n"));
             out.push_str(&format!("{pad}}};\n"));
             call_args.push(format!("{}_ffi", branch_name));
         } else {
@@ -252,7 +252,7 @@ fn emit_return_conversion(symbol_name: &str, ret_type: &Type, call_args: &[Strin
 fn family_match_pattern(arg_index: usize, ty: &Type) -> String {
     match ty.shape {
         TypePattern::Scalar => format!("ImpArrayOrScalar::Scalar(arg{arg_index})"),
-        _ => format!("ImpArrayOrScalar::Array(mut arg{arg_index})"),
+        _ => format!("ImpArrayOrScalar::Array(arg{arg_index})"),
     }
 }
 
@@ -331,7 +331,7 @@ fn generate_shape_checks(args: &[Farg]) -> String {
                     ));
                 }
                 AxisPattern::Dim(DimPattern::Var(extent)) => {
-                    let binding = format!("imp_extent_{}", extent);
+                    let binding = format!("_imp_extent_{}", extent);
                     if bound_dims.iter().any(|existing| existing == &binding) {
                         out.push_str(&format!("    assert_eq!({}.shp[{}], {}, \"extent {} mismatch\");\n",
                             arg.id, idx, binding, extent));
@@ -342,7 +342,7 @@ fn generate_shape_checks(args: &[Farg]) -> String {
                 }
                 AxisPattern::Dim(DimPattern::Any) => {}
                 AxisPattern::Rank(capture) => {
-                    let binding = format!("imp_rank_{}", capture.dim_name);
+                    let binding = format!("_imp_rank_{}", capture.dim_name);
                     if bound_ranks.iter().any(|existing| existing == &binding) {
                         out.push_str(&format!("    assert_eq!({}.shp.len(), {}, \"rank {} mismatch\");\n",
                             arg.id, binding, capture.dim_name));

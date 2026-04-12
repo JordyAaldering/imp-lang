@@ -64,7 +64,7 @@ impl<T> ImpArray<T>
 where
     T: Copy,
 {
-    pub fn as_raw(&mut self) -> ImpArrayRaw {
+    pub fn into_raw(mut self) -> ImpArrayRaw {
         ImpArrayRaw {
             len: self.data.len(),
             dim: self.shp.len(),
