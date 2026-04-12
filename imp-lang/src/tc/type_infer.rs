@@ -483,7 +483,7 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
             ret_type,
             args,
             shape_prelude: new_shape_prelude,
-            shape_facts: shape_facts.map_stage(),
+            shape_facts: shape_facts,
             decs: self.new_ids.clone(),
             body: new_body,
         }

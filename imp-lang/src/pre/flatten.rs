@@ -106,7 +106,7 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
             name: fundef.name,
             args: fundef.args,
             shape_prelude,
-            shape_facts: fundef.shape_facts.map_stage(),
+            shape_facts: fundef.shape_facts,
             decs: Vec::new(),
             body,
             ret_type: fundef.ret_type,

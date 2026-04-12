@@ -67,7 +67,6 @@ impl AnalyseTp {
             fundef.shape_facts.bindings.push(ShapeBinding {
                 symbol: symbol.to_owned(),
                 term,
-                source: None,
             });
         } else {
             fundef.shape_facts.equalities.push(ShapeEquality {

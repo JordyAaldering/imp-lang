@@ -96,7 +96,7 @@ impl<'ast> Traverse<'ast> for ToSsa<'ast> {
             name: fundef.name,
             args: fundef.args,
             shape_prelude,
-            shape_facts: fundef.shape_facts.map_stage(),
+            shape_facts: fundef.shape_facts,
             decs: mem::take(&mut self.decs),
             body,
             ret_type: fundef.ret_type,
