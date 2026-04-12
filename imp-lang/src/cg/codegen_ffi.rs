@@ -81,7 +81,7 @@ impl CompileFfi {
         let sig_str = sig.base_types.iter().map(rust_base_type).collect::<Vec<_>>();
         let fargs = sig.base_types.iter()
             .enumerate()
-            .map(|(i, base)| format!("arg{}: imp_core::ImpArrayOrScalar<{}>", i, rust_base_type(base)))
+            .map(|(i, base)| format!("arg{}: ImpArrayOrScalar<{}>", i, rust_base_type(base)))
             .collect::<Vec<_>>()
             .join(", ");
 
@@ -145,9 +145,9 @@ fn join_args(args: &[Farg], map_ty: fn(&Type) -> String) -> String {
 
 fn rust_api_type(ty: &Type) -> String {
     if matches!(ty.shape, TypePattern::Any) {
-        format!("imp_core::ImpDyn<{}>", rust_base_type(&ty.ty))
+        format!("ImpDyn<{}>", rust_base_type(&ty.ty))
     } else if ty.is_array() {
-        format!("imp_core::ImpArray<{}>", rust_base_type(&ty.ty))
+        format!("ImpArray<{}>", rust_base_type(&ty.ty))
     } else {
         rust_base_type(&ty.ty)
     }
@@ -155,21 +155,21 @@ fn rust_api_type(ty: &Type) -> String {
 
 fn rust_api_arg_type(ty: &Type) -> String {
     if matches!(ty.shape, TypePattern::Any) {
-        format!("imp_core::ImpArrayOrScalar<{}>", rust_base_type(&ty.ty))
+        format!("ImpArrayOrScalar<{}>", rust_base_type(&ty.ty))
     } else {
         rust_api_type(ty)
     }
 }
 
 fn rust_api_ret_type(ty: &Type) -> String {
-    format!("imp_core::ImpArrayOrScalar<{}>", rust_base_type(&ty.ty))
+    format!("ImpArrayOrScalar<{}>", rust_base_type(&ty.ty))
 }
 
 fn rust_ffi_type(ty: &Type) -> String {
     if matches!(ty.shape, TypePattern::Any) {
-        format!("imp_core::ImpDyn<{}>", rust_base_type(&ty.ty))
+        format!("ImpDyn<{}>", rust_base_type(&ty.ty))
     } else if ty.is_array() {
-        "imp_core::ImpArrayRaw".to_owned()
+        "ImpArrayRaw".to_owned()
     } else {
         rust_base_type(&ty.ty).to_owned()
     }
@@ -194,16 +194,15 @@ fn emit_marshaled_call_args(out: &mut String, args: &[Farg]) -> Vec<String> {
     let mut call_args = Vec::with_capacity(args.len());
     for arg in args {
         if is_static_array(&arg.ty) {
-            out.push_str(&format!("    let mut __{}_ffi = {};\n", arg.id, arg.id));
-            out.push_str(&format!("    let __{}_raw = __{}_ffi.as_raw();\n", arg.id, arg.id));
-            call_args.push(format!("__{}_raw", arg.id));
+            out.push_str(&format!("    let {}_raw = {}.as_raw();\n", arg.id, arg.id));
+            call_args.push(format!("{}_raw", arg.id));
         } else if matches!(arg.ty.shape, TypePattern::Any) {
-            out.push_str(&format!("    let mut __{}_dyn = {};\n", arg.id, arg.id));
-            out.push_str(&format!("    let __{}_ffi = match &mut __{}_dyn {{\n", arg.id, arg.id));
-            out.push_str("        imp_core::ImpArrayOrScalar::Scalar(v) => imp_core::ImpDyn::from_scalar(*v),\n");
-            out.push_str("        imp_core::ImpArrayOrScalar::Array(a) => imp_core::ImpDyn::from_array_raw(a.as_raw()),\n");
+            out.push_str(&format!("    let mut {}_dyn = {};\n", arg.id, arg.id));
+            out.push_str(&format!("    let {}_ffi = match &mut {}_dyn {{\n", arg.id, arg.id));
+            out.push_str("        ImpArrayOrScalar::Scalar(v) => ImpDyn::from_scalar(*v),\n");
+            out.push_str("        ImpArrayOrScalar::Array(a) => ImpDyn::from_array_raw(a.as_raw()),\n");
             out.push_str("    };\n");
-            call_args.push(format!("__{}_ffi", arg.id));
+            call_args.push(format!("{}_ffi", arg.id));
         } else {
             call_args.push(arg.id.clone());
         }
@@ -216,16 +215,15 @@ fn emit_marshaled_branch_args(out: &mut String, args: &[Farg], branch_names: &[S
     let mut call_args = Vec::with_capacity(args.len());
     for (arg, branch_name) in args.iter().zip(branch_names.iter()) {
         if is_static_array(&arg.ty) {
-            out.push_str(&format!("{pad}let mut __{}_ffi = {};\n", branch_name, branch_name));
-            out.push_str(&format!("{pad}let __{}_raw = __{}_ffi.as_raw();\n", branch_name, branch_name));
-            call_args.push(format!("__{}_raw", branch_name));
+            out.push_str(&format!("{pad}let {}_raw = {}.as_raw();\n", branch_name, branch_name));
+            call_args.push(format!("{}_raw", branch_name));
         } else if matches!(arg.ty.shape, TypePattern::Any) {
-            out.push_str(&format!("{pad}let mut __{}_dyn = {};\n", branch_name, branch_name));
-            out.push_str(&format!("{pad}let __{}_ffi = match &mut __{}_dyn {{\n", branch_name, branch_name));
-            out.push_str(&format!("{pad}    imp_core::ImpArrayOrScalar::Scalar(v) => imp_core::ImpDyn::from_scalar(*v),\n"));
-            out.push_str(&format!("{pad}    imp_core::ImpArrayOrScalar::Array(a) => imp_core::ImpDyn::from_array_raw(a.as_raw()),\n"));
+            out.push_str(&format!("{pad}let mut {}_dyn = {};\n", branch_name, branch_name));
+            out.push_str(&format!("{pad}let {}_ffi = match &mut {}_dyn {{\n", branch_name, branch_name));
+            out.push_str(&format!("{pad}    ImpArrayOrScalar::Scalar(v) => ImpDyn::from_scalar(*v),\n"));
+            out.push_str(&format!("{pad}    ImpArrayOrScalar::Array(a) => ImpDyn::from_array_raw(a.as_raw()),\n"));
             out.push_str(&format!("{pad}}};\n"));
-            call_args.push(format!("__{}_ffi", branch_name));
+            call_args.push(format!("{}_ffi", branch_name));
         } else {
             call_args.push(branch_name.clone());
         }
@@ -235,31 +233,22 @@ fn emit_marshaled_branch_args(out: &mut String, args: &[Farg], branch_names: &[S
 
 fn emit_return_conversion(symbol_name: &str, ret_type: &Type, call_args: &[String]) -> String {
     if matches!(ret_type.shape, TypePattern::Any) {
-        format!(
-            "    let __dyn = unsafe {{ IMP_{}({}) }};\n    unsafe {{ __dyn.into_array_or_scalar() }}",
-            symbol_name,
-            call_args.join(", ")
-        )
+        format!("let res0_dyn = unsafe {{ IMP_{}({}) }};\n    unsafe {{ res0_dyn.into_array_or_scalar() }}",
+            symbol_name, call_args.join(", ") )
     } else if is_static_array(ret_type) {
-        format!(
-            "    let __raw = unsafe {{ IMP_{}({}) }};\n    imp_core::ImpArrayOrScalar::Array(unsafe {{ imp_core::ImpArray::<{}>::from_raw(__raw) }})",
-            symbol_name,
-            call_args.join(", "),
-            rust_base_type(&ret_type.ty)
+        format!("let res0_raw = unsafe {{ IMP_{}({}) }};\n    ImpArrayOrScalar::Array(unsafe {{ ImpArray::<{}>::from_raw(res0_raw) }})",
+            symbol_name, call_args.join(", "), rust_base_type(&ret_type.ty)
         )
     } else {
-        format!(
-            "    imp_core::ImpArrayOrScalar::Scalar(unsafe {{ IMP_{}({}) }})",
-            symbol_name,
-            call_args.join(", ")
-        )
+        format!("ImpArrayOrScalar::Scalar(unsafe {{ IMP_{}({}) }})",
+            symbol_name, call_args.join(", "))
     }
 }
 
 fn family_match_pattern(arg_index: usize, ty: &Type) -> String {
     match ty.shape {
-        TypePattern::Scalar => format!("imp_core::ImpArrayOrScalar::Scalar(arg{arg_index})"),
-        _ => format!("imp_core::ImpArrayOrScalar::Array(arg{arg_index})"),
+        TypePattern::Scalar => format!("ImpArrayOrScalar::Scalar(arg{arg_index})"),
+        _ => format!("ImpArrayOrScalar::Array(mut arg{arg_index})"),
     }
 }
 
@@ -338,15 +327,10 @@ fn generate_shape_checks(args: &[Farg]) -> String {
                     ));
                 }
                 AxisPattern::Dim(DimPattern::Var(extent)) => {
-                    let binding = format!("__imp_extent_{}", sanitize_binding_name(&extent));
+                    let binding = format!("imp_extent_{}", extent);
                     if bound_dims.iter().any(|existing| existing == &binding) {
-                        out.push_str(&format!(
-                            "    assert_eq!({}.shp[{}], {}, \"extent {} mismatch\");\n",
-                            arg.id,
-                            idx,
-                            binding,
-                            extent,
-                        ));
+                        out.push_str(&format!("    assert_eq!({}.shp[{}], {}, \"extent {} mismatch\");\n",
+                            arg.id, idx, binding, extent));
                     } else {
                         out.push_str(&format!("    let {} = {}.shp[{}];\n", binding, arg.id, idx));
                         bound_dims.push(binding);
@@ -354,14 +338,10 @@ fn generate_shape_checks(args: &[Farg]) -> String {
                 }
                 AxisPattern::Dim(DimPattern::Any) => {}
                 AxisPattern::Rank(capture) => {
-                    let binding = format!("__imp_rank_{}", sanitize_binding_name(&capture.dim_name));
+                    let binding = format!("imp_rank_{}", capture.dim_name);
                     if bound_ranks.iter().any(|existing| existing == &binding) {
-                        out.push_str(&format!(
-                            "    assert_eq!({}.shp.len(), {}, \"rank {} mismatch\");\n",
-                            arg.id,
-                            binding,
-                            capture.dim_name,
-                        ));
+                        out.push_str(&format!("    assert_eq!({}.shp.len(), {}, \"rank {} mismatch\");\n",
+                            arg.id, binding, capture.dim_name));
                     } else {
                         out.push_str(&format!("    let {} = {}.shp.len();\n", binding, arg.id));
                         bound_ranks.push(binding);
@@ -372,12 +352,6 @@ fn generate_shape_checks(args: &[Farg]) -> String {
     }
 
     out
-}
-
-fn sanitize_binding_name(name: &str) -> String {
-    name.chars()
-        .map(|ch| if ch.is_ascii_alphanumeric() { ch } else { '_' })
-        .collect()
 }
 
 fn rust_wrapper_name(name: &str) -> String {

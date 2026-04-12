@@ -93,7 +93,7 @@ fn @mul(i32[d>0:shp] a, i32 b) -> i32[d>0:shp] {
     { a[iv] * b | iv < shp }
 }
 
-fn @admuld(i32[d>0:shp] a, i32[d>0:shp] b) -> i32[d>0:shp] {
+fn @mul(i32[d>0:shp] a, i32[d>0:shp] b) -> i32[d>0:shp] {
     { a[iv] * b[iv] | iv < shp }
 }
 
