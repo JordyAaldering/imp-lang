@@ -52,11 +52,12 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
             self.write(&id.name);
             self.write(";\n");
         }
-        self.visit_body(&fundef.body);
         self.depth -= 1;
 
-        self.write("}");
+        self.visit_body(&fundef.body);
         self.write("\n");
+        self.indent();
+        self.write("}\n");
     }
 
     fn visit_farg(&mut self, arg: &Farg) {
@@ -65,18 +66,16 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
     }
 
     fn visit_body(&mut self, body: &Body<'ast, Self::Ast>) {
-        self.write("{");
         self.depth += 1;
 
         for stmt in &body.stmts {
             self.visit_stmt(stmt);
         }
+
         self.indent();
-        self.write("return ");
         Self::Ast::visit_operand(self, &body.ret);
 
         self.depth -= 1;
-        self.write("}");
     }
 
     fn visit_assign(&mut self, assign: &Assign<'ast, Self::Ast>) {
@@ -146,8 +145,7 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
     fn visit_tensor(&mut self, tensor: &Tensor<'ast, Self::Ast>) {
         self.write("{\n");
         self.visit_body(&tensor.body);
-        self.indent();
-        self.write("| ");
+        self.write(" | ");
 
         if let Some(lb) = &tensor.lb {
             Ast::visit_operand(self, lb);

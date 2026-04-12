@@ -6,14 +6,12 @@ use crate::ast::*;
 
 pub struct Parser<'src> {
     lexer: Peekable<Lexer<'src>>,
-    uid: usize,
 }
 
 #[derive(Debug)]
 #[allow(unused)]
 pub enum ParseError {
     NonAssociative,
-    MissingReturn,
     DuplicateFunctionSignature(String),
     UnknownPrimitive(String, Span),
     FoldSelectionMustBeTensor,
@@ -27,13 +25,7 @@ impl<'src> Parser<'src> {
     pub fn new(lexer: Lexer<'src>) -> Self {
         Self {
             lexer: lexer.peekable(),
-            uid: 0,
         }
-    }
-
-    fn fresh_uid(&mut self) -> String {
-        self.uid += 1;
-        format!("_ret_{}", self.uid)
     }
 
     fn alloc_lvis(&self, name: String, ty: Option<Type>) -> &'static VarInfo<'static, ParsedAst> {
@@ -113,9 +105,9 @@ impl<'src> Parser<'src> {
 
         let (ret_type, _) = self.parse_type()?;
 
-        self.expect(Token::LBrace);
+        self.expect(Token::LBrace)?;
         let body = self.parse_body()?;
-        self.expect(Token::RBrace);
+        self.expect(Token::RBrace)?;
 
         Ok(Fundef {
             name,
@@ -142,7 +134,6 @@ impl<'src> Parser<'src> {
         }
 
         let ret = self.parse_expr(None::<Bop>)?;
-        self.expect(Token::RBrace)?;
         Ok(Body { stmts, ret })
     }
 

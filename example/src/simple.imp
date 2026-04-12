@@ -47,8 +47,8 @@ fn @add(usize[d>0:shp] a, usize[d>0:shp] b) -> usize[d>0:shp] {
 }
 
 fn sum(i32[d:shp] arr) -> i32 {
-    lb = { 0usize | [0usize] <= iv < [d] };
-    (@fold(0i32, +, { @selVxA(iv, arr) | iv < shp }))
+    lb = { (0usize) | [0usize] <= iv < [d] };
+    (@fold(0i32, +, { (@selVxA(iv, arr)) | iv < shp }))
 }
 
 fn cat(usize[n] a, usize[m] b) -> usize[nm] {
@@ -61,15 +61,15 @@ fn cat(usize[n] a, usize[m] b) -> usize[nm] {
 // Planar selection (i.e., non-scalar result)
 fn @sel(usize[o] idx, i32[o:oshp,i:ishp] arr) -> i32[i:ishp] {
     // We need helpers for this in the future, but for now this is fine.
-    ishp0 = { 0usize | [0usize] <= iv < [i] };
+    ishp0 = { (0usize) | [0usize] <= iv < [i] };
 
     ({ (@selVxA(cat(idx, iv), arr)) | ishp0 <= iv < ishp })
 }
 
 fn sumlast(i32[d:shp,n] arr) -> i32[n] {
     // We need helpers for this in the future, but for now this is fine.
-    shp0 = { 0usize | [0usize] <= iv < [d] };
-    neutral = { 0i32 | [0usize] <= iv < [n] };
+    shp0 = { (0usize) | [0usize] <= iv < [d] };
+    neutral = { (0i32) | [0usize] <= iv < [n] };
 
     // neutral: n-element vector
     // arr: rank-d+1 array

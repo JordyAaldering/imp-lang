@@ -77,18 +77,12 @@ impl<'ast> Traverse<'ast> for ToSsa<'ast> {
             for stmt in new_assigns {
                 match stmt {
                     Stmt::Assign(assign) => shape_prelude.push(assign),
-                    Stmt::Return(_) => unreachable!("shape prelude SSA lowering emitted return"),
                 }
             }
             shape_prelude.push(assign);
         }
 
-        let mut body = Vec::new();
-        for stmt in fundef.body {
-            let stmt = self.trav_stmt(stmt);
-            body.extend(mem::take(&mut self.new_assigns));
-            body.push(stmt);
-        }
+        let body = self.trav_body(fundef.body);
 
         self.pop_env();
 
@@ -104,7 +98,17 @@ impl<'ast> Traverse<'ast> for ToSsa<'ast> {
     }
 
     fn trav_body(&mut self, body: Body<'ast, FlattenedAst>) -> Body<'ast, UntypedAst> {
-        todo!()
+        let mut stmts = Vec::new();
+        for stmt in body.stmts {
+            let stmt = self.trav_stmt(stmt);
+            stmts.extend(mem::take(&mut self.new_assigns));
+            stmts.push(stmt);
+        }
+
+        let ret = self.trav_id(body.ret);
+        stmts.extend(mem::take(&mut self.new_assigns));
+
+        Body { stmts, ret }
     }
 
     fn trav_assign(&mut self, assign: Assign<'ast, Self::InAst>) -> Assign<'ast, Self::OutAst> {
@@ -152,13 +156,18 @@ impl<'ast> Traverse<'ast> for ToSsa<'ast> {
     fn trav_prf_call(&mut self, prf: PrfCall<'ast, Self::InAst>) -> Self::PrfCallOut {
         use PrfCall::*;
         match prf {
+            DimA(a) => {
+                let a = self.trav_id(a.clone());
+                DimA(a)
+            }
             ShapeA(a) => {
                 let a = self.trav_id(a.clone());
                 ShapeA(a)
             }
-            DimA(a) => {
+            SelVxA(a, b) => {
                 let a = self.trav_id(a.clone());
-                DimA(a)
+                let b = self.trav_id(b.clone());
+                SelVxA(a, b)
             }
             AddSxS(l, r) => {
                 let l = self.trav_id(l.clone());
@@ -179,11 +188,6 @@ impl<'ast> Traverse<'ast> for ToSsa<'ast> {
                 let l = self.trav_id(l.clone());
                 let r = self.trav_id(r.clone());
                 DivSxS(l, r)
-            }
-            SelVxA(a, b) => {
-                let a = self.trav_id(a.clone());
-                let b = self.trav_id(b.clone());
-                SelVxA(a, b)
             }
             LtSxS(a, b) => {
                 let a = self.trav_id(a.clone());
@@ -241,26 +245,12 @@ impl<'ast> Traverse<'ast> for ToSsa<'ast> {
         self.bind_env(tensor.iv.name.clone(), Id::Var(iv_lvis));
         let old_assigns = mem::take(&mut self.new_assigns);
 
-        let mut body = Vec::new();
-        for stmt in tensor.body {
-            let stmt = self.trav_stmt(stmt);
-            body.extend(mem::take(&mut self.new_assigns));
-            body.push(stmt);
-        }
-
-        let ret = self.trav_id(tensor.ret);
-        body.extend(mem::take(&mut self.new_assigns));
+        let body = self.trav_body(tensor.body);
 
         self.new_assigns = old_assigns;
         self.pop_env();
 
-        Tensor {
-            body,
-            ret,
-            iv: iv_lvis,
-            lb,
-            ub,
-        }
+        Tensor { body, iv: iv_lvis, lb, ub }
     }
 
     fn trav_fold(&mut self, fold: Fold<'ast, Self::InAst>) -> Self::FoldOut {
@@ -282,11 +272,7 @@ impl<'ast> Traverse<'ast> for ToSsa<'ast> {
 
         let selection = self.trav_tensor(fold.selection);
 
-        Fold {
-            neutral,
-            foldfun,
-            selection,
-        }
+        Fold { neutral, foldfun, selection }
     }
 
     fn trav_array(&mut self, array: Array<'ast, Self::InAst>) -> Self::ArrayOut {
