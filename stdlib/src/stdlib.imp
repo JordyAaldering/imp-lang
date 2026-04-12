@@ -123,6 +123,10 @@ fn iota(usize n) -> usize[n] {
     { iv[[0usize]] | iv < [n] }
 }
 
+//fn iota(usize[n] shp) -> usize[n:shp,n] {
+//    { iv | iv < shp }
+//}
+
 //fn genarray(usize[n] shp, i32[i:ishp] v) -> i32[n:shp,i:ishp] {
 //    { v | iv < shp }
 //}
