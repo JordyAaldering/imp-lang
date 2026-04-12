@@ -539,8 +539,8 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
         let (cond_id, cond_ty) = self.trav_id(cond.cond);
         self.expect_bool_scalar_prf_arg("cond", 0, &cond_ty);
 
-        let (then_id, then_ty) = self.trav_id(cond.then_branch);
-        let (else_id, else_ty) = self.trav_id(cond.else_branch);
+        let (then_id, then_ty) = self.trav_body(cond.then_branch);
+        let (else_id, else_ty) = self.trav_body(cond.else_branch);
 
         if !types_compatible(&then_ty, &else_ty) || !types_compatible(&else_ty, &then_ty) {
             self.errors.push(InferenceError::PrimitiveArgumentKindMismatch {

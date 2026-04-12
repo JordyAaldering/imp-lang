@@ -98,6 +98,8 @@ impl<'ast> Traverse<'ast> for ToSsa<'ast> {
     }
 
     fn trav_body(&mut self, body: Body<'ast, FlattenedAst>) -> Body<'ast, UntypedAst> {
+        let old_assigns = mem::take(&mut self.new_assigns);
+
         let mut stmts = Vec::new();
         for stmt in body.stmts {
             let stmt = self.trav_stmt(stmt);
@@ -108,6 +110,7 @@ impl<'ast> Traverse<'ast> for ToSsa<'ast> {
         let ret = self.trav_id(body.ret);
         stmts.extend(mem::take(&mut self.new_assigns));
 
+        self.new_assigns = old_assigns;
         Body { stmts, ret }
     }
 
@@ -140,8 +143,8 @@ impl<'ast> Traverse<'ast> for ToSsa<'ast> {
 
     fn trav_cond(&mut self, cond: Cond<'ast, Self::InAst>) -> Cond<'ast, Self::OutAst> {
         let c = self.trav_id(cond.cond);
-        let t = self.trav_id(cond.then_branch);
-        let e = self.trav_id(cond.else_branch);
+        let t = self.trav_body(cond.then_branch);
+        let e = self.trav_body(cond.else_branch);
         Cond { cond: c, then_branch: t, else_branch: e }
     }
 
@@ -243,11 +246,9 @@ impl<'ast> Traverse<'ast> for ToSsa<'ast> {
 
         self.push_env();
         self.bind_env(tensor.iv.name.clone(), Id::Var(iv_lvis));
-        let old_assigns = mem::take(&mut self.new_assigns);
 
         let body = self.trav_body(tensor.body);
 
-        self.new_assigns = old_assigns;
         self.pop_env();
 
         Tensor { body, iv: iv_lvis, lb, ub }

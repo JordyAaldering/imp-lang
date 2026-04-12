@@ -89,10 +89,12 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
     fn visit_cond(&mut self, cond: &Cond<'ast, Self::Ast>) {
         self.write("if ");
         Self::Ast::visit_operand(self, &cond.cond);
-        self.write(" {");
-        Self::Ast::visit_operand(self, &cond.then_branch);
-        self.write("} else {");
-        Self::Ast::visit_operand(self, &cond.else_branch);
+        self.write(" {\n");
+        self.visit_body(&cond.then_branch);
+        self.write("\n");
+        self.indent();
+        self.write("} else {\n");
+        self.visit_body(&cond.else_branch);
         self.write("}");
     }
 

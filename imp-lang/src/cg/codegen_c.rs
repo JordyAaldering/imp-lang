@@ -300,8 +300,8 @@ impl<'ast> Visit<'ast> for CompileC {
     }
 
     fn visit_body(&mut self, _body: &Body<'ast, Self::Ast>) {
-        unreachable!()
-     }
+        unreachable!("needs to be implemented in a case-by-case basis")
+    }
 
     fn visit_assign(&mut self, assign: &Assign<'ast, Self::Ast>) {
         if let Expr::Tensor(tensor) = assign.expr {
@@ -330,10 +330,39 @@ impl<'ast> Visit<'ast> for CompileC {
     }
 
     fn visit_cond(&mut self, cond: &Cond<'ast, Self::Ast>) {
-        let c = self.nameof(&cond.cond);
-        let t = self.nameof(&cond.then_branch);
-        let f = self.nameof(&cond.else_branch);
-        self.expr_stack.push(format!("{} ? {} : {}", c, t, f));
+        if cond.then_branch.stmts.is_empty() && cond.else_branch.stmts.is_empty() {
+            let c = self.nameof(&cond.cond);
+            let t = self.nameof(&cond.then_branch.ret);
+            let f = self.nameof(&cond.else_branch.ret);
+            self.expr_stack.push(format!("{} ? {} : {}", c, t, f));
+        } else {
+            self.push_line(&format!("{} cond_ret;", full_ctype(&self.id_type(&cond.then_branch.ret))));
+
+            let c = self.nameof(&cond.cond);
+            self.push_line(&format!("if ({}) {{", c));
+            self.indent += 1;
+
+            for stmt in &cond.then_branch.stmts {
+                self.visit_stmt(stmt);
+            }
+            let t = self.nameof(&cond.then_branch.ret);
+            self.push_line(&format!("cond_ret = {};", t));
+
+            self.indent -= 1;
+            self.push_line("} else {");
+            self.indent += 1;
+
+            for stmt in &cond.else_branch.stmts {
+                self.visit_stmt(stmt);
+            }
+            let f = self.nameof(&cond.else_branch.ret);
+            self.push_line(&format!("cond_ret = {};", f));
+
+            self.indent -= 1;
+            self.push_line("}");
+
+            self.expr_stack.push("cond_ret".to_string());
+        }
     }
 
     fn visit_fold(&mut self, fold: &Fold<'ast, Self::Ast>) {

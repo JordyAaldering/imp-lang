@@ -119,6 +119,8 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
     }
 
     fn trav_body(&mut self, body: Body<'ast, Self::InAst>) -> Body<'ast, Self::OutAst> {
+        let old_assigns = mem::take(&mut self.new_assigns);
+
         let mut stmts = Vec::new();
 
         for stmt in body.stmts {
@@ -130,6 +132,7 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
         let ret = self.trav_expr((*body.ret).clone());
         stmts.extend(mem::take(&mut self.new_assigns));
 
+        self.new_assigns = old_assigns;
         Body { stmts, ret }
     }
 
@@ -150,14 +153,10 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
         self.emit_expr(expr)
     }
 
-    /// TODO: this is currently not correct
-    /// We are pushing expressions to the outer scope, which may cause invalid applications.
-    /// E.g., the statement may be there explicitly to check for out of bounds access.
-    /// In future, the true and false branches must be vecs of statements.
     fn trav_cond(&mut self, cond: Cond<'ast, Self::InAst>) -> Self::CondOut {
         let c = self.trav_expr(cond.cond.clone());
-        let t = self.trav_expr(cond.then_branch.clone());
-        let e = self.trav_expr(cond.else_branch.clone());
+        let t = self.trav_body(cond.then_branch);
+        let e = self.trav_body(cond.else_branch);
         Cond { cond: c, then_branch: t, else_branch: e }
     }
 
@@ -258,11 +257,9 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
 
         self.push_env();
         self.bind_env(tensor.iv.name.clone(), Id::Var(tensor.iv.name.clone()));
-        let old_assigns = mem::take(&mut self.new_assigns);
 
         let body = self.trav_body(tensor.body);
 
-        self.new_assigns = old_assigns;
         self.pop_env();
 
         let iv = self.alloc_lvis(tensor.iv.name.clone(), tensor.iv.ty.clone());

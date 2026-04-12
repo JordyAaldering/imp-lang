@@ -177,13 +177,13 @@ impl<'src> Parser<'src> {
         let cond = self.parse_expr(None::<Bop>)?;
 
         self.expect(Token::LBrace)?;
-        let then_branch = self.parse_expr(None::<Bop>)?;
+        let then_branch = self.parse_body()?;
         self.expect(Token::RBrace)?;
 
         self.expect(Token::Else)?;
 
         self.expect(Token::LBrace)?;
-        let else_branch = self.parse_expr(None::<Bop>)?;
+        let else_branch = self.parse_body()?;
         self.expect(Token::RBrace)?;
 
         Ok(self.alloc_expr(Expr::Cond(Cond { cond, then_branch, else_branch })))

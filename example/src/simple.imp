@@ -55,7 +55,7 @@ fn cat(usize[n] a, usize[m] b) -> usize[nm] {
     // In future, using partitions:
     //return { a[iv] | [0usize] <= iv < [n];
     //         b[iv-n] | [n] <= iv < [n+m] };
-    ({ (if @ltSxS(iv[[0usize]], n) { a[iv] } else { b[[@subSxS(iv[[0usize]],n)]] }) | [0usize] <= iv < [n+m] })
+    ({ (if @ltSxS(iv[[0usize]], n) { (a[iv]) } else { (b[[@subSxS(iv[[0usize]],n)]]) }) | [0usize] <= iv < [n+m] })
 }
 
 // Planar selection (i.e., non-scalar result)

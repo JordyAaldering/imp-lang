@@ -76,8 +76,8 @@ pub trait Visit<'ast> {
 
     fn visit_cond(&mut self, cond: &Cond<'ast, Self::Ast>) {
         Self::Ast::visit_operand(self, &cond.cond);
-        Self::Ast::visit_operand(self, &cond.then_branch);
-        Self::Ast::visit_operand(self, &cond.else_branch);
+        self.visit_body(&cond.then_branch);
+        self.visit_body(&cond.else_branch);
     }
 
     fn visit_call(&mut self, call: &Call<'ast, Self::Ast>) {
