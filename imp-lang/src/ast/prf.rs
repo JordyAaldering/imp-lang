@@ -3,14 +3,14 @@ use super::*;
 /// Primitive function call
 #[derive(Clone, Debug)]
 pub enum PrfCall<'ast, Ast: AstConfig> {
-    /// @shapeA
-    ///
-    /// Shape vector of an array.
-    ShapeA(Ast::Operand<'ast>),
     /// @dimA
     ///
     /// Rank (dimension count) of an array.
     DimA(Ast::Operand<'ast>),
+    /// @shapeA
+    ///
+    /// Shape vector of an array.
+    ShapeA(Ast::Operand<'ast>),
     /// @selVxA
     ///
     /// Selection of a vector in an array, where the

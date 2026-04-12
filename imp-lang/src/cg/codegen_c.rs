@@ -151,32 +151,33 @@ impl CompileC {
 
 }
 
+const HEADER: &str = r#"
+#include <stdio.h>
+#include <string.h>
+
+static size_t imp_flat_index(ImpArrayRaw arr, ImpArrayRaw idx) {
+    size_t flat = 0;
+    for (size_t d = 0; d < idx.len; d += 1) {
+        flat = flat * arr.shp[d] + ((size_t *)idx.data)[d];
+    }
+    return flat;
+}
+
+static ImpArrayRaw imp_clone_array_raw(ImpArrayRaw src, size_t elem_size) {
+    size_t *shp = src.dim == 0 ? NULL : (size_t *)malloc(src.dim * sizeof(size_t));
+    if (src.dim > 0) { memcpy(shp, src.shp, src.dim * sizeof(size_t)); }
+    void *data = src.len == 0 ? NULL : malloc(src.len * elem_size);
+    if (src.len > 0) { memcpy(data, src.data, src.len * elem_size); }
+    return (ImpArrayRaw) { .len = src.len, .dim = src.dim, .shp = shp, .data = data };
+}
+"#;
+
 impl<'ast> Visit<'ast> for CompileC {
     type Ast = TypedAst;
 
     fn visit_program(&mut self, program: &Program<'ast, TypedAst>) {
         self.output.push_str(&format!("#include \"{}.h\"\n", self.module_name));
-        self.output.push('\n');
-        self.output.push_str("#include <stdio.h>\n");
-        self.output.push_str("#include <string.h>\n");
-        self.output.push('\n');
-        self.output.push_str("static size_t imp_flat_index(ImpArrayRaw arr, ImpArrayRaw idx) {\n");
-        self.output.push_str("    size_t flat = 0;\n");
-        self.output.push_str("    size_t *idx_data = (size_t *)idx.data;\n");
-        self.output.push_str("    for (size_t d = 0; d < idx.len; d += 1) {\n");
-        self.output.push_str("        flat = flat * arr.shp[d] + idx_data[d];\n");
-        self.output.push_str("    }\n");
-        self.output.push_str("    return flat;\n");
-        self.output.push_str("}\n");
-        self.output.push('\n');
-        self.output.push_str("static ImpArrayRaw imp_clone_array_raw(ImpArrayRaw src, size_t elem_size) {\n");
-        self.output.push_str("    size_t *shp = src.dim == 0 ? NULL : (size_t *)malloc(src.dim * sizeof(size_t));\n");
-        self.output.push_str("    if (src.dim > 0) { memcpy(shp, src.shp, src.dim * sizeof(size_t)); }\n");
-        self.output.push_str("    void *data = src.len == 0 ? NULL : malloc(src.len * elem_size);\n");
-        self.output.push_str("    if (src.len > 0) { memcpy(data, src.data, src.len * elem_size); }\n");
-        self.output.push_str("    return (ImpArrayRaw) { .len = src.len, .dim = src.dim, .shp = shp, .data = data };\n");
-        self.output.push_str("}\n");
-        self.output.push('\n');
+        self.output.push_str(HEADER);
 
         for (_name, overloads) in &program.overloads {
             for (_sig, fundefs) in overloads {
@@ -324,20 +325,6 @@ impl<'ast> Visit<'ast> for CompileC {
         }
     }
 
-    fn visit_expr(&mut self, expr: &Expr<'ast, Self::Ast>) {
-        use Expr::*;
-        match expr {
-            Cond(n) => self.visit_cond(n),
-            Call(n) => self.visit_call(n),
-            PrfCall(n) => self.visit_prf_call(n),
-            Fold(n) => self.visit_fold(n),
-            Tensor(n) => self.visit_tensor(n),
-            Array(n) => self.visit_array(n),
-            Id(n) => self.visit_id(n),
-            Const(n) => self.visit_const(n),
-        }
-    }
-
     fn visit_cond(&mut self, cond: &Cond<'ast, Self::Ast>) {
         let c = self.nameof(&cond.cond);
         let t = self.nameof(&cond.then_branch);
@@ -391,7 +378,7 @@ impl<'ast> Visit<'ast> for CompileC {
         ));
         self.push_line(&format!("size_t {iv_name}_shp_arr_{t_uid}[1] = {{ {rank} }};"));
         self.push_line(&format!(
-            "ImpArrayRaw {iv_name} __attribute__((unused)) = (ImpArrayRaw) {{ .len = {rank}, .shp = {iv_name}_shp_arr_{t_uid}, .dim = 1, .data = (void *){iv_name}_data_{t_uid} }};"
+            "ImpArrayRaw {iv_name} = (ImpArrayRaw) {{ .len = {rank}, .shp = {iv_name}_shp_arr_{t_uid}, .dim = 1, .data = (void *){iv_name}_data_{t_uid} }};"
         ));
 
         for stmt in &fold.selection.body {
@@ -513,7 +500,7 @@ impl<'ast> Visit<'ast> for CompileC {
         ));
         self.push_line(&format!("size_t {iv_name}_shp_arr_{t_uid}[1] = {{ {rank} }};"));
         self.push_line(&format!(
-            "ImpArrayRaw {iv_name} __attribute__((unused)) = (ImpArrayRaw) {{ .len = {rank}, .shp = {iv_name}_shp_arr_{t_uid}, .dim = 1, .data = (void *){iv_name}_data_{t_uid} }};"
+            "ImpArrayRaw {iv_name} = (ImpArrayRaw) {{ .len = {rank}, .shp = {iv_name}_shp_arr_{t_uid}, .dim = 1, .data = (void *){iv_name}_data_{t_uid} }};"
         ));
 
         // Row-major flat index: Σ (iv_d - lb_d) * stride_d
@@ -618,6 +605,10 @@ impl<'ast> Visit<'ast> for CompileC {
     fn visit_prf_call(&mut self, prf_call: &PrfCall<'ast, TypedAst>) {
         use PrfCall::*;
         let rendered = match prf_call {
+            DimA(arr) => {
+                let arg = self.render_expr(&Expr::Id(*arr));
+                format!("{arg}.dim")
+            }
             ShapeA(arr) => {
                 let arg = self.render_expr(&Expr::Id(*arr));
                 self.shp_uid += 1;
@@ -634,9 +625,11 @@ impl<'ast> Visit<'ast> for CompileC {
                 ));
                 wrap
             }
-            DimA(arr) => {
-                let arg = self.render_expr(&Expr::Id(*arr));
-                format!("{arg}.dim")
+            SelVxA(idx, arr) => {
+                let arr_name = self.render_expr(&Expr::Id(*arr));
+                let idx_name = self.render_expr(&Expr::Id(*idx));
+                let elem_base = elem_ctype_of_id(arr);
+                format!("(({elem_base} *){arr_name}.data)[imp_flat_index({arr_name}, {idx_name})]")
             }
             AddSxS(a, b) => format!("{} + {}", self.render_expr(&Expr::Id(*a)), self.render_expr(&Expr::Id(*b))),
             SubSxS(a, b) => format!("{} - {}", self.render_expr(&Expr::Id(*a)), self.render_expr(&Expr::Id(*b))),
@@ -650,13 +643,6 @@ impl<'ast> Visit<'ast> for CompileC {
             NeSxS(a, b) => format!("{} != {}", self.render_expr(&Expr::Id(*a)), self.render_expr(&Expr::Id(*b))),
             NegS(a) => format!("-{}", self.render_expr(&Expr::Id(*a))),
             NotS(a) => format!("!{}", self.render_expr(&Expr::Id(*a))),
-            SelVxA(idx, arr) => {
-                let arr_name = self.render_expr(&Expr::Id(*arr));
-                let idx_name = self.render_expr(&Expr::Id(*idx));
-                let elem_base = elem_ctype_of_id(arr);
-                let flat_fn = flat_index_fn_of_id(idx);
-                format!("(({elem_base} *){arr_name}.data)[{flat_fn}({arr_name}, {idx_name})]")
-            }
         };
         self.expr_stack.push(rendered);
     }
@@ -670,16 +656,17 @@ impl<'ast> Visit<'ast> for CompileC {
 
     fn visit_const(&mut self, c: &Const) {
         use Const::*;
-        match c {
-            Bool(v) => self.expr_stack.push(v.to_string()),
-            I32(v) => self.expr_stack.push(v.to_string()),
-            I64(v) => self.expr_stack.push(v.to_string()),
-            U32(v) => self.expr_stack.push(v.to_string()),
-            U64(v) => self.expr_stack.push(v.to_string()),
-            Usize(v) => self.expr_stack.push(v.to_string()),
-            F32(v) => self.expr_stack.push(v.to_string()),
-            F64(v) => self.expr_stack.push(v.to_string()),
-        }
+        let s = match c {
+            Bool(v) => v.to_string(),
+            I32(v) => v.to_string(),
+            I64(v) => v.to_string(),
+            U32(v) => v.to_string(),
+            U64(v) => v.to_string(),
+            Usize(v) => v.to_string(),
+            F32(v) => v.to_string(),
+            F64(v) => v.to_string(),
+        };
+        self.expr_stack.push(s)
     }
 }
 
@@ -772,25 +759,9 @@ fn wrapper_call_arg(shape: &TypePattern, arg: &str) -> String {
     }
 }
 
-/// The C element type for the data pointer stored inside an ImpArrayRaw id.
 fn elem_ctype_of_id(id: &Id<'_, TypedAst>) -> String {
     match id {
         Id::Arg(_) => "uint32_t".to_owned(),  // args used directly as array bounds are uncommon
         Id::Var(v) => base_ctype(&v.ty),
-    }
-}
-
-fn flat_index_fn_of_id(id: &Id<'_, TypedAst>) -> String {
-    use BaseType::*;
-    match id_base_type(id) {
-        Usize => "imp_flat_index".to_owned(),
-        _ => panic!("arrays can only be indexed by usize"),
-    }
-}
-
-fn id_base_type(id: &Id<'_, TypedAst>) -> BaseType {
-    match id {
-        Id::Var(v) => v.ty.ty.clone(),
-        Id::Arg(_) => BaseType::U32,
     }
 }
