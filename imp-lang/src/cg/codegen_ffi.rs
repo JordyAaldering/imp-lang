@@ -32,19 +32,21 @@ impl<'ast> Visit<'ast> for CompileFfi {
     fn visit_program(&mut self, program: &Program<'ast, TypedAst>) {
         self.push("#[allow(unused_imports)]\n");
         self.push("use imp_core::*;\n");
+        self.push("\n");
+
+        self.push("unsafe extern \"C\" {\n");
 
         for (_name, overloads) in &program.overloads {
             for (_sig, fundefs) in overloads {
                 for fundef in fundefs {
-                    self.push("\n");
-                    self.push("unsafe extern \"C\" {\n");
+
                     self.push(&format!("    fn IMP_{}(", fundef.name));
                     self.push(&join_args(&fundef.args, rust_ffi_type));
                     self.push(&format!(") -> {};\n", rust_ffi_type(&fundef.ret_type)));
-                    self.push("}\n");
                 }
             }
         }
+        self.push("}\n");
 
         for (name, overloads) in &program.overloads {
             let name = name.strip_prefix('@').unwrap_or(name).to_owned();
@@ -72,8 +74,12 @@ impl CompileFfi {
         }
 
         let call_args = emit_marshaled_call_args(&mut self.output, &fundef.args);
-        self.push(&emit_return_conversion(&fundef.name, &fundef.ret_type, &call_args));
-        self.push("\n");
+        let ret = &emit_return_conversion(&fundef.name, &fundef.ret_type, &call_args);
+        for line in ret.lines() {
+            self.push("    ");
+            self.push(line);
+            self.push("\n");
+        }
         self.push("}\n");
     }
 
@@ -98,8 +104,7 @@ impl CompileFfi {
         self.push(") {\n");
 
         for fundef in fundefs {
-            let pattern = fundef.args
-                .iter()
+            let pattern = fundef.args.iter()
                 .enumerate()
                 .map(|(i, arg)| family_match_pattern(i, &arg.ty))
                 .collect::<Vec<_>>()
@@ -233,10 +238,10 @@ fn emit_marshaled_branch_args(out: &mut String, args: &[Farg], branch_names: &[S
 
 fn emit_return_conversion(symbol_name: &str, ret_type: &Type, call_args: &[String]) -> String {
     if matches!(ret_type.shape, TypePattern::Any) {
-        format!("let res0_dyn = unsafe {{ IMP_{}({}) }};\n    unsafe {{ res0_dyn.into_array_or_scalar() }}",
+        format!("let res0_dyn = unsafe {{ IMP_{}({}) }};\nunsafe {{ res0_dyn.into_array_or_scalar() }}",
             symbol_name, call_args.join(", ") )
     } else if is_static_array(ret_type) {
-        format!("let res0_raw = unsafe {{ IMP_{}({}) }};\n    ImpArrayOrScalar::Array(unsafe {{ ImpArray::<{}>::from_raw(res0_raw) }})",
+        format!("let res0_raw = unsafe {{ IMP_{}({}) }};\nImpArrayOrScalar::Array(unsafe {{ ImpArray::<{}>::from_raw(res0_raw) }})",
             symbol_name, call_args.join(", "), rust_base_type(&ret_type.ty)
         )
     } else {
