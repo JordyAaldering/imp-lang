@@ -35,7 +35,6 @@ impl<'ast> Visit<'ast> for CompileFfi {
         self.push("\n");
 
         self.push("unsafe extern \"C\" {\n");
-
         for (_name, overloads) in &program.overloads {
             for (_sig, fundefs) in overloads {
                 for fundef in fundefs {
