@@ -53,6 +53,7 @@ pub enum Token {
     UnexpectedCharacter(char),
 }
 
+#[derive(Clone)]
 pub struct Lexer<'src> {
     /// The input program as a string.
     src: &'src str,

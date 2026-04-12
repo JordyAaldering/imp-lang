@@ -1,3 +1,0 @@
-fn should_error(f32[n] a, f32[n] b) -> f32[n] {
-    return a + b;
-}

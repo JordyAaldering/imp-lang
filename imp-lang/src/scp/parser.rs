@@ -15,6 +15,7 @@ pub enum ParseError {
     DuplicateFunctionSignature(String),
     UnknownPrimitive(String, Span),
     FoldSelectionMustBeTensor,
+    ExpectedStatement(Token, Span),
     UnexpectedToken(String, Token, Span),
     UnexpectedEof,
 }
@@ -126,32 +127,43 @@ impl<'src> Parser<'src> {
         Ok(Farg { id, ty })
     }
 
+    /// ```bnf
+    /// <body> = <stmt>* <expr>
+    /// ```
     fn parse_body(&mut self) -> ParseResult<Body<'static, ParsedAst>> {
-        // We assume that the return expression is wrapped in parentheses for now, to simplify parsing
         let mut stmts = Vec::new();
-        while self.peek()?.0 != Token::LParen {
-            stmts.extend(self.parse_stmt()?);
+
+        loop {
+            let checkpoint = self.lexer.clone();
+            match self.parse_stmt() {
+                Ok(stmt) => stmts.push(stmt),
+                Err(ParseError::ExpectedStatement(_, _)) => {
+                    self.lexer = checkpoint;
+                    break;
+                }
+                Err(e) => return Err(e),
+            }
         }
 
         let ret = self.parse_expr(None::<Bop>)?;
         Ok(Body { stmts, ret })
     }
 
-    fn parse_stmt(&mut self) -> ParseResult<Vec<Stmt<'static, ParsedAst>>> {
+    fn parse_stmt(&mut self) -> ParseResult<Stmt<'static, ParsedAst>> {
         let (token, span) = self.next()?;
         let stmts = match token {
             Token::Identifier(lhs) => {
-                self.expect(Token::Assign)?;
+                // A bit ugly, but good enough for now
+                let (err_token, err_loc) = self.peek()?.clone();
+                self.expect(Token::Assign)
+                    .map_err(|_| ParseError::ExpectedStatement(err_token, err_loc))?;
+
                 let expr = self.parse_expr(None::<Bop>)?;
                 let lhs = self.alloc_lvis(lhs, None);
-                vec![Stmt::Assign(Assign { lhs, expr })]
+                Stmt::Assign(Assign { lhs, expr })
             }
             _ => {
-                return Err(ParseError::UnexpectedToken(
-                    "statement".to_owned(),
-                    token,
-                    span,
-                ));
+                return Err(ParseError::ExpectedStatement(token, span));
             }
         };
 

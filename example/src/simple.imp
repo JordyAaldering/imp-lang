@@ -1,61 +1,66 @@
 fn dim(usize[d:shp] arr) -> usize {
-    (d)
+    d
 }
 
 fn shape(usize[d:shp] arr) -> usize[d] {
-    (shp)
+    shp
 }
 
 fn take(usize[o] sv, i32[o:oshp,i:ishp] arr) -> i32[o:sv,i:ishp] {
     // Just returns arr for now, which only is correct for sv == []
-    (arr)
+    arr
 }
 
 fn zeros(usize n) -> usize[n] {
-    ({ (0usize) | iv < [n] })
+    { 0usize | iv < [n] }
 }
 
 fn zeros_i32(usize n) -> i32[n] {
-    ({ (0i32) | iv < [n] })
+    { 0i32 | iv < [n] }
 }
 
 fn @add(i32 a, i32 b) -> i32 {
-    (@addSxS(a, b))
+    @addSxS(a, b)
 }
 
 fn @add(i32[d:shp] a, i32[d:shp] b) -> i32[d:shp] {
-    ({ (@selVxA(iv, a) + @selVxA(iv, b)) | iv < shp })
+    { @selVxA(iv, a) + @selVxA(iv, b) | iv < shp }
 }
 
 fn @add(usize a, usize b) -> usize {
-    (@addSxS(a, b))
+    @addSxS(a, b)
 }
 
 fn @add(usize a, usize[d>0:shp] b) -> usize[d>0:shp] {
     lb = zeros(d);
-    ({ (a + b[iv]) | iv < shp })
+    { a + b[iv] | iv < shp }
 }
 
 fn @add(usize[d>0:shp] a, usize b) -> usize[d>0:shp] {
     lb = zeros(d);
-    ({ (a[iv] + b) | lb <= iv < shp })
+    { a[iv] + b | lb <= iv < shp }
 }
 
 fn @add(usize[d>0:shp] a, usize[d>0:shp] b) -> usize[d>0:shp] {
     lb = zeros(d);
-    ({ (a[iv] + b[iv]) | lb <= iv < shp })
+    { a[iv] + b[iv] | lb <= iv < shp }
 }
 
 fn sum(i32[d:shp] arr) -> i32 {
-    lb = { (0usize) | [0usize] <= iv < [d] };
-    (@fold(0i32, +, { (@selVxA(iv, arr)) | iv < shp }))
+    lb = { 0usize | [0usize] <= iv < [d] };
+    @fold(0i32, +, { @selVxA(iv, arr) | iv < shp })
 }
 
 fn cat(usize[n] a, usize[m] b) -> usize[nm] {
     // In future, using partitions:
     //return { a[iv] | [0usize] <= iv < [n];
     //         b[iv-n] | [n] <= iv < [n+m] };
-    ({ (if @ltSxS(iv[[0usize]], n) { (a[iv]) } else { (b[[@subSxS(iv[[0usize]],n)]]) }) | [0usize] <= iv < [n+m] })
+    { if @ltSxS(iv[[0usize]], n) {
+            a[iv]
+        } else {
+            b[[@subSxS(iv[[0usize]],n)]]
+        }
+    | iv < [n+m] }
 }
 
 // Planar selection (i.e., non-scalar result)
@@ -63,13 +68,13 @@ fn @sel(usize[o] idx, i32[o:oshp,i:ishp] arr) -> i32[i:ishp] {
     // We need helpers for this in the future, but for now this is fine.
     ishp0 = { (0usize) | [0usize] <= iv < [i] };
 
-    ({ (@selVxA(cat(idx, iv), arr)) | ishp0 <= iv < ishp })
+    { @selVxA(cat(idx, iv), arr) | ishp0 <= iv < ishp }
 }
 
 fn sumlast(i32[d:shp,n] arr) -> i32[n] {
     // We need helpers for this in the future, but for now this is fine.
-    shp0 = { (0usize) | [0usize] <= iv < [d] };
-    neutral = { (0i32) | [0usize] <= iv < [n] };
+    shp0 = { 0usize | [0usize] <= iv < [d] };
+    neutral = { 0i32 | [0usize] <= iv < [n] };
 
     // neutral: n-element vector
     // arr: rank-d+1 array
@@ -78,78 +83,78 @@ fn sumlast(i32[d:shp,n] arr) -> i32[n] {
     // Thus, + applies on n-element vectors, and returns an n-element vector
     // Thus, the result of the fold is an n-element vector
 
-    (@fold(neutral, +, { (arr[iv]) | shp0 <= iv < shp }))
+    @fold(neutral, +, { arr[iv] | shp0 <= iv < shp })
 }
 
 fn four() -> usize[4] {
-    ([0usize, 1usize, 2usize, 3usize])
+    [0usize, 1usize, 2usize, 3usize]
 }
 
 fn five() -> usize[5] {
-    ([0usize, 1usize, 2usize, 3usize, 4usize])
+    [0usize, 1usize, 2usize, 3usize, 4usize]
 }
 
 fn add_demo(usize[n] four, usize[n] five) -> usize[k] {
-    (four + five)
+    four + five
 }
 
 fn overload_demo(usize a, usize b) -> usize {
-    (a + b)
+    a + b
 }
 
 fn overload_demo(usize[n] a, usize[n] b) -> usize[n] {
-    (a + b)
+    a + b
 }
 
 fn we_could_statically_figure_this_error_out() -> usize[5] {
     four = [0usize, 1usize, 2usize, 3usize];
     five = [0usize, 1usize, 2usize, 3usize, 4usize];
-    (four + five)
+    four + five
 }
 
 fn @sel(usize[n] idx, usize[n:shp] arr) -> usize {
-    (@selVxA(idx, arr))
+    @selVxA(idx, arr)
 }
 
 fn @sel(usize[n] idx, usize arr) -> usize {
-    (arr)
+    arr
 }
 
 fn @sel(usize[n] idx, u32[n:shp] arr) -> u32 {
-    (@selVxA(idx, arr))
+    @selVxA(idx, arr)
 }
 
 fn scalar_add_demo() -> usize {
-    (2usize + 3usize)
+    2usize + 3usize
 }
 
 fn shouldbefolded() -> u32 {
-    (@addSxS(4u32, @addSxS(2u32, 3u32)))
+    @addSxS(4u32, @addSxS(2u32, 3u32))
 }
 
 fn iota(usize n) -> usize[n] {
-    ({ (iv[[0usize]]) | [0usize] <= iv < [n] })
+    { iv[[0usize]] | [0usize] <= iv < [n] }
 }
 
 fn my_add_after_iota(usize[d:shp] a, usize[d:shp] b) -> usize[d:shp] {
-    (a + b)
+    a + b
 }
 
 fn arrays() -> u32[n] {
     a = [1u32,3u32,1u32,4u32,1u32];
-    (a)
+    a
 }
 
 fn sel_demo() -> u32 {
     arr = [1u32,2u32,3u32,4u32,5u32];
     x = arr[[2usize]];
-    (x)
+    x
 }
 
 fn scalar_or_array(usize[d:shp] a) -> usize[d:shp] {
-    (a)
+    a
 }
 
 fn add_dyn(usize[d:shp] a, usize[d:shp] b) -> usize[d:shp] {
-    (a + b)
+    a + b
 }
