@@ -1,17 +1,4 @@
 //
-// Helper functions
-//
-
-fn cat(usize[n] a, usize[m] b) -> usize[nm] {
-    { if @ltSxS(iv[[0usize]], n) {
-          a[iv]
-      } else {
-          b[[@subSxS(iv[[0usize]],n)]]
-      }
-    | iv < [n+m] }
-}
-
-//
 // Selection
 //
 
@@ -161,4 +148,17 @@ fn prod(i32[d:shp] arr) -> i32 {
 
 fn prod(usize[d:shp] arr) -> usize {
     @fold(1usize, *, { arr[iv] | iv < shp })
+}
+
+//
+// Helper functions
+//
+
+fn cat(usize[n] a, usize[m] b) -> usize[nm] {
+    { if @ltSxS(iv[[0usize]], n) {
+          a[iv]
+      } else {
+          b[[@subSxS(iv[[0usize]],n)]]
+      }
+    | iv < [n+m] }
 }
