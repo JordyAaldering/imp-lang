@@ -28,9 +28,7 @@ pub trait Visit<'ast> {
             self.visit_vardec(vardec);
         }
 
-        for stmt in &fundef.body {
-            self.visit_stmt(stmt);
-        }
+        self.visit_body(&fundef.body);
     }
 
     fn visit_fargs(&mut self, args: &[Farg]) {
@@ -45,16 +43,20 @@ pub trait Visit<'ast> {
 
     // Statements
 
+    fn visit_body(&mut self, body: &Body<'ast, Self::Ast>) {
+        for stmt in &body.stmts {
+            self.visit_stmt(stmt);
+        }
+        Self::Ast::visit_operand(self, &body.ret);
+    }
+
     fn visit_stmt(&mut self, stmt: &Stmt<'ast, Self::Ast>) {
         match stmt {
             Stmt::Assign(assign) => self.visit_assign(assign),
-            Stmt::Return(ret) => self.visit_return(ret),
         }
     }
 
     fn visit_assign(&mut self, _assign: &Assign<'ast, Self::Ast>) { }
-
-    fn visit_return(&mut self, _ret: &Return<'ast, Self::Ast>) { }
 
     // Expressions
 
@@ -112,12 +114,7 @@ pub trait Visit<'ast> {
             Self::Ast::visit_operand(self, lb);
         }
         Self::Ast::visit_operand(self, &tensor.ub);
-
-        for stmt in &tensor.body {
-            self.visit_stmt(stmt);
-        }
-
-        Self::Ast::visit_operand(self, &tensor.ret);
+        self.visit_body(&tensor.body);
     }
 
     fn visit_array(&mut self, array: &Array<'ast, Self::Ast>) {
@@ -161,9 +158,7 @@ pub trait Rewrite<'ast> {
             self.rewrite_assign(assign);
         }
 
-        for stmt in &mut fundef.body {
-            self.rewrite_stmt(stmt);
-        }
+        self.rewrite_body(&mut fundef.body);
     }
 
     fn rewrite_farg(&mut self, arg: Farg) -> Farg {
@@ -172,20 +167,17 @@ pub trait Rewrite<'ast> {
 
     // Statements
 
+    fn rewrite_body(&mut self, body: &mut Body<'ast, Self::Ast>);
+
     fn rewrite_stmt(&mut self, stmt: &mut Stmt<'ast, Self::Ast>) {
         match stmt {
             Stmt::Assign(assign) => self.rewrite_assign(assign),
-            Stmt::Return(ret) => self.rewrite_return(ret),
         }
     }
 
     fn rewrite_assign(&mut self, assign: &mut Assign<'ast, Self::Ast>) {
         let new_expr = self.rewrite_expr((*assign.expr).clone());
         assign.expr = Box::leak(Box::new(new_expr));
-    }
-
-    fn rewrite_return(&mut self, ret: &mut Return<'ast, Self::Ast>) {
-        ret.id = self.rewrite_id(ret.id.clone());
     }
 
     // Expressions
@@ -223,9 +215,7 @@ pub trait Rewrite<'ast> {
 
     fn rewrite_tensor(&mut self, tensor: Tensor<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
         let mut tensor = tensor;
-        for stmt in &mut tensor.body {
-            self.rewrite_stmt(stmt);
-        }
+        self.rewrite_body(&mut tensor.body);
         Expr::Tensor(tensor)
     }
 
@@ -277,34 +267,7 @@ pub trait Traverse<'ast> {
         Program { overloads }
     }
 
-    fn trav_fundef(&mut self, fundef: Fundef<'ast, Self::InAst>) -> Fundef<'ast, Self::OutAst> {
-        let args = self.trav_fargs(fundef.args);
-
-        let mut shape_prelude = Vec::new();
-        for assign in fundef.shape_prelude {
-            shape_prelude.push(self.trav_assign(assign));
-        }
-
-        let mut decs = Vec::new();
-        for vardec in fundef.decs {
-            decs.push(self.trav_vardec(vardec));
-        }
-
-        let mut body = Vec::new();
-        for stmt in fundef.body {
-            body.push(self.trav_stmt(stmt));
-        }
-
-        Fundef {
-            name: fundef.name,
-            ret_type: fundef.ret_type,
-            args,
-            shape_prelude,
-            shape_facts: ShapeFacts::default(),
-            decs,
-            body,
-        }
-    }
+    fn trav_fundef(&mut self, fundef: Fundef<'ast, Self::InAst>) -> Fundef<'ast, Self::OutAst>;
 
     fn trav_fargs(&mut self, args: Vec<Farg>) -> Vec<Farg> {
         let mut new_args = Vec::new();
@@ -324,17 +287,18 @@ pub trait Traverse<'ast> {
 
     // Statements
 
+    type BodyOut = Body<'ast, Self::OutAst>;
+
+    fn trav_body(&mut self, body: Body<'ast, Self::InAst>) -> Self::BodyOut;
+
     fn trav_stmt(&mut self, stmt: Stmt<'ast, Self::InAst>) -> Stmt<'ast, Self::OutAst> {
         use Stmt::*;
         match stmt {
             Assign(n) => Assign(self.trav_assign(n)),
-            Return(n) => Return(self.trav_return(n)),
         }
     }
 
     fn trav_assign(&mut self, assign: Assign<'ast, Self::InAst>) -> Assign<'ast, Self::OutAst>;
-
-    fn trav_return(&mut self, ret: Return<'ast, Self::InAst>) -> Return<'ast, Self::OutAst>;
 
     // Expressions
 

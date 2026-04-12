@@ -113,19 +113,9 @@ impl<'src> Parser<'src> {
 
         let (ret_type, _) = self.parse_type()?;
 
-        self.expect(Token::LBrace)?;
-
-        let mut body = Vec::new();
-
-        while self.peek()?.0 != Token::RBrace {
-            body.extend(self.parse_stmt()?);
-        }
-
-        self.expect(Token::RBrace)?;
-
-        if !matches!(body.last(), Some(Stmt::Return(_))) {
-            return Err(ParseError::MissingReturn);
-        }
+        self.expect(Token::LBrace);
+        let body = self.parse_body()?;
+        self.expect(Token::RBrace);
 
         Ok(Fundef {
             name,
@@ -144,29 +134,26 @@ impl<'src> Parser<'src> {
         Ok(Farg { id, ty })
     }
 
+    fn parse_body(&mut self) -> ParseResult<Body<'static, ParsedAst>> {
+        // We assume that the return expression is wrapped in parentheses for now, to simplify parsing
+        let mut stmts = Vec::new();
+        while self.peek()?.0 != Token::LParen {
+            stmts.extend(self.parse_stmt()?);
+        }
+
+        let ret = self.parse_expr(None::<Bop>)?;
+        self.expect(Token::RBrace)?;
+        Ok(Body { stmts, ret })
+    }
+
     fn parse_stmt(&mut self) -> ParseResult<Vec<Stmt<'static, ParsedAst>>> {
         let (token, span) = self.next()?;
-
         let stmts = match token {
             Token::Identifier(lhs) => {
                 self.expect(Token::Assign)?;
                 let expr = self.parse_expr(None::<Bop>)?;
                 let lhs = self.alloc_lvis(lhs, None);
                 vec![Stmt::Assign(Assign { lhs, expr })]
-            }
-            Token::Return => {
-                let expr = self.parse_expr(None::<Bop>)?;
-                match expr {
-                    Expr::Id(id) => vec![Stmt::Return(Return { id: id.clone() })],
-                    _ => {
-                        let ret_name = self.fresh_uid();
-                        let ret_lvis = self.alloc_lvis(ret_name.clone(), None);
-                        vec![
-                            Stmt::Assign(Assign { lhs: ret_lvis, expr }),
-                            Stmt::Return(Return { id: Id::Var(ret_name) }),
-                        ]
-                    }
-                }
             }
             _ => {
                 return Err(ParseError::UnexpectedToken(
@@ -178,7 +165,6 @@ impl<'src> Parser<'src> {
         };
 
         self.expect(Token::Semicolon)?;
-
         Ok(stmts)
     }
 
@@ -215,7 +201,7 @@ impl<'src> Parser<'src> {
     fn parse_tensor(&mut self) -> ParseResult<&'static Expr<'static, ParsedAst>> {
         self.expect(Token::LBrace)?;
 
-        let ret = self.parse_expr(None::<Bop>)?;
+        let body = self.parse_body()?;
 
         self.expect(Token::Bar)?;
 
@@ -245,8 +231,7 @@ impl<'src> Parser<'src> {
 
         let iv = self.alloc_lvis(iv, None);
         Ok(self.alloc_expr(Expr::Tensor(Tensor {
-            body: Vec::new(),
-            ret,
+            body,
             iv,
             lb,
             ub,

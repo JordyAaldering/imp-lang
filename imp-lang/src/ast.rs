@@ -3,9 +3,9 @@ mod program;
 mod fundef;
 mod shapefact;
 // Statements
+mod body;
 mod stmt;
 mod assign;
-mod ret;
 // Expressions
 mod expr;
 mod cond;
@@ -25,9 +25,9 @@ pub use program::*;
 pub use fundef::*;
 pub use shapefact::*;
 // Statements
+pub use body::*;
 pub use stmt::*;
 pub use assign::*;
-pub use ret::*;
 // Expressions
 pub use expr::*;
 pub use cond::*;

@@ -103,6 +103,10 @@ impl<'ast> Traverse<'ast> for ToSsa<'ast> {
         }
     }
 
+    fn trav_body(&mut self, body: Body<'ast, FlattenedAst>) -> Body<'ast, UntypedAst> {
+        todo!()
+    }
+
     fn trav_assign(&mut self, assign: Assign<'ast, Self::InAst>) -> Assign<'ast, Self::OutAst> {
         let old_name = assign.lhs.name.clone();
         let new_name = self.fresh_uid();
@@ -114,11 +118,6 @@ impl<'ast> Traverse<'ast> for ToSsa<'ast> {
         self.decs.push(lvis);
 
         Assign { lhs: lvis, expr }
-    }
-
-    fn trav_return(&mut self, ret: Return<'ast, Self::InAst>) -> Return<'ast, Self::OutAst> {
-        let id = self.trav_id(ret.id);
-        Return { id }
     }
 
     fn trav_expr(&mut self, expr: Expr<'ast, Self::InAst>) -> Self::ExprOut {

@@ -191,6 +191,10 @@ impl Rewrite<'static> for AnalyseTp {
         self.analyse_ret_constraints(fundef);
     }
 
+    fn rewrite_body(&mut self, _body: &mut Body<'static, Self::Ast>) {
+        unreachable!()
+    }
+
     fn rewrite_farg(&mut self, arg: Farg) -> Farg {
         arg
     }

@@ -11,8 +11,7 @@ use super::*;
 /// Note that <lb> has no effect on the result shape. Any values below <lb> are zeros.
 #[derive(Clone, Debug)]
 pub struct Tensor<'ast, Ast: AstConfig> {
-    pub body: Vec<Stmt<'ast, Ast>>,
-    pub ret: Ast::Operand<'ast>,
+    pub body: Body<'ast, Ast>,
     pub iv: &'ast VarInfo<'ast, Ast>,
     pub lb: Option<Ast::Operand<'ast>>,
     pub ub: Ast::Operand<'ast>,

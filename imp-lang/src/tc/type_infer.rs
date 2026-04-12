@@ -1,4 +1,4 @@
-use core::panic;
+use core::borrow;
 use std::collections::HashMap;
 
 use crate::{ast::*, traverse::Traverse};
@@ -21,7 +21,7 @@ pub fn type_infer<'ast>(program: Program<'ast, UntypedAst>) -> Result<Program<'a
                     shape_prelude: Vec::new(),
                     shape_facts: ShapeFacts::default(),
                     decs: Vec::new(),
-                    body: Vec::new(),
+                    body: Body { stmts: vec![], ret: Id::Arg(usize::MAX) },
                 }));
                 stub_fundefs.push(stub);
             }
@@ -377,23 +377,8 @@ impl<'ast> TypeInfer<'ast> {
         self.idmap.insert(tensor.iv as *const _, iv);
         self.new_ids.push(iv);
 
-        let mut body = Vec::new();
-        for stmt in tensor.body {
-            body.push(self.trav_stmt(stmt));
-        }
-
-        let (ret, ret_ty) = self.trav_id(tensor.ret);
-
-        (
-            Tensor {
-                iv,
-                lb,
-                ub,
-                ret,
-                body,
-            },
-            ret_ty,
-        )
+        let (body, ret_ty) = self.trav_body(tensor.body);
+        (Tensor { body, iv, lb, ub }, ret_ty)
     }
 
     fn resolve_dispatch(&mut self, func_name: &str, arg_types: &[Type]) -> (&'ast Fundef<'ast, TypedAst>, bool) {
@@ -461,31 +446,26 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
     // Declarations
 
     fn trav_fundef(&mut self, fundef: Fundef<'ast, Self::InAst>) -> Fundef<'ast, Self::OutAst> {
-        let Fundef { name, ret_type, args, shape_prelude, shape_facts, body, decs: _ } = fundef;
-
-        self.args = args.clone();
+        self.args = fundef.args.clone();
 
         self.idmap.clear();
         self.new_ids.clear();
 
         let mut new_shape_prelude = Vec::new();
-        for assign in shape_prelude {
+        for assign in fundef.shape_prelude {
             new_shape_prelude.push(self.trav_assign(assign));
         }
 
-        let mut new_body = Vec::new();
-        for stmt in body {
-            new_body.push(self.trav_stmt(stmt));
-        }
+        let (body, _ret_ty) = self.trav_body(fundef.body);
 
         Fundef {
-            name,
-            ret_type,
-            args,
+            name: fundef.name,
+            ret_type: fundef.ret_type,
+            args: fundef.args,
             shape_prelude: new_shape_prelude,
-            shape_facts: shape_facts,
+            shape_facts: fundef.shape_facts,
             decs: self.new_ids.clone(),
-            body: new_body,
+            body,
         }
     }
 
@@ -500,9 +480,16 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
         Assign { lhs: new_lvis, expr: expr_ref }
     }
 
-    fn trav_return(&mut self, ret: Return<'ast, Self::InAst>) -> Return<'ast, Self::OutAst> {
-        let (id, _) = self.trav_id(ret.id);
-        Return { id }
+    type BodyOut = (Body<'ast, Self::OutAst>, Type);
+
+    fn trav_body(&mut self, body: Body<'ast, Self::InAst>) -> Self::BodyOut {
+        let mut stmts = Vec::new();
+        for stmt in body.stmts {
+            stmts.push(self.trav_stmt(stmt));
+        }
+
+        let (ret, ret_ty) = self.trav_id(body.ret);
+        (Body { stmts, ret }, ret_ty)
     }
 
     // Expressions
@@ -870,12 +857,7 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
         self.idmap.insert(tensor.iv as *const _, iv_new);
         self.new_ids.push(iv_new);
 
-        let mut body = Vec::new();
-        for stmt in tensor.body {
-            body.push(self.trav_stmt(stmt));
-        }
-
-        let (ret, ret_ty) = self.trav_id(tensor.ret);
+        let (body, ret_ty) = self.trav_body(tensor.body);
 
         let result_ty = match leading_axes {
             Some(axes) => Self::tensor_result_type(ret_ty, axes),
@@ -885,7 +867,7 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
             },
         };
 
-        let tensor = Tensor { iv: iv_new, lb, ub, ret, body };
+        let tensor = Tensor { iv: iv_new, lb, ub, body };
         (tensor, result_ty)
     }
 

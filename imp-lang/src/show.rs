@@ -52,9 +52,7 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
             self.write(&id.name);
             self.write(";\n");
         }
-        for stmt in &fundef.body {
-            self.visit_stmt(stmt);
-        }
+        self.visit_body(&fundef.body);
         self.depth -= 1;
 
         self.write("}");
@@ -66,12 +64,19 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
         self.write(&format!(" {}, ", arg.id));
     }
 
-    fn visit_stmt(&mut self, stmt: &Stmt<'ast, Self::Ast>) {
-        match stmt {
-            Stmt::Assign(n) => self.visit_assign(n),
-            Stmt::Return(n) => self.visit_return(n),
+    fn visit_body(&mut self, body: &Body<'ast, Self::Ast>) {
+        self.write("{");
+        self.depth += 1;
+
+        for stmt in &body.stmts {
+            self.visit_stmt(stmt);
         }
-        self.write(";\n");
+        self.indent();
+        self.write("return ");
+        Self::Ast::visit_operand(self, &body.ret);
+
+        self.depth -= 1;
+        self.write("}");
     }
 
     fn visit_assign(&mut self, assign: &Assign<'ast, Self::Ast>) {
@@ -79,12 +84,7 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
         self.write(&assign.lhs.name);
         self.write(" = ");
         self.visit_expr(assign.expr);
-    }
-
-    fn visit_return(&mut self, ret: &Return<'ast, Self::Ast>) {
-        self.indent();
-        self.write("return ");
-        self.visit_id(&ret.id);
+        self.write(";\n");
     }
 
     fn visit_cond(&mut self, cond: &Cond<'ast, Self::Ast>) {
@@ -145,18 +145,7 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
 
     fn visit_tensor(&mut self, tensor: &Tensor<'ast, Self::Ast>) {
         self.write("{\n");
-
-        self.depth += 1;
-        for stmt in &tensor.body {
-            self.visit_stmt(stmt);
-        }
-
-        self.indent();
-        Ast::visit_operand(self, &tensor.ret);
-        self.write("\n");
-
-        self.depth -= 1;
-
+        self.visit_body(&tensor.body);
         self.indent();
         self.write("| ");
 

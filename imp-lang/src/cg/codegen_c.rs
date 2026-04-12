@@ -149,6 +149,57 @@ impl CompileC {
         self.push_line("}");
     }
 
+    fn emit_return(&mut self, ret: Id<'_, TypedAst>) {
+        let name = self.render_expr(&Expr::Id(ret));
+        let declared_ty = self.ret_type.clone().unwrap_or_else(|| self.id_type(&ret));
+        let value_ty = self.id_type(&ret);
+
+        if matches!(declared_ty.shape, TypePattern::Any) {
+            let dyn_ty = dyn_ctype(&declared_ty.ty);
+            self.push_line(&format!("if ({name}.is_array) {{"));
+            self.indent += 1;
+            self.push_line(&format!("{dyn_ty} out = {name};"));
+            self.push_line(&format!(
+                "out.data.array = imp_clone_array_raw({name}.data.array, sizeof({}));",
+                base_ctype(&declared_ty)
+            ));
+            self.push_line("return out;");
+            self.indent -= 1;
+            self.push_line("}");
+            self.push_line(&format!("return {};", name));
+        } else if declared_ty.is_array() {
+            if matches!(value_ty.shape, TypePattern::Any) {
+                self.push_line(&format!("if (!{name}.is_array) {{"));
+                self.indent += 1;
+                self.push_line("fprintf(stderr, \"return type mismatch: expected array\\n\");");
+                self.push_line("abort();");
+                self.indent -= 1;
+                self.push_line("}");
+                self.push_line(&format!(
+                    "return imp_clone_array_raw({name}.data.array, sizeof({}));",
+                    base_ctype(&declared_ty)
+                ));
+            } else {
+                self.push_line(&format!(
+                    "return imp_clone_array_raw({}, sizeof({}));",
+                    name,
+                    base_ctype(&declared_ty)
+                ));
+            }
+        } else {
+            if matches!(value_ty.shape, TypePattern::Any) {
+                self.push_line(&format!("if ({name}.is_array) {{"));
+                self.indent += 1;
+                self.push_line("fprintf(stderr, \"return type mismatch: expected scalar\\n\");");
+                self.push_line("abort();");
+                self.indent -= 1;
+                self.push_line("}");
+                self.push_line(&format!("return {name}.data.scalar;"));
+            } else {
+                self.push_line(&format!("return {};", name));
+            }
+        }
+    }
 }
 
 const HEADER: &str = r#"
@@ -238,14 +289,19 @@ impl<'ast> Visit<'ast> for CompileC {
         for assign in &fundef.shape_prelude {
             self.visit_assign(assign);
         }
-        for stmt in &fundef.body {
+        for stmt in &fundef.body.stmts {
             self.visit_stmt(stmt);
         }
+        self.emit_return(fundef.body.ret);
         self.indent -= 1;
 
         self.push_line("}");
         self.ret_type = None;
     }
+
+    fn visit_body(&mut self, _body: &Body<'ast, Self::Ast>) {
+        unreachable!()
+     }
 
     fn visit_assign(&mut self, assign: &Assign<'ast, Self::Ast>) {
         if let Expr::Tensor(tensor) = assign.expr {
@@ -271,58 +327,6 @@ impl<'ast> Visit<'ast> for CompileC {
 
         let rhs = self.render_expr(assign.expr);
         self.push_line(&format!("{} {} = {};", full_ctype(&assign.lhs.ty), assign.lhs.name, rhs));
-    }
-
-    fn visit_return(&mut self, ret: &Return<'ast, Self::Ast>) {
-        let name = self.render_expr(&Expr::Id(ret.id));
-        let declared_ty = self.ret_type.clone().unwrap_or_else(|| self.id_type(&ret.id));
-        let value_ty = self.id_type(&ret.id);
-
-        if matches!(declared_ty.shape, TypePattern::Any) {
-            let dyn_ty = dyn_ctype(&declared_ty.ty);
-            self.push_line(&format!("if ({name}.is_array) {{"));
-            self.indent += 1;
-            self.push_line(&format!("{dyn_ty} out = {name};"));
-            self.push_line(&format!(
-                "out.data.array = imp_clone_array_raw({name}.data.array, sizeof({}));",
-                base_ctype(&declared_ty)
-            ));
-            self.push_line("return out;");
-            self.indent -= 1;
-            self.push_line("}");
-            self.push_line(&format!("return {};", name));
-        } else if declared_ty.is_array() {
-            if matches!(value_ty.shape, TypePattern::Any) {
-                self.push_line(&format!("if (!{name}.is_array) {{"));
-                self.indent += 1;
-                self.push_line("fprintf(stderr, \"return type mismatch: expected array\\n\");");
-                self.push_line("abort();");
-                self.indent -= 1;
-                self.push_line("}");
-                self.push_line(&format!(
-                    "return imp_clone_array_raw({name}.data.array, sizeof({}));",
-                    base_ctype(&declared_ty)
-                ));
-            } else {
-                self.push_line(&format!(
-                    "return imp_clone_array_raw({}, sizeof({}));",
-                    name,
-                    base_ctype(&declared_ty)
-                ));
-            }
-        } else {
-            if matches!(value_ty.shape, TypePattern::Any) {
-                self.push_line(&format!("if ({name}.is_array) {{"));
-                self.indent += 1;
-                self.push_line("fprintf(stderr, \"return type mismatch: expected scalar\\n\");");
-                self.push_line("abort();");
-                self.indent -= 1;
-                self.push_line("}");
-                self.push_line(&format!("return {name}.data.scalar;"));
-            } else {
-                self.push_line(&format!("return {};", name));
-            }
-        }
     }
 
     fn visit_cond(&mut self, cond: &Cond<'ast, Self::Ast>) {
@@ -381,11 +385,11 @@ impl<'ast> Visit<'ast> for CompileC {
             "ImpArrayRaw {iv_name} = (ImpArrayRaw) {{ .len = {rank}, .shp = {iv_name}_shp_arr_{t_uid}, .dim = 1, .data = (void *){iv_name}_data_{t_uid} }};"
         ));
 
-        for stmt in &fold.selection.body {
+        for stmt in &fold.selection.body.stmts {
             self.visit_stmt(stmt);
         }
 
-        let sel_expr = self.render_expr(&Expr::Id(fold.selection.ret));
+        let sel_expr = self.render_expr(&Expr::Id(fold.selection.body.ret));
 
         let (fold_name, call_args) = match &fold.foldfun {
             FoldFun::Name(id) => {
@@ -527,12 +531,12 @@ impl<'ast> Visit<'ast> for CompileC {
         self.push_line(&format!("size_t {iv_name}_flat = {flat_expr};"));
 
         // Body statements.
-        for stmt in &tensor.body {
+        for stmt in &tensor.body.stmts {
             self.visit_stmt(stmt);
         }
 
         // Store element into the flat result buffer.
-        let mut ret = self.render_expr(&Expr::Id(tensor.ret));
+        let mut ret = self.render_expr(&Expr::Id(tensor.body.ret));
         if rank == 1 && ret == iv_name {
             ret = format!("(({iv_elem}*){iv_name}.data)[0]");
         }

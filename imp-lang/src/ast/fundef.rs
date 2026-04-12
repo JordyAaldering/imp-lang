@@ -8,7 +8,7 @@ pub struct Fundef<'ast, Ast: AstConfig> {
     pub shape_prelude: Vec<Assign<'ast, Ast>>,
     pub shape_facts: ShapeFacts,
     pub decs: Vec<&'ast VarInfo<'ast, Ast>>,
-    pub body: Vec<Stmt<'ast, Ast>>,
+    pub body: Body<'ast, Ast>,
 }
 
 #[derive(Clone, Debug)]

@@ -27,7 +27,6 @@ pub enum Token {
     Semicolon,
     // Keywords
     Fn,
-    Return,
     If, Else,
     // Operators
     Add, Sub, Mul, Div,
@@ -179,8 +178,6 @@ impl<'source> Iterator for Lexer<'source> {
             F64Type
         } else if self.match_str("fn") {
             Fn
-        } else if self.match_str("return") {
-            Return
         } else if self.match_str("if") {
             If
         } else if self.match_str("else") {

@@ -87,18 +87,12 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
             for stmt in new_assigns {
                 match stmt {
                     Stmt::Assign(assign) => shape_prelude.push(assign),
-                    Stmt::Return(_) => unreachable!("shape prelude lowering emitted return"),
                 }
             }
             shape_prelude.push(assign);
         }
 
-        let mut body = Vec::new();
-        for stmt in fundef.body {
-            let stmt = self.trav_stmt(stmt);
-            body.extend(mem::take(&mut self.new_assigns));
-            body.push(stmt);
-        }
+        let body = self.trav_body(fundef.body);
 
         self.pop_env();
 
@@ -124,9 +118,19 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
         Assign { lhs: lhs_lvis, expr: rhs_expr }
     }
 
-    fn trav_return(&mut self, ret: Return<'ast, Self::InAst>) -> Return<'ast, Self::OutAst> {
-        let id = self.trav_id(ret.id);
-        Return { id }
+    fn trav_body(&mut self, body: Body<'ast, Self::InAst>) -> Body<'ast, Self::OutAst> {
+        let mut stmts = Vec::new();
+
+        for stmt in body.stmts {
+            let stmt = self.trav_stmt(stmt);
+            stmts.extend(mem::take(&mut self.new_assigns));
+            stmts.push(stmt);
+        }
+
+        let ret = self.trav_expr((*body.ret).clone());
+        stmts.extend(mem::take(&mut self.new_assigns));
+
+        Body { stmts, ret }
     }
 
     type ExprOut = Id<'ast, Self::OutAst>;
@@ -256,22 +260,14 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
         self.bind_env(tensor.iv.name.clone(), Id::Var(tensor.iv.name.clone()));
         let old_assigns = mem::take(&mut self.new_assigns);
 
-        let mut body = Vec::new();
-        for stmt in tensor.body {
-            let stmt = self.trav_stmt(stmt);
-            body.extend(mem::take(&mut self.new_assigns));
-            body.push(stmt);
-        }
-
-        let ret = self.trav_expr((*tensor.ret).clone());
-        body.extend(mem::take(&mut self.new_assigns));
+        let body = self.trav_body(tensor.body);
 
         self.new_assigns = old_assigns;
         self.pop_env();
 
         let iv = self.alloc_lvis(tensor.iv.name.clone(), tensor.iv.ty.clone());
 
-        Tensor { body, ret, iv, lb, ub }
+        Tensor { body, iv, lb, ub }
     }
 
     fn trav_fold(&mut self, fold: Fold<'ast, Self::InAst>) -> Self::FoldOut {

@@ -29,14 +29,16 @@ impl<'ast> Rewrite<'ast> for DeadCodeRemoval {
 
     fn rewrite_fundef(&mut self, fundef: &mut Fundef<'ast, Self::Ast>) {
         self.used.clear();
+        self.rewrite_body(&mut fundef.body);
+        fundef.decs.retain(|lvis| self.used.contains(&Self::ptr(lvis)));
+    }
 
-        let mut kept_rev = Vec::with_capacity(fundef.body.len());
-        for stmt in mem::take(&mut fundef.body).into_iter().rev() {
+    fn rewrite_body(&mut self, body: &mut Body<'ast, Self::Ast>) {
+        self.rewrite_id(body.ret);
+
+        let mut kept_rev = Vec::with_capacity(body.stmts.len());
+        for stmt in mem::take(&mut body.stmts).into_iter().rev() {
             match stmt {
-                Stmt::Return(mut ret) => {
-                    self.rewrite_return(&mut ret);
-                    kept_rev.push(Stmt::Return(ret));
-                }
                 Stmt::Assign(mut assign) => {
                     if self.used.contains(&Self::ptr(assign.lhs)) {
                         self.rewrite_assign(&mut assign);
@@ -47,8 +49,7 @@ impl<'ast> Rewrite<'ast> for DeadCodeRemoval {
         }
 
         kept_rev.reverse();
-        fundef.body = kept_rev;
-        fundef.decs.retain(|lvis| self.used.contains(&Self::ptr(lvis)));
+        body.stmts = kept_rev;
     }
 
     fn rewrite_cond(&mut self, mut cond: Cond<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
@@ -75,30 +76,13 @@ impl<'ast> Rewrite<'ast> for DeadCodeRemoval {
     fn rewrite_tensor(&mut self, mut tensor: Tensor<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
         let outer_used = mem::take(&mut self.used);
 
-        self.rewrite_id(Id::Var(tensor.iv));
-        self.rewrite_id(tensor.ret);
         if let Some(lb) = tensor.lb {
             self.rewrite_id(lb);
         }
         self.rewrite_id(tensor.ub);
+        self.rewrite_id(Id::Var(tensor.iv));
 
-        let mut kept_rev = Vec::with_capacity(tensor.body.len());
-        for stmt in mem::take(&mut tensor.body).into_iter().rev() {
-            match stmt {
-                Stmt::Return(mut ret) => {
-                    self.rewrite_return(&mut ret);
-                    kept_rev.push(Stmt::Return(ret));
-                }
-                Stmt::Assign(mut assign) => {
-                    if self.used.contains(&Self::ptr(assign.lhs)) {
-                        self.rewrite_assign(&mut assign);
-                        kept_rev.push(Stmt::Assign(assign));
-                    }
-                }
-            }
-        }
-        kept_rev.reverse();
-        tensor.body = kept_rev;
+        self.rewrite_body(&mut tensor.body);
 
         self.used = outer_used;
         if let Some(lb) = &mut tensor.lb {

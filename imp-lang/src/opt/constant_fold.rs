@@ -35,9 +35,14 @@ impl<'ast> Rewrite<'ast> for ConstantFold {
     type Ast = TypedAst;
 
     fn rewrite_fundef(&mut self, fundef: &mut Fundef<'ast, Self::Ast>) {
-        for stmt in &mut fundef.body {
+        self.rewrite_body(&mut fundef.body);
+    }
+
+    fn rewrite_body(&mut self, body: &mut Body<'ast, Self::Ast>) {
+        for stmt in &mut body.stmts {
             self.rewrite_stmt(stmt);
         }
+        body.ret = self.rewrite_id(body.ret);
     }
 
     fn rewrite_assign(&mut self, assign: &mut Assign<'ast, Self::Ast>) {
