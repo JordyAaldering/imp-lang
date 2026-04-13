@@ -34,12 +34,12 @@ pub enum Token {
     Eq, Ne, Not,
     // Literals
     BoolValue(bool),
-    NatValue(i32),
-    I32Value(i32),
-    I64Value(i64),
+    NatValue(usize),
+    UsizeValue(usize),
     U32Value(u32),
     U64Value(u64),
-    UsizeValue(usize),
+    I32Value(i32),
+    I64Value(i64),
     RealValue(f32),
     F32Value(f32),
     F64Value(f64),
@@ -163,16 +163,16 @@ impl<'source> Iterator for Lexer<'source> {
             BoolValue(false)
         } else if self.match_str("bool") {
             BoolType
-        } else if self.match_str("i32") {
-            I32Type
-        } else if self.match_str("i64") {
-            I64Type
+        } else if self.match_str("usize") {
+            UsizeType
         } else if self.match_str("u32") {
             U32Type
         } else if self.match_str("u64") {
             U64Type
-        } else if self.match_str("usize") {
-            UsizeType
+        } else if self.match_str("i32") {
+            I32Type
+        } else if self.match_str("i64") {
+            I64Type
         } else if self.match_str("f32") {
             F32Type
         } else if self.match_str("f64") {
@@ -240,17 +240,11 @@ impl<'source> Iterator for Lexer<'source> {
                     let end_idx = self.current;
                     let s = &self.src[start_idx..end_idx];
 
-                    if self.match_str("i32") {
+                    if self.match_str("usize") {
                         if is_real {
                             NotANaturalNumber(s.to_string())
                         } else {
-                            I32Value(s.parse().unwrap())
-                        }
-                    } else if self.match_str("i64") {
-                        if is_real {
-                            NotANaturalNumber(s.to_string())
-                        } else {
-                            I64Value(s.parse().unwrap())
+                            UsizeValue(s.parse().unwrap())
                         }
                     } else if self.match_str("u32") {
                         if is_real {
@@ -264,11 +258,17 @@ impl<'source> Iterator for Lexer<'source> {
                         } else {
                             U64Value(s.parse().unwrap())
                         }
-                    } else if self.match_str("usize") {
+                    } else if self.match_str("i32") {
                         if is_real {
                             NotANaturalNumber(s.to_string())
                         } else {
-                            UsizeValue(s.parse().unwrap())
+                            I32Value(s.parse().unwrap())
+                        }
+                    } else if self.match_str("i64") {
+                        if is_real {
+                            NotANaturalNumber(s.to_string())
+                        } else {
+                            I64Value(s.parse().unwrap())
                         }
                     } else if self.match_str("f32") {
                         F32Value(s.parse().unwrap())

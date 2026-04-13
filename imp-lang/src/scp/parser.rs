@@ -260,12 +260,12 @@ impl<'src> Parser<'src> {
                 }
             }
             Token::BoolValue(v) => self.alloc_expr(Expr::Const(Const::Bool(v))),
-            Token::NatValue(v) => self.alloc_expr(Expr::Const(Const::I32(v))),
-            Token::I32Value(v) => self.alloc_expr(Expr::Const(Const::I32(v))),
-            Token::I64Value(v) => self.alloc_expr(Expr::Const(Const::I64(v))),
             Token::U32Value(v) => self.alloc_expr(Expr::Const(Const::U32(v))),
             Token::U64Value(v) => self.alloc_expr(Expr::Const(Const::U64(v))),
+            Token::NatValue(v) => self.alloc_expr(Expr::Const(Const::Usize(v))),
             Token::UsizeValue(v) => self.alloc_expr(Expr::Const(Const::Usize(v))),
+            Token::I32Value(v) => self.alloc_expr(Expr::Const(Const::I32(v))),
+            Token::I64Value(v) => self.alloc_expr(Expr::Const(Const::I64(v))),
             Token::RealValue(v) => self.alloc_expr(Expr::Const(Const::F32(v))),
             Token::F32Value(v) => self.alloc_expr(Expr::Const(Const::F32(v))),
             Token::F64Value(v) => self.alloc_expr(Expr::Const(Const::F64(v))),

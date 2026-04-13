@@ -107,7 +107,7 @@ fn @mul(usize[d>0:shp] a, usize[d>0:shp] b) -> usize[d>0:shp] {
 //
 
 fn iota(usize n) -> usize[n] {
-    { iv[[0usize]] | iv < [n] }
+    { iv[[0]] | iv < [n] }
 }
 
 //fn iota(usize[n] shp) -> usize[n:shp,n] {
@@ -153,7 +153,7 @@ fn sum(i32[d:shp] arr) -> i32 {
 }
 
 fn sum(usize[d:shp] arr) -> usize {
-    @fold(0usize, +, { arr[iv] | iv < shp })
+    @fold(0, +, { arr[iv] | iv < shp })
 }
 
 fn prod(i32[d:shp] arr) -> i32 {
@@ -161,7 +161,7 @@ fn prod(i32[d:shp] arr) -> i32 {
 }
 
 fn prod(usize[d:shp] arr) -> usize {
-    @fold(1usize, *, { arr[iv] | iv < shp })
+    @fold(1, *, { arr[iv] | iv < shp })
 }
 
 //
@@ -169,17 +169,17 @@ fn prod(usize[d:shp] arr) -> usize {
 //
 
 fn reverse(usize[n] shp) -> usize[n] {
-    { i = @selVxA([0usize], iv);
-      idx = @subSxS(@subSxS(n, 1usize), i);
+    { i = @selVxA([0], iv);
+      idx = @subSxS(@subSxS(n, 1), i);
       @selVxA([idx], shp)
     | iv < [n] }
 }
 
 fn cat(usize[n] a, usize[m] b) -> usize[nm] {
-    { if @ltSxS(iv[[0usize]], n) {
+    { if @ltSxS(iv[[0]], n) {
           a[iv]
       } else {
-          b[[@subSxS(iv[[0usize]],n)]]
+          b[[@subSxS(iv[[0]],n)]]
       }
     | iv < [n+m] }
 }
