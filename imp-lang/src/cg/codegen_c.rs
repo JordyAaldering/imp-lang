@@ -233,6 +233,7 @@ impl<'ast> Visit<'ast> for CompileC {
         for (_name, overloads) in &program.overloads {
             for (_sig, fundefs) in overloads {
                 for fundef in fundefs {
+                    self.output.push('\n');
                     self.emit_function_prototype(fundef);
                 }
             }
@@ -242,18 +243,18 @@ impl<'ast> Visit<'ast> for CompileC {
             let name = name.strip_prefix('@').unwrap_or(name).to_owned();
             for (sig, fundefs) in overloads {
                 if overloads.len() > 1 || fundefs.len() > 1 {
+                    self.output.push('\n');
                     self.emit_wrapper_prototype(&name, sig, &fundefs[0].ret_type.ty);
                 }
             }
         }
 
-        self.output.push('\n');
 
         for (_name, overloads) in &program.overloads {
             for (_sig, fundefs) in overloads {
                 for fundef in fundefs {
-                    self.visit_fundef(fundef);
                     self.output.push('\n');
+                    self.visit_fundef(fundef);
                 }
             }
         }
@@ -262,8 +263,8 @@ impl<'ast> Visit<'ast> for CompileC {
             let name = name.strip_prefix('@').unwrap_or(name).to_owned();
             for (sig, fundefs) in overloads {
                 if overloads.len() > 1 || fundefs.len() > 1 {
-                    self.emit_wrapper_function(&name, sig, fundefs);
                     self.output.push('\n');
+                    self.emit_wrapper_function(&name, sig, fundefs);
                 }
             }
         }
@@ -283,9 +284,6 @@ impl<'ast> Visit<'ast> for CompileC {
         ));
 
         self.indent += 1;
-        for arg in &fundef.args {
-            self.push_line(&format!("(void){};", arg.id));
-        }
         for assign in &fundef.shape_prelude {
             self.visit_assign(assign);
         }

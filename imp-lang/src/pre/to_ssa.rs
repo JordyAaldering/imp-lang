@@ -66,9 +66,7 @@ impl<'ast> Traverse<'ast> for ToSsa<'ast> {
     fn trav_fundef(&mut self, fundef: Fundef<'ast, FlattenedAst>) -> Fundef<'ast, UntypedAst> {
         self.push_env();
 
-        for (i, arg) in fundef.args.iter().enumerate() {
-            self.bind_env(arg.id.clone(), Id::Arg(i));
-        }
+        let args = self.trav_fargs(fundef.args);
 
         let mut shape_prelude = Vec::new();
         for assign in fundef.shape_prelude {
@@ -88,13 +86,18 @@ impl<'ast> Traverse<'ast> for ToSsa<'ast> {
 
         Fundef {
             name: fundef.name,
-            args: fundef.args,
+            args,
             shape_prelude,
             shape_facts: fundef.shape_facts,
             decs: mem::take(&mut self.decs),
             body,
             ret_type: fundef.ret_type,
         }
+    }
+
+    fn trav_farg(&mut self, arg: Farg, idx: usize) -> Farg {
+        self.bind_env(arg.id.clone(), Id::Arg(idx));
+        arg
     }
 
     fn trav_body(&mut self, body: Body<'ast, FlattenedAst>) -> Body<'ast, UntypedAst> {

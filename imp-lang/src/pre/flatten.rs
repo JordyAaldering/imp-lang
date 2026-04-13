@@ -141,13 +141,15 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
     fn trav_expr(&mut self, expr: Expr<'ast, Self::InAst>) -> Self::ExprOut {
         use Expr::*;
         let expr = match expr {
+            Id(n) => {
+                return self.trav_id(n);
+            }
             Cond(n) => Cond(self.trav_cond(n)),
             Call(n) => Call(self.trav_call(n)),
             PrfCall(n) => PrfCall(self.trav_prf_call(n)),
             Fold(n) => Fold(self.trav_fold(n)),
             Tensor(n) => Tensor(self.trav_tensor(n)),
             Array(n) => Array(self.trav_array(n)),
-            Id(n) => Id(self.trav_id(n)),
             Const(c) => Const(c),
         };
         self.emit_expr(expr)
@@ -288,11 +290,7 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
 
         let selection = self.trav_tensor(fold.selection);
 
-        Fold {
-            neutral,
-            foldfun,
-            selection,
-        }
+        Fold { neutral, foldfun, selection }
     }
 
     fn trav_array(&mut self, array: Array<'ast, Self::InAst>) -> Self::ArrayOut {

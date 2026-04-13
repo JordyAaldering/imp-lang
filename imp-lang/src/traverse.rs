@@ -271,13 +271,13 @@ pub trait Traverse<'ast> {
 
     fn trav_fargs(&mut self, args: Vec<Farg>) -> Vec<Farg> {
         let mut new_args = Vec::new();
-        for arg in args {
-            new_args.push(self.trav_farg(arg));
+        for (idx, arg) in args.into_iter().enumerate() {
+            new_args.push(self.trav_farg(arg, idx));
         }
         new_args
     }
 
-    fn trav_farg(&mut self, arg: Farg) -> Farg {
+    fn trav_farg(&mut self, arg: Farg, _idx: usize) -> Farg {
         arg
     }
 

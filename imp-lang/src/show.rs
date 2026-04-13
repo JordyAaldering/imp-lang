@@ -45,6 +45,15 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
         self.write(" {\n");
 
         self.depth += 1;
+
+        self.indent();
+        self.write("// Shape prelude:\n");
+        for stmt in &fundef.shape_prelude {
+            self.visit_assign(stmt);
+        }
+
+        self.indent();
+        self.write("// Variable declarations:\n");
         for id in &fundef.decs {
             self.indent();
             Self::Ast::visit_type(self, &id.ty);
@@ -52,6 +61,10 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
             self.write(&id.name);
             self.write(";\n");
         }
+
+        self.indent();
+        self.write("// Function body:\n");
+
         self.depth -= 1;
 
         self.visit_body(&fundef.body);

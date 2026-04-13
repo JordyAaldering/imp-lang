@@ -1,0 +1,3 @@
+fn genarray(usize[n] shp, usize[n] unused, i32 v) -> i32[n:shp] {
+    { v | iv < shp }
+}
