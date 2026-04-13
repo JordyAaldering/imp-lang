@@ -63,7 +63,7 @@ fn @add(usize[d>0:shp] a, usize[d>0:shp] b) -> usize[d>0:shp] {
 }
 
 fn sum(i32[d:shp] arr) -> i32 {
-    @fold(0i32, +, { @selVxA(iv, arr) | iv < shp })
+    fold(0i32, +, { @selVxA(iv, arr) | iv < shp })
 }
 
 fn cat(usize[n] a, usize[m] b) -> usize[nm] {
@@ -85,7 +85,7 @@ fn @sel(usize[o] idx, i32[o:oshp,i:ishp] arr) -> i32[i:ishp] {
 
 fn sumlast(i32[d:shp,n] arr) -> i32[n] {
     neutral = { 0i32 | iv < [n] };
-    @fold(neutral, +, { arr[iv] | iv < shp })
+    fold(neutral, +, { arr[iv] | iv < shp })
 }
 
 fn four() -> usize[4] {

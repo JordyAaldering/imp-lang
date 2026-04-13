@@ -1,7 +1,7 @@
 # Fold syntax
 
 ```imp
-x = @fold(neutral, foldfun, { expr(iv) | 0*ub <= iv < ub });
+x = fold(neutral, foldfun, { expr(iv) | 0*ub <= iv < ub });
 
 where
 
@@ -13,14 +13,14 @@ x :: T[d:shp]
 
 ```
 fn sum(i32[d:shp] arr) -> i32 {
-    return @fold(0i32, +, { arr[iv] | 0*shp <= iv < shp });
+    return fold(0i32, +, { arr[iv] | 0*shp <= iv < shp });
     //                 |     |
     //                 |     Scalar selection (result is i32)
     //                 Scalar-scalar addition
 }
 
 fn sumlast(i32[d:shp,n] arr) -> i32[n] {
-    return @fold(zeros(n), +, { arr[iv] | 0*shp <= iv < shp });
+    return fold(zeros(n), +, { arr[iv] | 0*shp <= iv < shp });
     //                     |     |
     //                     |     Planar selection (result is i32[n])
     //                     Vector-vector addition
@@ -45,7 +45,7 @@ fn frt(point p, point q, point u, point v) -> point {
 
 fn farthest(point p, point q, point[n] ps) -> point {
     neutral = p; // p has distance 0 so will never be the farthest
-    return @fold(neutral, frt(p, q, _, _), { ps[iv] | [0] <= iv < [n] });
+    return fold(neutral, frt(p, q, _, _), { ps[iv] | [0] <= iv < [n] });
 }
 ```
 

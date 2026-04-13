@@ -245,13 +245,8 @@ impl<'src> Parser<'src> {
         let (token, span_start) = self.next()?;
 
         let mut left = match token {
-            Token::Prf(id) => {
-                if id == "fold" {
-                    self.parse_fold()?
-                } else {
-                    self.parse_prf_call(id, span_start)?
-                }
-            }
+            Token::Fold => self.parse_fold()?,
+            Token::Prf(id) => self.parse_prf_call(id, span_start)?,
             Token::Identifier(id) => {
                 if let Some((Token::LParen, _)) = self.lexer.peek() {
                     self.parse_call(id)?

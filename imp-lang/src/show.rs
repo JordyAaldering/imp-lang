@@ -134,7 +134,7 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
     }
 
     fn visit_fold(&mut self, fold: &Fold<'ast, Self::Ast>) {
-        self.write("@fold(");
+        self.write("fold(");
         Ast::visit_operand(self, &fold.neutral);
         self.write(", ");
         match &fold.foldfun {

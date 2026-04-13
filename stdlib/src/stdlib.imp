@@ -149,19 +149,19 @@ fn transpose(usize[d:shp] arr) -> usize[d:shp_t] {
 //
 
 fn sum(i32[d:shp] arr) -> i32 {
-    @fold(0i32, +, { arr[iv] | iv < shp })
+    fold(0i32, +, { arr[iv] | iv < shp })
 }
 
 fn sum(usize[d:shp] arr) -> usize {
-    @fold(0, +, { arr[iv] | iv < shp })
+    fold(0, +, { arr[iv] | iv < shp })
 }
 
 fn prod(i32[d:shp] arr) -> i32 {
-    @fold(1i32, *, { arr[iv] | iv < shp })
+    fold(1i32, *, { arr[iv] | iv < shp })
 }
 
 fn prod(usize[d:shp] arr) -> usize {
-    @fold(1, *, { arr[iv] | iv < shp })
+    fold(1, *, { arr[iv] | iv < shp })
 }
 
 //
