@@ -80,25 +80,12 @@ fn cat(usize[n] a, usize[m] b) -> usize[nm] {
 
 // Planar selection (i.e., non-scalar result)
 fn @sel(usize[o] idx, i32[o:oshp,i:ishp] arr) -> i32[i:ishp] {
-    // We need helpers for this in the future, but for now this is fine.
-    ishp0 = { (0) | [0] <= iv < [i] };
-
-    { @selVxA(cat(idx, iv), arr) | ishp0 <= iv < ishp }
+    { @selVxA(cat(idx, iv), arr) | iv < ishp }
 }
 
 fn sumlast(i32[d:shp,n] arr) -> i32[n] {
-    // We need helpers for this in the future, but for now this is fine.
-    shp0 = { 0 | [0] <= iv < [d] };
-    neutral = { 0i32 | [0] <= iv < [n] };
-
-    // neutral: n-element vector
-    // arr: rank-d+1 array
-    // iv and shp: d-element vectors
-    // arr[iv]: rank-1 array, i.e. a vector, namely an n-element vector
-    // Thus, + applies on n-element vectors, and returns an n-element vector
-    // Thus, the result of the fold is an n-element vector
-
-    @fold(neutral, +, { arr[iv] | shp0 <= iv < shp })
+    neutral = { 0i32 | iv < [n] };
+    @fold(neutral, +, { arr[iv] | iv < shp })
 }
 
 fn four() -> usize[4] {
