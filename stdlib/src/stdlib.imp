@@ -131,6 +131,20 @@ fn genarray(usize[n] shp, usize v) -> usize[n:shp] {
 //}
 
 //
+// Array transformations
+//
+
+fn transpose(i32[d:shp] arr) -> i32[d:shp_t] {
+    shp_t = reverse(shp);
+    { @selVxA(reverse(iv), arr) | iv < shp_t }
+}
+
+fn transpose(usize[d:shp] arr) -> usize[d:shp_t] {
+    shp_t = reverse(shp);
+    { @selVxA(reverse(iv), arr) | iv < shp_t }
+}
+
+//
 // Array reductions
 //
 
@@ -151,8 +165,15 @@ fn prod(usize[d:shp] arr) -> usize {
 }
 
 //
-// Helper functions
+// Index helper functions
 //
+
+fn reverse(usize[n] shp) -> usize[n] {
+    { i = @selVxA([0usize], iv);
+      idx = @subSxS(@subSxS(n, 1usize), i);
+      @selVxA([idx], shp)
+    | iv < [n] }
+}
 
 fn cat(usize[n] a, usize[m] b) -> usize[nm] {
     { if @ltSxS(iv[[0usize]], n) {
