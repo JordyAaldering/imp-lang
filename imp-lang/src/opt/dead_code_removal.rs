@@ -45,11 +45,19 @@ impl<'ast> Rewrite<'ast> for DeadCodeRemoval {
                         kept_rev.push(Stmt::Assign(assign));
                     }
                 }
+                Stmt::Printf(mut printf) => {
+                    self.rewrite_printf(&mut printf);
+                    kept_rev.push(Stmt::Printf(printf));
+                }
             }
         }
 
         kept_rev.reverse();
         body.stmts = kept_rev;
+    }
+
+    fn rewrite_printf(&mut self, printf: &mut Printf<'ast, Self::Ast>) {
+        printf.id = self.rewrite_id(printf.id);
     }
 
     fn rewrite_cond(&mut self, mut cond: Cond<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {

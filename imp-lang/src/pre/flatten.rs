@@ -86,7 +86,8 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
             let new_assigns = mem::take(&mut self.new_assigns);
             for stmt in new_assigns {
                 match stmt {
-                    Stmt::Assign(assign) => shape_prelude.push(assign),
+                    Stmt::Assign(n) => shape_prelude.push(n),
+                    Stmt::Printf(_) => unreachable!(),
                 }
             }
             shape_prelude.push(assign);
@@ -116,6 +117,11 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
         self.bind_env(lhs_name.clone(), Id::Var(lhs_name));
 
         Assign { lhs: lhs_lvis, expr: rhs_expr }
+    }
+
+    fn trav_printf(&mut self, printf: Printf<'ast, Self::InAst>) -> Printf<'ast, Self::OutAst> {
+        let id = self.trav_id(printf.id);
+        Printf { id }
     }
 
     fn trav_body(&mut self, body: Body<'ast, Self::InAst>) -> Body<'ast, Self::OutAst> {

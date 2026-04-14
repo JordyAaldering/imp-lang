@@ -74,7 +74,8 @@ impl<'ast> Traverse<'ast> for ToSsa<'ast> {
             let new_assigns = mem::take(&mut self.new_assigns);
             for stmt in new_assigns {
                 match stmt {
-                    Stmt::Assign(assign) => shape_prelude.push(assign),
+                    Stmt::Assign(n) => shape_prelude.push(n),
+                    Stmt::Printf(_) => unreachable!(),
                 }
             }
             shape_prelude.push(assign);
@@ -128,6 +129,11 @@ impl<'ast> Traverse<'ast> for ToSsa<'ast> {
         self.decs.push(lvis);
 
         Assign { lhs: lvis, expr }
+    }
+
+    fn trav_printf(&mut self, printf: Printf<'ast, Self::InAst>) -> Printf<'ast, Self::OutAst> {
+        let id = self.trav_id(printf.id);
+        Printf { id }
     }
 
     fn trav_expr(&mut self, expr: Expr<'ast, Self::InAst>) -> Self::ExprOut {

@@ -162,6 +162,12 @@ impl<'src> Parser<'src> {
                 let lhs = self.alloc_lvis(lhs, None);
                 Stmt::Assign(Assign { lhs, expr })
             }
+            Token::Printf => {
+                self.expect(Token::LParen)?;
+                let (id, _) = self.parse_id()?;
+                self.expect(Token::RParen)?;
+                Stmt::Printf(Printf { id: Id::Var(id) })
+            },
             _ => {
                 return Err(ParseError::ExpectedStatement(token, span));
             }

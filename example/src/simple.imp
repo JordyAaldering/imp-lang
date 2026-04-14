@@ -63,6 +63,7 @@ fn @add(usize[d>0:shp] a, usize[d>0:shp] b) -> usize[d>0:shp] {
 }
 
 fn sum(i32[d:shp] arr) -> i32 {
+    debug_print(arr);
     fold(0i32, +, { @selVxA(iv, arr) | iv < shp })
 }
 

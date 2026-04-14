@@ -51,12 +51,18 @@ pub trait Visit<'ast> {
     }
 
     fn visit_stmt(&mut self, stmt: &Stmt<'ast, Self::Ast>) {
+        use Stmt::*;
         match stmt {
-            Stmt::Assign(assign) => self.visit_assign(assign),
+            Assign(n) => self.visit_assign(n),
+            Printf(n) => self.visit_printf(n),
         }
     }
 
     fn visit_assign(&mut self, _assign: &Assign<'ast, Self::Ast>) { }
+
+    fn visit_printf(&mut self, printf: &Printf<'ast, Self::Ast>) {
+        self.visit_id(&printf.id);
+    }
 
     // Expressions
 
@@ -170,14 +176,20 @@ pub trait Rewrite<'ast> {
     fn rewrite_body(&mut self, body: &mut Body<'ast, Self::Ast>);
 
     fn rewrite_stmt(&mut self, stmt: &mut Stmt<'ast, Self::Ast>) {
+        use Stmt::*;
         match stmt {
-            Stmt::Assign(assign) => self.rewrite_assign(assign),
+            Assign(n) => self.rewrite_assign(n),
+            Printf(n) => self.rewrite_printf(n),
         }
     }
 
     fn rewrite_assign(&mut self, assign: &mut Assign<'ast, Self::Ast>) {
         let new_expr = self.rewrite_expr((*assign.expr).clone());
         assign.expr = Box::leak(Box::new(new_expr));
+    }
+
+    fn rewrite_printf(&mut self, printf: &mut Printf<'ast, Self::Ast>) {
+        printf.id = self.rewrite_id(printf.id.clone());
     }
 
     // Expressions
@@ -295,10 +307,13 @@ pub trait Traverse<'ast> {
         use Stmt::*;
         match stmt {
             Assign(n) => Assign(self.trav_assign(n)),
+            Printf(n) => Printf(self.trav_printf(n)),
         }
     }
 
     fn trav_assign(&mut self, assign: Assign<'ast, Self::InAst>) -> Assign<'ast, Self::OutAst>;
+
+    fn trav_printf(&mut self, printf: Printf<'ast, Self::InAst>) -> Printf<'ast, Self::OutAst>;
 
     // Expressions
 

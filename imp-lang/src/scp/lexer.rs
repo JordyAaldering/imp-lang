@@ -29,6 +29,7 @@ pub enum Token {
     Fn,
     Fold,
     If, Else,
+    Printf,
     // Operators
     Add, Sub, Mul, Div,
     Lt, Le, Gt, Ge,
@@ -44,7 +45,6 @@ pub enum Token {
     RealValue(f32),
     F32Value(f32),
     F64Value(f64),
-    String(String),
     /// `@` is used as a prefix for primitive function calls
     Prf(String),
     Identifier(String),
@@ -187,6 +187,8 @@ impl<'source> Iterator for Lexer<'source> {
             If
         } else if self.match_str("else") {
             Else
+        } else if self.match_str("debug_print") {
+            Printf
         } else {
             match self.next_char()? {
                 // Symbols
@@ -215,17 +217,6 @@ impl<'source> Iterator for Lexer<'source> {
                 '!' if self.match_char('=') => Ne,
                 '!' => Not,
                 '=' => Assign,
-                '"' => {
-                    while self.peek_char().is_some_and(|c| c != '"') {
-                        self.current += 1;
-                        self.col += 1;
-                    }
-
-                    let end_idx = self.current;
-                    self.current += 1; // Skip the closing quote
-                    self.col += 1;
-                    String(self.src[start_idx + 1..end_idx].to_string())
-                }
                 // Primitive function call
                 '@' => {
                     while self.peek_char().is_some_and(|c| c.is_ascii_alphanumeric() || c == '_') {

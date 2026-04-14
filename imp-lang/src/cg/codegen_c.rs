@@ -327,6 +327,11 @@ impl<'ast> Visit<'ast> for CompileC {
         self.push_line(&format!("{} {} = {};", full_ctype(&assign.lhs.ty), assign.lhs.name, rhs));
     }
 
+    fn visit_printf(&mut self, printf: &Printf<'ast, Self::Ast>) {
+        let id = self.nameof(&printf.id);
+        self.push_line(&format!("printf(\"Hello, {}\\n\");", id));
+    }
+
     fn visit_cond(&mut self, cond: &Cond<'ast, Self::Ast>) {
         if cond.then_branch.stmts.is_empty() && cond.else_branch.stmts.is_empty() {
             let c = self.nameof(&cond.cond);

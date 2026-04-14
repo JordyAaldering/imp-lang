@@ -479,6 +479,11 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
         Assign { lhs: new_lvis, expr: expr_ref }
     }
 
+    fn trav_printf(&mut self, printf: Printf<'ast, Self::InAst>) -> Printf<'ast, Self::OutAst> {
+        let (id, _) = self.trav_id(printf.id);
+        Printf { id }
+    }
+
     type BodyOut = (Body<'ast, Self::OutAst>, Type);
 
     fn trav_body(&mut self, body: Body<'ast, Self::InAst>) -> Self::BodyOut {

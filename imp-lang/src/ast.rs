@@ -6,6 +6,7 @@ mod shapefact;
 mod body;
 mod stmt;
 mod assign;
+mod printf;
 // Expressions
 mod expr;
 mod cond;
@@ -28,6 +29,7 @@ pub use shapefact::*;
 pub use body::*;
 pub use stmt::*;
 pub use assign::*;
+pub use printf::*;
 // Expressions
 pub use expr::*;
 pub use cond::*;
