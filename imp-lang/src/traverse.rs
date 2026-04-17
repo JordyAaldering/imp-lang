@@ -1,4 +1,5 @@
-use std::collections::HashMap;
+use std::{cell::RefCell, collections::HashMap};
+use typed_arena::Arena;
 
 use crate::ast::*;
 
@@ -11,6 +12,7 @@ pub trait Visit<'ast> {
         for (_, groups) in &program.overloads {
             for (_, fundefs) in groups {
                 for fundef in fundefs {
+                    let fundef = fundef.borrow();
                     self.visit_fundef(&fundef);
                 }
             }
@@ -143,7 +145,8 @@ pub trait Rewrite<'ast> {
         for groups in program.overloads.values_mut() {
             for fundefs in groups.values_mut() {
                 for fundef in fundefs {
-                    self.rewrite_fundef(fundef);
+                    let mut fundef = fundef.borrow_mut();
+                    self.rewrite_fundef(&mut fundef);
                 }
             }
         }
@@ -180,8 +183,8 @@ pub trait Rewrite<'ast> {
     }
 
     fn rewrite_assign(&mut self, assign: &mut Assign<'ast, Self::Ast>) {
-        let new_expr = self.rewrite_expr((*assign.expr).clone());
-        assign.expr = Box::leak(Box::new(new_expr));
+        let _ = assign;
+        panic!("Rewrite::rewrite_assign must be implemented by passes that rewrite assignments");
     }
 
     fn rewrite_printf(&mut self, printf: &mut Printf<'ast, Self::Ast>) {
@@ -255,6 +258,7 @@ pub trait Traverse<'ast> {
 
     fn trav_program(&mut self, program: Program<'ast, Self::InAst>) -> Program<'ast, Self::OutAst> {
         let mut overloads = HashMap::new();
+        let fundefs_arena: Arena<RefCell<Fundef<'ast, Self::OutAst>>> = Arena::new();
 
         for (name, groups) in program.overloads {
             let mut new_groups = HashMap::new();
@@ -263,7 +267,12 @@ pub trait Traverse<'ast> {
                 let mut new_fundefs = Vec::new();
 
                 for fundef in fundefs {
-                    new_fundefs.push(self.trav_fundef(fundef));
+                    let fundef = fundef.borrow();
+                    let out_fundef = self.trav_fundef(&fundef);
+                    let out_ref = fundefs_arena.alloc(RefCell::new(out_fundef));
+                    // SAFETY: fundefs_arena is moved into Program before return.
+                    let out_ref: &'ast RefCell<Fundef<'ast, Self::OutAst>> = unsafe { std::mem::transmute(out_ref) };
+                    new_fundefs.push(out_ref);
                 }
 
                 new_groups.insert(sig, new_fundefs);
@@ -272,10 +281,13 @@ pub trait Traverse<'ast> {
             overloads.insert(name, new_groups);
         }
 
-        Program { overloads }
+        Program {
+            overloads,
+            fundefs: fundefs_arena,
+        }
     }
 
-    fn trav_fundef(&mut self, fundef: Fundef<'ast, Self::InAst>) -> Fundef<'ast, Self::OutAst>;
+    fn trav_fundef(&mut self, fundef: &Fundef<'ast, Self::InAst>) -> Fundef<'ast, Self::OutAst>;
 
     fn trav_fargs(&mut self, args: Vec<Farg>) -> Vec<Farg> {
         let mut new_args = Vec::new();

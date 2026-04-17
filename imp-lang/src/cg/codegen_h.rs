@@ -116,7 +116,8 @@ impl<'ast> Visit<'ast> for CompileH {
             for (_sig, fundefs) in overloads {
                 for fundef in fundefs {
                     self.output.push('\n');
-                    self.visit_fundef(fundef);
+                    let fundef = fundef.borrow();
+                    self.visit_fundef(&fundef);
                 }
             }
         }

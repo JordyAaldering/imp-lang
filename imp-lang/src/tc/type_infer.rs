@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{cell::RefCell, collections::HashMap, mem};
 use typed_arena::Arena;
 
 use crate::{ast::*, traverse::Traverse};
@@ -6,23 +6,33 @@ use crate::{ast::*, traverse::Traverse};
 pub fn type_infer<'ast>(program: Program<'ast, UntypedAst>) -> Result<Program<'ast, TypedAst>, InferenceError> {
     validate_overload_families(&program.overloads)?;
 
+    let mut typed_program = Program {
+        overloads: HashMap::new(),
+        fundefs: Arena::new(),
+    };
+
     // First pass: create stub signatures for all functions to enable forward references
-    let mut stubs: HashMap<String, HashMap<BaseSignature, Vec<&'ast Fundef<'ast, TypedAst>>>> = HashMap::new();
+    let mut stubs: HashMap<String, HashMap<BaseSignature, Vec<&'ast RefCell<Fundef<'ast, TypedAst>>>>> = HashMap::new();
 
     for (name, overloads) in &program.overloads {
         let mut stub_groups = HashMap::new();
         for (sig, fundefs) in overloads {
             let mut stub_fundefs = Vec::new();
             for fundef in fundefs {
-                let stub: &Fundef<'_, _> = Box::leak(Box::new(Fundef {
+                let fundef = fundef.borrow();
+                let stub_ref = typed_program.fundefs.alloc(RefCell::new(Fundef {
                     name: fundef.name.clone(),
                     ret_type: fundef.ret_type.clone(),
                     args: fundef.args.clone(),
                     shape_prelude: Vec::new(),
                     shape_facts: ShapeFacts::default(),
                     decs: Arena::new(),
+                    exprs: Arena::new(),
                     body: Body { stmts: vec![], ret: Id::Arg(usize::MAX) },
                 }));
+                // SAFETY: `typed_program` is returned from this function, so dispatch arena
+                // outlives all references used in inferred call targets.
+                let stub: &'ast RefCell<Fundef<'ast, TypedAst>> = unsafe { std::mem::transmute(stub_ref) };
                 stub_fundefs.push(stub);
             }
 
@@ -41,13 +51,19 @@ pub fn type_infer<'ast>(program: Program<'ast, UntypedAst>) -> Result<Program<'a
             let mut new_fundefs = Vec::new();
             for fundef in fundefs {
                 let mut infer = TypeInfer::new(stubs.clone());
-                let fundef = infer.trav_fundef(fundef.clone());
+                let typed = {
+                    let fundef = fundef.borrow();
+                    infer.trav_fundef(&fundef)
+                };
 
                 if let Some(err) = infer.errors.into_iter().next() {
                     return Err(err);
                 }
 
-                new_fundefs.push(fundef);
+                let typed_ref = typed_program.fundefs.alloc(RefCell::new(typed));
+                // SAFETY: typed_program owns the arena for returned program lifetime.
+                let typed_ref: &'ast RefCell<Fundef<'ast, TypedAst>> = unsafe { std::mem::transmute(typed_ref) };
+                new_fundefs.push(typed_ref);
             }
 
             new_groups.insert(sig, new_fundefs);
@@ -56,15 +72,18 @@ pub fn type_infer<'ast>(program: Program<'ast, UntypedAst>) -> Result<Program<'a
         overloads.insert(name, new_groups);
     }
 
-    Ok(Program { overloads })
+    typed_program.overloads = overloads;
+    Ok(typed_program)
 }
 
-fn validate_overload_families(overloads: &HashMap<String, HashMap<BaseSignature, Vec<Fundef<'_, UntypedAst>>>>) -> Result<(), InferenceError> {
+fn validate_overload_families(overloads: &HashMap<String, HashMap<BaseSignature, Vec<&RefCell<Fundef<'_, UntypedAst>>>>>) -> Result<(), InferenceError> {
     for (name, group) in overloads {
         for (sig, fundefs) in group {
             let (first, fundefs) = fundefs.split_first().unwrap();
+            let first = first.borrow();
             let expected_ret_ty = &first.ret_type.ty;
             for fundef in fundefs {
+                let fundef = fundef.borrow();
                 if &fundef.ret_type.ty != expected_ret_ty {
                     return Err(InferenceError::InconsistentOverloadReturnBase {
                         name: name.clone(),
@@ -82,9 +101,10 @@ fn validate_overload_families(overloads: &HashMap<String, HashMap<BaseSignature,
 pub struct TypeInfer<'ast> {
     args: Vec<Farg>,
     idmap: HashMap<*const VarInfo<'ast, UntypedAst>, &'ast VarInfo<'ast, TypedAst>>,
-    new_ids: Vec<&'ast VarInfo<'ast, TypedAst>>,
+    decs_arena: Arena<VarInfo<'ast, TypedAst>>,
+    expr_arena: Arena<Expr<'ast, TypedAst>>,
     errors: Vec<InferenceError>,
-    stubs: HashMap<String, HashMap<BaseSignature, Vec<&'ast Fundef<'ast, TypedAst>>>>,
+    stubs: HashMap<String, HashMap<BaseSignature, Vec<&'ast RefCell<Fundef<'ast, TypedAst>>>>>,
 }
 
 #[allow(unused)]
@@ -153,22 +173,25 @@ pub enum InferenceError {
 }
 
 impl<'ast> TypeInfer<'ast> {
-    fn new(overloads: HashMap<String, HashMap<BaseSignature, Vec<&'ast Fundef<'ast, TypedAst>>>>) -> Self {
+    fn new(overloads: HashMap<String, HashMap<BaseSignature, Vec<&'ast RefCell<Fundef<'ast, TypedAst>>>>>) -> Self {
         Self {
             args: Vec::new(),
             idmap: HashMap::new(),
-            new_ids: Vec::new(),
+            decs_arena: Arena::new(),
+            expr_arena: Arena::new(),
             errors: Vec::new(),
             stubs: overloads,
         }
     }
 
     fn alloc_lvis(&self, name: String, ty: Type, ssa: Option<&'ast Expr<'ast, TypedAst>>) -> &'ast VarInfo<'ast, TypedAst> {
-        Box::leak(Box::new(VarInfo { name, ty, ssa }))
+        // SAFETY: arenas are owned by TypeInfer and moved into the produced Fundef.
+        unsafe { std::mem::transmute(self.decs_arena.alloc(VarInfo { name, ty, ssa })) }
     }
 
     fn alloc_expr(&self, expr: Expr<'ast, TypedAst>) -> &'ast Expr<'ast, TypedAst> {
-        Box::leak(Box::new(expr))
+        // SAFETY: arenas are owned by TypeInfer and moved into the produced Fundef.
+        unsafe { std::mem::transmute(self.expr_arena.alloc(expr)) }
     }
 
     /// Build the type of an array literal. The element count becomes a leading `Known(n)` dimension
@@ -375,13 +398,12 @@ impl<'ast> TypeInfer<'ast> {
         let (iv_ty, _leading_k) = Self::tensor_iv_and_dims(&ub_ty);
         let iv = self.alloc_lvis(tensor.iv.name.clone(), iv_ty, None);
         self.idmap.insert(tensor.iv as *const _, iv);
-        self.new_ids.push(iv);
 
         let (body, ret_ty) = self.trav_body(tensor.body);
         (Tensor { body, iv, lb, ub }, ret_ty)
     }
 
-    fn resolve_dispatch(&mut self, func_name: &str, arg_types: &[Type]) -> (&'ast Fundef<'ast, TypedAst>, bool) {
+    fn resolve_dispatch(&mut self, func_name: &str, arg_types: &[Type]) -> (&'ast RefCell<Fundef<'ast, TypedAst>>, bool) {
         let Some(group) = self.stubs.get(func_name) else {
             self.errors.push(InferenceError::UndefinedFunction {
                     name: func_name.to_owned(),
@@ -402,8 +424,9 @@ impl<'ast> TypeInfer<'ast> {
 
         let mut matches = Vec::new();
         for target in candidates {
+            let target_b = target.borrow();
             let mut is_match = true;
-            for (expected, provided) in target.args.iter().zip(arg_types.iter()) {
+            for (expected, provided) in target_b.args.iter().zip(arg_types.iter()) {
                 if !types_compatible(&expected.ty, provided) {
                     is_match = false;
                     break;
@@ -445,32 +468,31 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
 
     // Declarations
 
-    fn trav_fundef(&mut self, fundef: Fundef<'ast, Self::InAst>) -> Fundef<'ast, Self::OutAst> {
+    fn trav_fundef(&mut self, fundef: &Fundef<'ast, Self::InAst>) -> Fundef<'ast, Self::OutAst> {
         self.args = fundef.args.clone();
 
         self.idmap.clear();
-        self.new_ids.clear();
+        self.decs_arena = Arena::new();
+        self.expr_arena = Arena::new();
 
         let mut new_shape_prelude = Vec::new();
-        for assign in fundef.shape_prelude {
-            new_shape_prelude.push(self.trav_assign(assign));
+        for assign in &fundef.shape_prelude {
+            new_shape_prelude.push(self.trav_assign(*assign));
         }
 
-        let (body, _ret_ty) = self.trav_body(fundef.body);
+        let (body, _ret_ty) = self.trav_body(fundef.body.clone());
+
+        let decs = mem::take(&mut self.decs_arena);
+        let exprs = mem::take(&mut self.expr_arena);
 
         Fundef {
-            name: fundef.name,
-            ret_type: fundef.ret_type,
-            args: fundef.args,
+            name: fundef.name.clone(),
+            ret_type: fundef.ret_type.clone(),
+            args: fundef.args.clone(),
             shape_prelude: new_shape_prelude,
-            shape_facts: fundef.shape_facts,
-            decs: {
-                let decs = Arena::new();
-                for dec in &self.new_ids {
-                    decs.alloc((**dec).clone());
-                }
-                decs
-            },
+            shape_facts: fundef.shape_facts.clone(),
+            decs,
+            exprs,
             body,
         }
     }
@@ -482,7 +504,6 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
         let expr_ref = self.alloc_expr(new_expr);
         let new_lvis = self.alloc_lvis(assign.lhs.name.clone(), new_ty, Some(expr_ref));
         self.idmap.insert(assign.lhs as *const _, new_lvis);
-        self.new_ids.push(new_lvis);
         Assign { lhs: new_lvis, expr: expr_ref }
     }
 
@@ -581,12 +602,13 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
 
         let (target, runtime_dispatch) = self.resolve_dispatch(func_name, &arg_types);
         let call_ty = if runtime_dispatch {
+            let target = target.borrow();
             Type {
                 ty: target.ret_type.ty.clone(),
                 shape: TypePattern::Any,
             }
         } else {
-            target.ret_type.clone()
+            target.borrow().ret_type.clone()
         };
         let typed_call = Call {
             id: CallTarget::Function(target),
@@ -613,9 +635,10 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
                 let arg_types = vec![neutral_ty.clone(), selection_ty.clone()];
                 let (target, runtime_dispatch) = self.resolve_dispatch(&id, &arg_types);
                 let out_ty = if runtime_dispatch {
+                    let target = target.borrow();
                     Type { ty: target.ret_type.ty.clone(), shape: TypePattern::Any }
                 } else {
-                    target.ret_type.clone()
+                    target.borrow().ret_type.clone()
                 };
                 (FoldFun::Name(CallTarget::Function(target)), out_ty)
             }
@@ -866,7 +889,6 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
 
         let iv_new = self.alloc_lvis(tensor.iv.name.clone(), iv_ty, None);
         self.idmap.insert(tensor.iv as *const _, iv_new);
-        self.new_ids.push(iv_new);
 
         let (body, ret_ty) = self.trav_body(tensor.body);
 
@@ -987,15 +1009,17 @@ fn dims_compatible(expected: &DimPattern, provided: &DimPattern) -> bool {
     }
 }
 
-fn maximal_candidates<'ast>(candidates: &[&'ast Fundef<'ast, TypedAst>]) -> Vec<&'ast Fundef<'ast, TypedAst>> {
-    let mut maximal: Vec<&Fundef<'_, TypedAst>> = Vec::new();
+fn maximal_candidates<'ast>(
+    candidates: &[&'ast RefCell<Fundef<'ast, TypedAst>>],
+) -> Vec<&'ast RefCell<Fundef<'ast, TypedAst>>> {
+    let mut maximal: Vec<&RefCell<Fundef<'_, TypedAst>>> = Vec::new();
 
     'outer: for a in candidates {
         for b in candidates {
             if std::ptr::eq(*a, *b) {
                 continue;
             }
-            if overload_more_specific(b, a) {
+            if overload_more_specific(&b.borrow(), &a.borrow()) {
                 continue 'outer;
             }
         }

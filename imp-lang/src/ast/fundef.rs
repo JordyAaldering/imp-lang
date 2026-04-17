@@ -8,6 +8,7 @@ pub struct Fundef<'ast, Ast: AstConfig> {
     pub shape_prelude: Vec<Assign<'ast, Ast>>,
     pub shape_facts: ShapeFacts,
     pub decs: Arena<VarInfo<'ast, Ast>>,
+    pub exprs: Arena<Expr<'ast, Ast>>,
     pub body: Body<'ast, Ast>,
 }
 
@@ -20,6 +21,7 @@ impl<'ast, Ast: AstConfig> Clone for Fundef<'ast, Ast> {
             shape_prelude: self.shape_prelude.clone(),
             shape_facts: self.shape_facts.clone(),
             decs: Arena::new(),
+            exprs: Arena::new(),
             body: self.body.clone(),
         }
     }

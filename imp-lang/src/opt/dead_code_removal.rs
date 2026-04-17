@@ -1,4 +1,5 @@
 use std::{collections::HashSet, mem};
+use typed_arena::Arena;
 
 use crate::{Rewrite, ast::*};
 
@@ -10,13 +11,25 @@ pub fn dead_code_removal<'ast>(mut program: Program<'ast, TypedAst>) -> Program<
 
 struct DeadCodeRemoval {
     used: HashSet<*const ()>,
+    expr_arena: *const (),
 }
 
 impl DeadCodeRemoval {
     fn new() -> Self {
         Self {
             used: HashSet::new(),
+            expr_arena: std::ptr::null(),
         }
+    }
+
+    fn set_expr_arena<'ast>(&mut self, arena: &Arena<Expr<'ast, TypedAst>>) {
+        self.expr_arena = arena as *const _ as *const ();
+    }
+
+    fn alloc_expr_in_arena<'ast>(&self, expr: Expr<'ast, TypedAst>) -> &'ast Expr<'ast, TypedAst> {
+        let arena = unsafe { &*(self.expr_arena as *const Arena<Expr<'ast, TypedAst>>) };
+        // SAFETY: arena belongs to current fundef and outlives produced expr references.
+        unsafe { std::mem::transmute(arena.alloc(expr)) }
     }
 
     fn ptr<'ast>(lvis: &VarInfo<'ast, TypedAst>) -> *const () {
@@ -29,7 +42,13 @@ impl<'ast> Rewrite<'ast> for DeadCodeRemoval {
 
     fn rewrite_fundef(&mut self, fundef: &mut Fundef<'ast, Self::Ast>) {
         self.used.clear();
+        self.set_expr_arena(&fundef.exprs);
         self.rewrite_body(&mut fundef.body);
+    }
+
+    fn rewrite_assign(&mut self, assign: &mut Assign<'ast, Self::Ast>) {
+        let new_expr = self.rewrite_expr((*assign.expr).clone());
+        assign.expr = self.alloc_expr_in_arena(new_expr);
     }
 
     fn rewrite_body(&mut self, body: &mut Body<'ast, Self::Ast>) {

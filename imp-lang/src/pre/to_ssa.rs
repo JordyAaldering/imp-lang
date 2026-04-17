@@ -9,7 +9,8 @@ pub fn to_ssa<'ast>(program: Program<'ast, FlattenedAst>) -> Program<'ast, Untyp
 
 pub struct ToSsa<'ast> {
     uid: usize,
-    decs: Vec<&'ast VarInfo<'ast, UntypedAst>>,
+    decs_arena: Arena<VarInfo<'ast, UntypedAst>>,
+    expr_arena: Arena<Expr<'ast, UntypedAst>>,
     new_assigns: Vec<Stmt<'ast, UntypedAst>>,
     env_stack: Vec<HashMap<String, Id<'ast, UntypedAst>>>,
 }
@@ -18,7 +19,8 @@ impl<'ast> ToSsa<'ast> {
     fn new() -> Self {
         Self {
             uid: 0,
-            decs: Vec::new(),
+            decs_arena: Arena::new(),
+            expr_arena: Arena::new(),
             new_assigns: Vec::new(),
             env_stack: Vec::new(),
         }
@@ -30,11 +32,18 @@ impl<'ast> ToSsa<'ast> {
     }
 
     fn alloc_lvis(&self, name: String, ssa: Option<&'ast Expr<'ast, UntypedAst>>) -> &'ast VarInfo<'ast, UntypedAst> {
-        Box::leak(Box::new(VarInfo { name, ty: None, ssa }))
+        // SAFETY: The Arena is owned by ToSsa<'ast>, so it lives for 'ast.
+        // typed_arena uses interior mutability to allow allocation through &self.
+        // The returned reference is valid for 'ast because the Arena will not be dropped
+        // until the end of 'ast.
+        unsafe {
+            std::mem::transmute(self.decs_arena.alloc(VarInfo { name, ty: None, ssa }))
+        }
     }
 
     fn alloc_expr(&self, expr: Expr<'ast, UntypedAst>) -> &'ast Expr<'ast, UntypedAst> {
-        Box::leak(Box::new(expr))
+        // SAFETY: The arena is owned by ToSsa<'ast> and moved into Fundef.
+        unsafe { std::mem::transmute(self.expr_arena.alloc(expr)) }
     }
 
     fn push_env(&mut self) {
@@ -64,14 +73,18 @@ impl<'ast> Traverse<'ast> for ToSsa<'ast> {
 
     type OutAst = UntypedAst;
 
-    fn trav_fundef(&mut self, fundef: Fundef<'ast, FlattenedAst>) -> Fundef<'ast, UntypedAst> {
+    fn trav_fundef(&mut self, fundef: &Fundef<'ast, FlattenedAst>) -> Fundef<'ast, UntypedAst> {
+        // Fresh arena for this fundef's declarations
+        self.decs_arena = Arena::new();
+        self.expr_arena = Arena::new();
+
         self.push_env();
 
-        let args = self.trav_fargs(fundef.args);
+        let args = self.trav_fargs(fundef.args.clone());
 
         let mut shape_prelude = Vec::new();
-        for assign in fundef.shape_prelude {
-            let assign = self.trav_assign(assign);
+        for assign in &fundef.shape_prelude {
+            let assign = self.trav_assign(*assign);
             let new_assigns = mem::take(&mut self.new_assigns);
             for stmt in new_assigns {
                 match stmt {
@@ -82,23 +95,23 @@ impl<'ast> Traverse<'ast> for ToSsa<'ast> {
             shape_prelude.push(assign);
         }
 
-        let body = self.trav_body(fundef.body);
+        let body = self.trav_body(fundef.body.clone());
 
         self.pop_env();
 
-        let decs = Arena::new();
-        for dec in &self.decs {
-            decs.alloc((**dec).clone());
-        }
+        // Move the filled arena to Fundef; no cloning needed
+        let decs = mem::take(&mut self.decs_arena);
+        let exprs = mem::take(&mut self.expr_arena);
 
         Fundef {
-            name: fundef.name,
+            name: fundef.name.clone(),
             args,
             shape_prelude,
-            shape_facts: fundef.shape_facts,
+            shape_facts: fundef.shape_facts.clone(),
             decs,
+            exprs,
             body,
-            ret_type: fundef.ret_type,
+            ret_type: fundef.ret_type.clone(),
         }
     }
 
@@ -132,7 +145,6 @@ impl<'ast> Traverse<'ast> for ToSsa<'ast> {
         let expr = self.alloc_expr(expr);
         let lvis = self.alloc_lvis(new_name, Some(expr));
         self.bind_env(old_name, Id::Var(lvis));
-        self.decs.push(lvis);
 
         Assign { lhs: lvis, expr }
     }
@@ -257,7 +269,6 @@ impl<'ast> Traverse<'ast> for ToSsa<'ast> {
         let ub = self.trav_id(tensor.ub);
 
         let iv_lvis = self.alloc_lvis(tensor.iv.name.clone(), None);
-        self.decs.push(iv_lvis);
 
         self.push_env();
         self.bind_env(tensor.iv.name.clone(), Id::Var(iv_lvis));

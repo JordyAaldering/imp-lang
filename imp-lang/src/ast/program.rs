@@ -1,8 +1,8 @@
-use std::collections::HashMap;
+use std::{cell::RefCell, collections::HashMap};
+use typed_arena::Arena;
 
 use super::*;
 
-#[derive(Clone)]
 pub struct Program<'ast, Ast: AstConfig> {
     /// Contains all fundefs in the program, grouped by overload.
     ///
@@ -25,5 +25,15 @@ pub struct Program<'ast, Ast: AstConfig> {
     ///   }
     /// }
     /// ```
-    pub overloads: HashMap<String, HashMap<BaseSignature, Vec<Fundef<'ast, Ast>>>>,
+    pub overloads: HashMap<String, HashMap<BaseSignature, Vec<&'ast RefCell<Fundef<'ast, Ast>>>>>,
+    pub fundefs: Arena<RefCell<Fundef<'ast, Ast>>>,
+}
+
+impl<'ast, Ast: AstConfig> Clone for Program<'ast, Ast> {
+    fn clone(&self) -> Self {
+        Self {
+            overloads: self.overloads.clone(),
+            fundefs: Arena::new(),
+        }
+    }
 }

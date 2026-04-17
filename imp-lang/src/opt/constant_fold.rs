@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use typed_arena::Arena;
 
 use crate::{ast::*, Rewrite};
 
@@ -10,13 +11,25 @@ pub fn constant_fold<'ast>(mut program: Program<'ast, TypedAst>) -> Program<'ast
 
 pub struct ConstantFold {
     known: HashMap<*const (), u32>,
+    expr_arena: *const (),
 }
 
 impl ConstantFold {
     pub fn new() -> Self {
         Self {
             known: HashMap::new(),
+            expr_arena: std::ptr::null(),
         }
+    }
+
+    fn set_expr_arena<'ast>(&mut self, arena: &Arena<Expr<'ast, TypedAst>>) {
+        self.expr_arena = arena as *const _ as *const ();
+    }
+
+    fn alloc_expr_in_arena<'ast>(&self, expr: Expr<'ast, TypedAst>) -> &'ast Expr<'ast, TypedAst> {
+        let arena = unsafe { &*(self.expr_arena as *const Arena<Expr<'ast, TypedAst>>) };
+        // SAFETY: arena belongs to current fundef and outlives produced expr references.
+        unsafe { std::mem::transmute(arena.alloc(expr)) }
     }
 
     fn ptr<'ast>(lvis: &VarInfo<'ast, TypedAst>) -> *const () {
@@ -35,6 +48,7 @@ impl<'ast> Rewrite<'ast> for ConstantFold {
     type Ast = TypedAst;
 
     fn rewrite_fundef(&mut self, fundef: &mut Fundef<'ast, Self::Ast>) {
+        self.set_expr_arena(&fundef.exprs);
         self.rewrite_body(&mut fundef.body);
     }
 
@@ -51,7 +65,7 @@ impl<'ast> Rewrite<'ast> for ConstantFold {
         match &new_expr {
             Expr::Const(Const::U32(v)) => {
                 self.known.insert(Self::ptr(assign.lhs), *v);
-                assign.expr = Box::leak(Box::new(new_expr));
+                assign.expr = self.alloc_expr_in_arena(new_expr);
             }
             _ => {
                 debug_assert!(!self.known.contains_key(&Self::ptr(assign.lhs)));

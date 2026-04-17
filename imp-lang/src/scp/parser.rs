@@ -1,4 +1,5 @@
 use std::{collections::HashMap, iter::Peekable};
+use std::cell::RefCell;
 use typed_arena::Arena;
 
 use super::{lexer::*, operator::*, span::*};
@@ -7,6 +8,8 @@ use crate::ast::*;
 
 pub struct Parser<'src> {
     lexer: Peekable<Lexer<'src>>,
+    decs_arena: Arena<VarInfo<'static, ParsedAst>>,
+    expr_arena: Arena<Expr<'static, ParsedAst>>,
 }
 
 #[derive(Debug)]
@@ -27,15 +30,19 @@ impl<'src> Parser<'src> {
     pub fn new(lexer: Lexer<'src>) -> Self {
         Self {
             lexer: lexer.peekable(),
+            decs_arena: Arena::new(),
+            expr_arena: Arena::new(),
         }
     }
 
     fn alloc_lvis(&self, name: String, ty: Option<Type>) -> &'static VarInfo<'static, ParsedAst> {
-        Box::leak(Box::new(VarInfo { name, ty, ssa: () }))
+        // SAFETY: arenas are owned by Parser and moved into each Fundef after parsing.
+        unsafe { std::mem::transmute(self.decs_arena.alloc(VarInfo { name, ty, ssa: () })) }
     }
 
     fn alloc_expr(&self, expr: Expr<'static, ParsedAst>) -> &'static Expr<'static, ParsedAst> {
-        Box::leak(Box::new(expr))
+        // SAFETY: arenas are owned by Parser and moved into each Fundef after parsing.
+        unsafe { std::mem::transmute(self.expr_arena.alloc(expr)) }
     }
 
     fn matches(&mut self, expected: Token) -> Option<(Token, Span)> {
@@ -67,14 +74,20 @@ impl<'src> Parser<'src> {
 impl<'src> Parser<'src> {
     pub fn parse_program(&mut self) -> ParseResult<Program<'static, ParsedAst>> {
         let mut overloads = HashMap::new();
+        let fundefs_arena: Arena<RefCell<Fundef<'static, ParsedAst>>> = Arena::new();
 
         while let Some((token, _)) = self.lexer.peek() {
             match token {
                 Token::Fn => {
                     let fundef = self.parse_fundef()?;
-                    let group = overloads.entry(fundef.name.clone()).or_insert(HashMap::new());
-                    let fundefs = group.entry(fundef.signature()).or_insert(Vec::new());
-                    fundefs.push(fundef);
+                    let name = fundef.name.clone();
+                    let sig = fundef.signature();
+                    let fundef_ref = fundefs_arena.alloc(RefCell::new(fundef));
+                    // SAFETY: fundefs_arena is moved into Program before return.
+                    let fundef_ref: &'static RefCell<Fundef<'static, ParsedAst>> = unsafe { std::mem::transmute(fundef_ref) };
+                    let group = overloads.entry(name).or_insert(HashMap::new());
+                    let fundefs = group.entry(sig).or_insert(Vec::new());
+                    fundefs.push(fundef_ref);
                 }
                 _ => {
                     let (token, span) = self.next()?;
@@ -83,10 +96,16 @@ impl<'src> Parser<'src> {
             }
         }
 
-        Ok(Program { overloads })
+        Ok(Program {
+            overloads,
+            fundefs: fundefs_arena,
+        })
     }
 
     fn parse_fundef(&mut self) -> ParseResult<Fundef<'static, ParsedAst>> {
+        self.decs_arena = Arena::new();
+        self.expr_arena = Arena::new();
+
         let _ = self.expect(Token::Fn)?;
         let name = self.parse_callable_name()?;
 
@@ -111,12 +130,16 @@ impl<'src> Parser<'src> {
         let body = self.parse_body()?;
         self.expect(Token::RBrace)?;
 
+        let decs = std::mem::take(&mut self.decs_arena);
+        let exprs = std::mem::take(&mut self.expr_arena);
+
         Ok(Fundef {
             name,
             args,
             shape_prelude: Vec::new(),
             shape_facts: ShapeFacts::default(),
-            decs: Arena::new(),
+            decs,
+            exprs,
             body,
             ret_type,
         })

@@ -9,6 +9,8 @@ pub fn flatten<'ast>(program: Program<'ast, ParsedAst>) -> Program<'ast, Flatten
 
 struct Flatten<'ast> {
     uid: usize,
+    decs_arena: Arena<VarInfo<'ast, FlattenedAst>>,
+    expr_arena: Arena<Expr<'ast, FlattenedAst>>,
     new_assigns: Vec<Stmt<'ast, FlattenedAst>>,
     env_stack: Vec<HashMap<String, Id<'ast, FlattenedAst>>>,
 }
@@ -17,6 +19,8 @@ impl<'ast> Flatten<'ast> {
     fn new() -> Self {
         Self {
             uid: 0,
+            decs_arena: Arena::new(),
+            expr_arena: Arena::new(),
             new_assigns: Vec::new(),
             env_stack: Vec::new(),
         }
@@ -28,11 +32,13 @@ impl<'ast> Flatten<'ast> {
     }
 
     fn alloc_lvis(&self, name: String, ty: Option<Type>) -> &'ast VarInfo<'ast, FlattenedAst> {
-        Box::leak(Box::new(VarInfo { name, ty, ssa: () }))
+        // SAFETY: arenas are owned by Flatten and moved into the produced Fundef.
+        unsafe { std::mem::transmute(self.decs_arena.alloc(VarInfo { name, ty, ssa: () })) }
     }
 
     fn alloc_expr(&self, expr: Expr<'ast, FlattenedAst>) -> &'ast Expr<'ast, FlattenedAst> {
-        Box::leak(Box::new(expr))
+        // SAFETY: arenas are owned by Flatten and moved into the produced Fundef.
+        unsafe { std::mem::transmute(self.expr_arena.alloc(expr)) }
     }
 
     fn push_env(&mut self) {
@@ -74,7 +80,10 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
 
     type OutAst = FlattenedAst;
 
-    fn trav_fundef(&mut self, fundef: Fundef<'ast, Self::InAst>) -> Fundef<'ast, Self::OutAst> {
+    fn trav_fundef(&mut self, fundef: &Fundef<'ast, Self::InAst>) -> Fundef<'ast, Self::OutAst> {
+        self.decs_arena = Arena::new();
+        self.expr_arena = Arena::new();
+
         self.push_env();
 
         for (i, arg) in fundef.args.iter().enumerate() {
@@ -82,8 +91,8 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
         }
 
         let mut shape_prelude = Vec::new();
-        for assign in fundef.shape_prelude {
-            let assign = self.trav_assign(assign);
+        for assign in &fundef.shape_prelude {
+            let assign = self.trav_assign(*assign);
             let new_assigns = mem::take(&mut self.new_assigns);
             for stmt in new_assigns {
                 match stmt {
@@ -94,18 +103,22 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
             shape_prelude.push(assign);
         }
 
-        let body = self.trav_body(fundef.body);
+        let body = self.trav_body(fundef.body.clone());
 
         self.pop_env();
 
+        let decs = mem::take(&mut self.decs_arena);
+        let exprs = mem::take(&mut self.expr_arena);
+
         Fundef {
-            name: fundef.name,
-            args: fundef.args,
+            name: fundef.name.clone(),
+            args: fundef.args.clone(),
             shape_prelude,
-            shape_facts: fundef.shape_facts,
-            decs: Arena::new(),
+            shape_facts: fundef.shape_facts.clone(),
+            decs,
+            exprs,
             body,
-            ret_type: fundef.ret_type,
+            ret_type: fundef.ret_type.clone(),
         }
     }
 

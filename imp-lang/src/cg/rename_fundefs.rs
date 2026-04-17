@@ -58,6 +58,7 @@ impl RenameFundefs {
         for (_name, overloads) in &mut program.overloads {
             for (_sig, fundefs) in overloads {
                 for fundef in fundefs {
+                    let mut fundef = fundef.borrow_mut();
                     let name = mangle_fundef_name(&fundef.name, &fundef.args);
 
                     #[cfg(debug_assertions)]
