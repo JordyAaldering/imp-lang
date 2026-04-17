@@ -53,16 +53,6 @@ impl<'ast, Ast: AstConfig + 'ast> Visit<'ast> for Show<'ast, Ast> {
         }
 
         self.indent();
-        self.write("// Variable declarations:\n");
-        for id in &fundef.decs {
-            self.indent();
-            Self::Ast::visit_type(self, &id.ty);
-            self.write(" ");
-            self.write(&id.name);
-            self.write(";\n");
-        }
-
-        self.indent();
         self.write("// Function body:\n");
 
         self.depth -= 1;

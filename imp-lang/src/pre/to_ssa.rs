@@ -1,4 +1,5 @@
 use std::{collections::HashMap, mem};
+use typed_arena::Arena;
 
 use crate::{ast::*, traverse::Traverse};
 
@@ -85,12 +86,17 @@ impl<'ast> Traverse<'ast> for ToSsa<'ast> {
 
         self.pop_env();
 
+        let decs = Arena::new();
+        for dec in &self.decs {
+            decs.alloc((**dec).clone());
+        }
+
         Fundef {
             name: fundef.name,
             args,
             shape_prelude,
             shape_facts: fundef.shape_facts,
-            decs: mem::take(&mut self.decs),
+            decs,
             body,
             ret_type: fundef.ret_type,
         }

@@ -798,6 +798,8 @@ fn wrapper_call_arg(shape: &TypePattern, arg: &str) -> String {
 fn elem_ctype_of_id(id: &Id<'_, TypedAst>) -> String {
     match id {
         Id::Arg(_) => "uint32_t".to_owned(),  // args used directly as array bounds are uncommon
-        Id::Var(v) => base_ctype(&v.ty),
+        Id::Var(v) => {
+            base_ctype(&v.ty)
+        }
     }
 }

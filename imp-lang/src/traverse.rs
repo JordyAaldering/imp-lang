@@ -24,10 +24,6 @@ pub trait Visit<'ast> {
             self.visit_assign(assign);
         }
 
-        for vardec in &fundef.decs {
-            self.visit_vardec(vardec);
-        }
-
         self.visit_body(&fundef.body);
     }
 

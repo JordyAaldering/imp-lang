@@ -19,7 +19,7 @@ impl DeadCodeRemoval {
         }
     }
 
-    fn ptr<'ast>(lvis: &'ast VarInfo<'ast, TypedAst>) -> *const () {
+    fn ptr<'ast>(lvis: &VarInfo<'ast, TypedAst>) -> *const () {
         lvis as *const _ as *const ()
     }
 }
@@ -30,7 +30,6 @@ impl<'ast> Rewrite<'ast> for DeadCodeRemoval {
     fn rewrite_fundef(&mut self, fundef: &mut Fundef<'ast, Self::Ast>) {
         self.used.clear();
         self.rewrite_body(&mut fundef.body);
-        fundef.decs.retain(|lvis| self.used.contains(&Self::ptr(lvis)));
     }
 
     fn rewrite_body(&mut self, body: &mut Body<'ast, Self::Ast>) {
@@ -132,7 +131,7 @@ impl<'ast> Rewrite<'ast> for DeadCodeRemoval {
 
     fn rewrite_id(&mut self, id: Id<'ast, Self::Ast>) -> Id<'ast, Self::Ast> {
         if let Id::Var(v) = &id {
-            self.used.insert(Self::ptr(v));
+            self.used.insert(Self::ptr(*v));
         }
         id
     }

@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use typed_arena::Arena;
 
 use crate::{ast::*, traverse::Traverse};
 
@@ -19,7 +20,7 @@ pub fn type_infer<'ast>(program: Program<'ast, UntypedAst>) -> Result<Program<'a
                     args: fundef.args.clone(),
                     shape_prelude: Vec::new(),
                     shape_facts: ShapeFacts::default(),
-                    decs: Vec::new(),
+                    decs: Arena::new(),
                     body: Body { stmts: vec![], ret: Id::Arg(usize::MAX) },
                 }));
                 stub_fundefs.push(stub);
@@ -463,7 +464,13 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
             args: fundef.args,
             shape_prelude: new_shape_prelude,
             shape_facts: fundef.shape_facts,
-            decs: self.new_ids.clone(),
+            decs: {
+                let decs = Arena::new();
+                for dec in &self.new_ids {
+                    decs.alloc((**dec).clone());
+                }
+                decs
+            },
             body,
         }
     }

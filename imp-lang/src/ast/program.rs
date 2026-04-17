@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use super::*;
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Program<'ast, Ast: AstConfig> {
     /// Contains all fundefs in the program, grouped by overload.
     ///

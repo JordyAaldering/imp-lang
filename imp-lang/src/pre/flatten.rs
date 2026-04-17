@@ -1,4 +1,5 @@
 use std::{collections::HashMap, mem};
+use typed_arena::Arena;
 
 use crate::{ast::*, traverse::Traverse};
 
@@ -102,7 +103,7 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
             args: fundef.args,
             shape_prelude,
             shape_facts: fundef.shape_facts,
-            decs: Vec::new(),
+            decs: Arena::new(),
             body,
             ret_type: fundef.ret_type,
         }

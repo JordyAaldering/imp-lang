@@ -1,4 +1,5 @@
 use std::{collections::HashMap, iter::Peekable};
+use typed_arena::Arena;
 
 use super::{lexer::*, operator::*, span::*};
 
@@ -115,7 +116,7 @@ impl<'src> Parser<'src> {
             args,
             shape_prelude: Vec::new(),
             shape_facts: ShapeFacts::default(),
-            decs: Vec::new(),
+            decs: Arena::new(),
             body,
             ret_type,
         })
