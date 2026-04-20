@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::ast::*;
+use crate::{ast::*, traverse::{Rewrite, Visit}};
 
 /// Functions may be overloaded, e.g.
 ///
@@ -42,34 +42,52 @@ use crate::ast::*;
 /// For example, this is not allowed for bar(u32[o:oshp,i:ishp] a, u32[o:oshp] b) and bar(u32[o:oshp] a, u32[o:osho,i:ishp] b).
 /// As, in the case where the shapes of a and b are the same, and thus i == 0, both overloads would be equally specific.
 /// Namely, there must be a clear ordering
-pub struct RenameFundefs;
+pub struct RenameFundefs {
+    #[cfg(debug_assertions)]
+    used_names: HashSet<String>,
+}
 
 pub fn rename_fundefs<'ast>(mut program: Program<'ast, TypedAst>) -> Program<'ast, TypedAst> {
-    let rf = RenameFundefs;
-    rf.rename(&mut program);
+    let mut rf = RenameFundefs::new();
+    rf.rewrite_program(&mut program);
     program
 }
 
 impl RenameFundefs {
-    fn rename<'ast>(&self, program: &mut Program<'ast, TypedAst>) {
-        #[cfg(debug_assertions)]
-        let mut used = HashSet::new();
-
-        for (_name, overloads) in &mut program.overloads {
-            for (_sig, fundefs) in overloads {
-                for fundef in fundefs {
-                    let mut fundef = fundef.borrow_mut();
-                    let name = mangle_fundef_name(&fundef.name, &fundef.args);
-
-                    #[cfg(debug_assertions)]
-                    if !used.insert(name.clone()) {
-                        panic!("name collision: {}", name);
-                    }
-
-                    fundef.name = name;
-                }
-            }
+    pub fn new() -> Self {
+        Self {
+            #[cfg(debug_assertions)]
+            used_names: HashSet::new(),
         }
+    }
+}
+
+impl<'ast> Rewrite<'ast> for RenameFundefs {
+    type Ast = TypedAst;
+
+    fn rewrite_fundef(&mut self, fundef: &mut Fundef<'ast, Self::Ast>) {
+        fundef.name = mangle_fundef_name(&fundef.name, &fundef.args);
+
+        #[cfg(debug_assertions)]
+        if !self.used_names.insert(fundef.name.clone()) {
+            panic!("name collision: {}", fundef.name);
+        }
+
+        self.rewrite_body(&mut fundef.body);
+    }
+
+    fn rewrite_body(&mut self, body: &mut Body<'ast, Self::Ast>) {
+        for stmt in &mut body.stmts {
+            self.rewrite_stmt(stmt);
+        }
+    }
+
+    fn rewrite_call(&mut self, call: Call<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
+        Expr::Call(call)
+    }
+
+    fn rewrite_fold(&mut self, fold: Fold<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
+        Expr::Fold(fold)
     }
 }
 
