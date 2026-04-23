@@ -6,10 +6,10 @@ use super::{lexer::*, operator::*, span::*};
 
 use crate::ast::*;
 
-pub struct Parser<'src> {
+pub struct Parser<'src, 'ast> {
     lexer: Peekable<Lexer<'src>>,
-    decs_arena: Arena<VarInfo<'static, ParsedAst>>,
-    expr_arena: Arena<Expr<'static, ParsedAst>>,
+    decs_arena: Arena<VarInfo<'ast, ParsedAst>>,
+    expr_arena: Arena<Expr<'ast, ParsedAst>>,
 }
 
 #[derive(Debug)]
@@ -26,7 +26,7 @@ pub enum ParseError {
 
 type ParseResult<T> = Result<T, ParseError>;
 
-impl<'src> Parser<'src> {
+impl<'src, 'ast> Parser<'src, 'ast> {
     pub fn new(lexer: Lexer<'src>) -> Self {
         Self {
             lexer: lexer.peekable(),
@@ -35,12 +35,12 @@ impl<'src> Parser<'src> {
         }
     }
 
-    fn alloc_lvis(&self, name: String, ty: Option<Type>) -> &'static VarInfo<'static, ParsedAst> {
+    fn alloc_lvis(&self, name: String, ty: Option<Type>) -> &'ast VarInfo<'ast, ParsedAst> {
         // SAFETY: arenas are owned by Parser and moved into each Fundef after parsing.
         unsafe { std::mem::transmute(self.decs_arena.alloc(VarInfo { name, ty, ssa: () })) }
     }
 
-    fn alloc_expr(&self, expr: Expr<'static, ParsedAst>) -> &'static Expr<'static, ParsedAst> {
+    fn alloc_expr(&self, expr: Expr<'ast, ParsedAst>) -> &'ast Expr<'ast, ParsedAst> {
         // SAFETY: arenas are owned by Parser and moved into each Fundef after parsing.
         unsafe { std::mem::transmute(self.expr_arena.alloc(expr)) }
     }
@@ -69,12 +69,10 @@ impl<'src> Parser<'src> {
     fn next(&mut self) -> ParseResult<(Token, Span)> {
         self.lexer.next().ok_or(ParseError::UnexpectedEof)
     }
-}
 
-impl<'src> Parser<'src> {
-    pub fn parse_program(&mut self) -> ParseResult<Program<'static, ParsedAst>> {
+    pub fn parse_program(&mut self) -> ParseResult<Program<'ast, ParsedAst>> {
         let mut overloads = HashMap::new();
-        let fundefs_arena: Arena<RefCell<Fundef<'static, ParsedAst>>> = Arena::new();
+        let fundefs_arena: Arena<RefCell<Fundef<'ast, ParsedAst>>> = Arena::new();
 
         while let Some((token, _)) = self.lexer.peek() {
             match token {
@@ -84,7 +82,7 @@ impl<'src> Parser<'src> {
                     let sig = fundef.signature();
                     let fundef_ref = fundefs_arena.alloc(RefCell::new(fundef));
                     // SAFETY: fundefs_arena is moved into Program before return.
-                    let fundef_ref: &'static RefCell<Fundef<'static, ParsedAst>> = unsafe { std::mem::transmute(fundef_ref) };
+                    let fundef_ref: &'ast RefCell<Fundef<'ast, ParsedAst>> = unsafe { std::mem::transmute(fundef_ref) };
                     let group = overloads.entry(name).or_insert(HashMap::new());
                     let fundefs = group.entry(sig).or_insert(Vec::new());
                     fundefs.push(fundef_ref);
@@ -102,7 +100,7 @@ impl<'src> Parser<'src> {
         })
     }
 
-    fn parse_fundef(&mut self) -> ParseResult<Fundef<'static, ParsedAst>> {
+    fn parse_fundef(&mut self) -> ParseResult<Fundef<'ast, ParsedAst>> {
         self.decs_arena = Arena::new();
         self.expr_arena = Arena::new();
 
@@ -154,7 +152,7 @@ impl<'src> Parser<'src> {
     /// ```bnf
     /// <body> = <stmt>* <expr>
     /// ```
-    fn parse_body(&mut self) -> ParseResult<Body<'static, ParsedAst>> {
+    fn parse_body(&mut self) -> ParseResult<Body<'ast, ParsedAst>> {
         let mut stmts = Vec::new();
 
         loop {
@@ -173,7 +171,7 @@ impl<'src> Parser<'src> {
         Ok(Body { stmts, ret })
     }
 
-    fn parse_stmt(&mut self) -> ParseResult<Stmt<'static, ParsedAst>> {
+    fn parse_stmt(&mut self) -> ParseResult<Stmt<'ast, ParsedAst>> {
         let (token, span) = self.next()?;
         let stmts = match token {
             Token::Identifier(lhs) => {
@@ -201,7 +199,7 @@ impl<'src> Parser<'src> {
         Ok(stmts)
     }
 
-    fn parse_expr(&mut self, prev_op: Option<impl Operator>) -> ParseResult<&'static Expr<'static, ParsedAst>> {
+    fn parse_expr(&mut self, prev_op: Option<impl Operator>) -> ParseResult<&'ast Expr<'ast, ParsedAst>> {
         if let Some((Token::If, _)) = self.lexer.peek() {
             self.parse_cond()
         } else if let Some((Token::LBrace, _)) = self.lexer.peek() {
@@ -213,7 +211,7 @@ impl<'src> Parser<'src> {
         }
     }
 
-    fn parse_cond(&mut self) -> ParseResult<&'static Expr<'static, ParsedAst>> {
+    fn parse_cond(&mut self) -> ParseResult<&'ast Expr<'ast, ParsedAst>> {
         self.expect(Token::If)?;
 
         let cond = self.parse_expr(None::<Bop>)?;
@@ -231,7 +229,7 @@ impl<'src> Parser<'src> {
         Ok(self.alloc_expr(Expr::Cond(Cond { cond, then_branch, else_branch })))
     }
 
-    fn parse_tensor(&mut self) -> ParseResult<&'static Expr<'static, ParsedAst>> {
+    fn parse_tensor(&mut self) -> ParseResult<&'ast Expr<'ast, ParsedAst>> {
         self.expect(Token::LBrace)?;
 
         let body = self.parse_body()?;
@@ -271,7 +269,7 @@ impl<'src> Parser<'src> {
         })))
     }
 
-    fn parse_binary(&mut self, prev_op: Option<impl Operator>) -> ParseResult<&'static Expr<'static, ParsedAst>> {
+    fn parse_binary(&mut self, prev_op: Option<impl Operator>) -> ParseResult<&'ast Expr<'ast, ParsedAst>> {
         let (token, span_start) = self.next()?;
 
         let mut left = match token {
@@ -336,7 +334,7 @@ impl<'src> Parser<'src> {
         Ok(left)
     }
 
-    fn parse_postfix(&mut self, operand: &'static Expr<'static, ParsedAst>) -> ParseResult<&'static Expr<'static, ParsedAst>> {
+    fn parse_postfix(&mut self, operand: &'ast Expr<'ast, ParsedAst>) -> ParseResult<&'ast Expr<'ast, ParsedAst>> {
         let mut expr = operand;
 
         while let Some((Token::LSquare, _)) = self.lexer.peek() {
@@ -346,7 +344,7 @@ impl<'src> Parser<'src> {
         Ok(expr)
     }
 
-    fn parse_unary(&mut self, op: Uop) -> ParseResult<&'static Expr<'static, ParsedAst>> {
+    fn parse_unary(&mut self, op: Uop) -> ParseResult<&'ast Expr<'ast, ParsedAst>> {
         let r = self.parse_expr(Some(op))?;
         Ok(self.alloc_expr(Expr::Call(Call {
             id: op.symbol().to_owned(),
@@ -354,7 +352,7 @@ impl<'src> Parser<'src> {
         })))
     }
 
-    fn parse_call(&mut self, id: String) -> ParseResult<&'static Expr<'static, ParsedAst>> {
+    fn parse_call(&mut self, id: String) -> ParseResult<&'ast Expr<'ast, ParsedAst>> {
         self.expect(Token::LParen)?;
 
         let mut args = Vec::new();
@@ -381,7 +379,7 @@ impl<'src> Parser<'src> {
         }
     }
 
-    fn parse_prf_call(&mut self, id: String, span: Span) -> ParseResult<&'static Expr<'static, ParsedAst>> {
+    fn parse_prf_call(&mut self, id: String, span: Span) -> ParseResult<&'ast Expr<'ast, ParsedAst>> {
         let mut args = Vec::new();
 
         self.expect(Token::LParen)?;
@@ -438,7 +436,7 @@ impl<'src> Parser<'src> {
         Ok(id)
     }
 
-    fn parse_fold_fun_arg(&mut self) -> ParseResult<FoldFunArg<'static, ParsedAst>> {
+    fn parse_fold_fun_arg(&mut self) -> ParseResult<FoldFunArg<'ast, ParsedAst>> {
         let expr = self.parse_expr(None::<Bop>)?;
         if matches!(expr, Expr::Id(Id::Var(name)) if name == "_") {
             Ok(FoldFunArg::Placeholder)
@@ -447,7 +445,7 @@ impl<'src> Parser<'src> {
         }
     }
 
-    fn parse_fold_fun(&mut self) -> ParseResult<FoldFun<'static, ParsedAst>> {
+    fn parse_fold_fun(&mut self) -> ParseResult<FoldFun<'ast, ParsedAst>> {
         let (token, span) = self.next()?;
         let id = self.fold_dispatch_from_token(token, span)?;
 
@@ -467,7 +465,7 @@ impl<'src> Parser<'src> {
         Ok(FoldFun::Apply { id, args })
     }
 
-    fn parse_fold(&mut self) -> ParseResult<&'static Expr<'static, ParsedAst>> {
+    fn parse_fold(&mut self) -> ParseResult<&'ast Expr<'ast, ParsedAst>> {
         self.expect(Token::LParen)?;
 
         let neutral = self.parse_expr(None::<Bop>)?;
@@ -491,7 +489,7 @@ impl<'src> Parser<'src> {
         })))
     }
 
-    fn parse_array(&mut self) -> ParseResult<&'static Expr<'static, ParsedAst>> {
+    fn parse_array(&mut self) -> ParseResult<&'ast Expr<'ast, ParsedAst>> {
         let mut values = Vec::new();
 
         self.expect(Token::LSquare)?;
@@ -509,7 +507,7 @@ impl<'src> Parser<'src> {
         Ok(self.alloc_expr(Expr::Array(Array { elems: values })))
     }
 
-    fn parse_sel(&mut self, arr: &'static Expr<'static, ParsedAst>) -> ParseResult<&'static Expr<'static, ParsedAst>> {
+    fn parse_sel(&mut self, arr: &'ast Expr<'ast, ParsedAst>) -> ParseResult<&'ast Expr<'ast, ParsedAst>> {
         self.expect(Token::LSquare)?;
         let idx = self.parse_expr(None::<Bop>)?;
         self.expect(Token::RSquare)?;
