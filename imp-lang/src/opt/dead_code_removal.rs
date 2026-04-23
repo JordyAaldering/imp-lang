@@ -28,6 +28,17 @@ impl<'ast> Traverse<'ast> for DeadCodeRemoval {
     fn trav_fundef(&mut self, fundef: &mut Fundef<'ast, Self::Ast>) {
         self.used.clear();
         self.trav_body(&mut fundef.body);
+
+        let mut kept_rev = Vec::with_capacity(fundef.shape_prelude.len());
+        for mut assign in mem::take(&mut fundef.shape_prelude).into_iter().rev() {
+            if self.used.contains(&Self::ptr(assign.lhs)) {
+                self.trav_assign(&mut assign);
+                kept_rev.push(assign);
+            }
+        }
+
+        kept_rev.reverse();
+        fundef.shape_prelude = kept_rev;
     }
 
     fn trav_assign(&mut self, assign: &mut Assign<'ast, Self::Ast>) {

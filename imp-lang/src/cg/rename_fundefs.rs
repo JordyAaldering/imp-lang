@@ -67,8 +67,6 @@ impl<'ast> Traverse<'ast> for RenameFundefs {
         let old = fundef.name.clone();
         fundef.name = mangle_fundef_name(&fundef.name, &fundef.args);
 
-        eprintln!("rename {} to {}", old, fundef.name);
-
         #[cfg(debug_assertions)]
         if !self.used_names.insert(fundef.name.clone()) {
             panic!("name collision: {}", fundef.name);
