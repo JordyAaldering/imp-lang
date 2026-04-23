@@ -15,4 +15,3 @@ pub struct VarInfo<'ast, Ast: AstConfig> {
     pub ty: Ast::VarType,
     pub ssa: Ast::SsaLink<'ast>,
 }
-

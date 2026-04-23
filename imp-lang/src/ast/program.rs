@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+
 use typed_arena::Arena;
 
 use super::*;
@@ -27,13 +28,4 @@ pub struct Program<'ast, Ast: AstConfig> {
     /// ```
     pub overloads: HashMap<String, HashMap<BaseSignature, Vec<&'ast Fundef<'ast, Ast>>>>,
     pub fundefs: Arena<Fundef<'ast, Ast>>,
-}
-
-impl<'ast, Ast: AstConfig> Clone for Program<'ast, Ast> {
-    fn clone(&self) -> Self {
-        Self {
-            overloads: self.overloads.clone(),
-            fundefs: Arena::new(),
-        }
-    }
 }

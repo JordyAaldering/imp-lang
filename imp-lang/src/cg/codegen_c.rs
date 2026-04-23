@@ -601,8 +601,8 @@ impl<'ast> Traverse<'ast> for CompileC {
         self.expr_stack.push(format!("IMP_{}({})", name, args.join(", ")));
     }
 
-    fn trav_prf(&mut self, prf: &mut PrfCall<'ast, TypedAst>) {
-        use PrfCall::*;
+    fn trav_prf(&mut self, prf: &mut Prf<'ast, TypedAst>) {
+        use Prf::*;
         let rendered = match &prf {
             DimA(arr) => {
                 let arg = self.render_id(*arr);

@@ -36,18 +36,18 @@ impl<'ast> AnalyseTp {
     }
 
     fn shape_of_arg_expr(&self, fundef: &Fundef<'ast, ParsedAst>, arg_index: usize) -> Expr<'ast, ParsedAst> {
-        Expr::PrfCall(PrfCall::ShapeA(self.arg_expr(fundef, arg_index)))
+        Expr::Prf(Prf::ShapeA(self.arg_expr(fundef, arg_index)))
     }
 
     fn dim_of_arg_expr(&self, fundef: &Fundef<'ast, ParsedAst>, arg_index: usize) -> Expr<'ast, ParsedAst> {
-        Expr::PrfCall(PrfCall::DimA(self.arg_expr(fundef, arg_index)))
+        Expr::Prf(Prf::DimA(self.arg_expr(fundef, arg_index)))
     }
 
     fn dim_at_expr(&self, fundef: &Fundef<'ast, ParsedAst>, arg_index: usize, axis_index: usize) -> Expr<'ast, ParsedAst> {
         let idx = self.alloc_expr(fundef, Expr::Const(Const::Usize(axis_index)));
         let idx_vec = self.alloc_expr(fundef, Expr::Array(Array { elems: vec![idx] }));
         let shp = self.alloc_expr(fundef, self.shape_of_arg_expr(fundef, arg_index));
-        Expr::PrfCall(PrfCall::SelVxA(idx_vec, shp))
+        Expr::Prf(Prf::SelVxA(idx_vec, shp))
     }
 
     fn bind_symbol(

@@ -192,7 +192,7 @@ impl<'ast> Flatten<'ast> {
             }
             Cond(n) => Cond(self.trav_cond(n)),
             Call(n) => Call(self.trav_call(n)),
-            PrfCall(n) => PrfCall(self.trav_prf_call(n)),
+            Prf(n) => Prf(self.trav_prf_call(n)),
             Fold(n) => Fold(self.trav_fold(n)),
             Tensor(n) => Tensor(self.trav_tensor(n)),
             Array(n) => Array(self.trav_array(n)),
@@ -221,8 +221,8 @@ impl<'ast> Flatten<'ast> {
         Call { id: call.id, args }
     }
 
-    fn trav_prf_call(&mut self, prf: PrfCall<'ast, ParsedAst>) -> PrfCall<'ast, ParsedAst> {
-        use PrfCall::*;
+    fn trav_prf_call(&mut self, prf: Prf<'ast, ParsedAst>) -> Prf<'ast, ParsedAst> {
+        use Prf::*;
         match prf {
             ShapeA(a) => ShapeA(self.trav_expr((*a).clone())),
             DimA(a) => DimA(self.trav_expr((*a).clone())),

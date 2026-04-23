@@ -2,7 +2,7 @@ use super::*;
 
 /// Primitive function call
 #[derive(Clone, Debug)]
-pub enum PrfCall<'ast, Ast: AstConfig> {
+pub enum Prf<'ast, Ast: AstConfig> {
     /// @dimA
     ///
     /// Rank (dimension count) of an array.
@@ -73,9 +73,9 @@ pub enum PrfCall<'ast, Ast: AstConfig> {
     NotS(Ast::Operand<'ast>),
 }
 
-impl<'ast, Ast: AstConfig> PrfCall<'ast, Ast> {
+impl<'ast, Ast: AstConfig> Prf<'ast, Ast> {
     pub fn nameof(&self) -> &'static str {
-        use PrfCall::*;
+        use Prf::*;
         match self {
             ShapeA(_) => "@shapeA",
             DimA(_) => "@dimA",
@@ -96,7 +96,7 @@ impl<'ast, Ast: AstConfig> PrfCall<'ast, Ast> {
     }
 
     pub fn args(&self) -> Vec<&Ast::Operand<'ast>> {
-        use PrfCall::*;
+        use Prf::*;
         match self {
             ShapeA(a) => vec![a],
             DimA(a) => vec![a],
@@ -117,7 +117,7 @@ impl<'ast, Ast: AstConfig> PrfCall<'ast, Ast> {
     }
 
     pub fn args_mut(&mut self) -> Vec<&mut Ast::Operand<'ast>> {
-        use PrfCall::*;
+        use Prf::*;
         match self {
             ShapeA(a) => vec![a],
             DimA(a) => vec![a],

@@ -263,7 +263,7 @@ pub trait Traverse<'ast> {
         match expr {
             Cond(n) => self.trav_cond_expr(n),
             Call(n) => self.trav_call_expr(n),
-            PrfCall(n) => self.trav_prf_expr(n),
+            Prf(n) => self.trav_prf_expr(n),
             Tensor(n) => self.trav_tensor_expr(n),
             Fold(n) => self.trav_fold_expr(n),
             Array(n) => self.trav_array_expr(n),
@@ -294,12 +294,12 @@ pub trait Traverse<'ast> {
         }
     }
 
-    fn trav_prf_expr(&mut self, mut prf: PrfCall<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
+    fn trav_prf_expr(&mut self, mut prf: Prf<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
         self.trav_prf(&mut prf);
-        Expr::PrfCall(prf)
+        Expr::Prf(prf)
     }
 
-    fn trav_prf(&mut self, prf: &mut PrfCall<'ast, Self::Ast>) {
+    fn trav_prf(&mut self, prf: &mut Prf<'ast, Self::Ast>) {
         for arg in prf.args_mut() {
             Self::Ast::trav_operand(self, arg);
         }

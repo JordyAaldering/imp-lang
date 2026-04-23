@@ -345,9 +345,9 @@ impl<'ast> TypeInfer<'ast> {
                 let (call, ty) = self.trav_call(n);
                 (Expr::Call(call), ty)
             }
-            Expr::PrfCall(n) => {
+            Expr::Prf(n) => {
                 let (prf_call, ty) = self.trav_prf_call(n);
-                (Expr::PrfCall(prf_call), ty)
+                (Expr::Prf(prf_call), ty)
             }
             Expr::Fold(n) => {
                 let (fold, ty) = self.trav_fold(n);
@@ -461,8 +461,8 @@ impl<'ast> TypeInfer<'ast> {
         (Fold { neutral, foldfun, selection }, neutral_ty)
     }
 
-    fn trav_prf_call(&mut self, prf: PrfCall<'ast, UntypedAst>) -> (PrfCall<'ast, UntypedAst>, Type) {
-        use PrfCall::*;
+    fn trav_prf_call(&mut self, prf: Prf<'ast, UntypedAst>) -> (Prf<'ast, UntypedAst>, Type) {
+        use Prf::*;
         match prf {
             ShapeA(arr) => {
                 let (arr, arr_ty) = self.trav_id(arr);

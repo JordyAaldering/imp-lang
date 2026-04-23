@@ -187,7 +187,7 @@ impl<'ast> ToSsa<'ast> {
         match expr {
             Cond(n) => Cond(self.trav_cond(n)),
             Call(n) => Call(self.trav_call(n)),
-            PrfCall(n) => PrfCall(self.trav_prf_call(n)),
+            Prf(n) => Prf(self.trav_prf_call(n)),
             Fold(n) => Fold(self.trav_fold(n)),
             Tensor(n) => Tensor(self.trav_tensor(n)),
             Array(n) => Array(self.trav_array(n)),
@@ -216,8 +216,8 @@ impl<'ast> ToSsa<'ast> {
         Call { id: call.id, args }
     }
 
-    fn trav_prf_call(&mut self, prf: PrfCall<'ast, ParsedAst>) -> PrfCall<'ast, UntypedAst> {
-        use PrfCall::*;
+    fn trav_prf_call(&mut self, prf: Prf<'ast, ParsedAst>) -> Prf<'ast, UntypedAst> {
+        use Prf::*;
         match prf {
             DimA(a) => DimA(self.unwrap_id_operand(a)),
             ShapeA(a) => ShapeA(self.unwrap_id_operand(a)),

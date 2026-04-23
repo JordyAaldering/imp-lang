@@ -127,7 +127,7 @@ impl<'ast, Ast: AstConfig + 'ast> Traverse<'ast> for Show<'ast, Ast> {
         self.write(")");
     }
 
-    fn trav_prf(&mut self, prf: &mut PrfCall<'ast, Self::Ast>) {
+    fn trav_prf(&mut self, prf: &mut Prf<'ast, Self::Ast>) {
         self.write(prf.nameof());
         self.write("(");
         for arg in prf.args_mut() {

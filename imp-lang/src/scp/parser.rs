@@ -392,7 +392,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
             self.expect(Token::RParen)?;
         }
 
-        use PrfCall::*;
+        use Prf::*;
         let call = match (id.as_str(), args.as_slice()) {
             ("dimA", [a]) => DimA(*a),
             ("shapeA", [a]) => ShapeA(*a),
@@ -414,7 +414,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
             }
         };
 
-        Ok(self.alloc_expr(Expr::PrfCall(call)))
+        Ok(self.alloc_expr(Expr::Prf(call)))
     }
 
     fn fold_dispatch_from_token(&self, token: Token, span: Span) -> ParseResult<String> {

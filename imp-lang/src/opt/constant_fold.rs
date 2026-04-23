@@ -45,8 +45,8 @@ impl<'ast> Traverse<'ast> for ConstantFold {
         }
     }
 
-    fn trav_prf_expr(&mut self, prf: PrfCall<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
-        use PrfCall::*;
+    fn trav_prf_expr(&mut self, prf: Prf<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
+        use Prf::*;
         match &prf {
             AddSxS(l, r) => {
                 if let (Some(l), Some(r)) = (self.const_u32(l), self.const_u32(r)) {
@@ -71,6 +71,6 @@ impl<'ast> Traverse<'ast> for ConstantFold {
             _ => (),
         }
 
-        Expr::PrfCall(prf)
+        Expr::Prf(prf)
     }
 }

@@ -229,7 +229,7 @@ impl<'ast> DispatchResolver<'ast> {
         match expr {
             Expr::Cond(n) => Expr::Cond(self.lower_cond(n)),
             Expr::Call(n) => Expr::Call(self.lower_call(n)),
-            Expr::PrfCall(n) => Expr::PrfCall(self.lower_prf(n)),
+            Expr::Prf(n) => Expr::Prf(self.lower_prf(n)),
             Expr::Fold(n) => Expr::Fold(self.lower_fold(n)),
             Expr::Tensor(n) => Expr::Tensor(self.lower_tensor(n)),
             Expr::Array(n) => Expr::Array(self.lower_array(n)),
@@ -259,8 +259,8 @@ impl<'ast> DispatchResolver<'ast> {
         }
     }
 
-    fn lower_prf(&mut self, prf: PrfCall<'ast, UntypedAst>) -> PrfCall<'ast, TypedAst> {
-        use PrfCall::*;
+    fn lower_prf(&mut self, prf: Prf<'ast, UntypedAst>) -> Prf<'ast, TypedAst> {
+        use Prf::*;
         match prf {
             ShapeA(a) => ShapeA(self.lower_id(a)),
             DimA(a) => DimA(self.lower_id(a)),

@@ -4,7 +4,7 @@ use super::*;
 pub enum Expr<'ast, Ast: AstConfig> {
     Cond(Cond<'ast, Ast>),
     Call(Call<'ast, Ast>),
-    PrfCall(PrfCall<'ast, Ast>),
+    Prf(Prf<'ast, Ast>),
     Tensor(Tensor<'ast, Ast>),
     Fold(Fold<'ast, Ast>),
     Array(Array<'ast, Ast>),

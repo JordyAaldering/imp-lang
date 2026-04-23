@@ -162,7 +162,6 @@ fn add_dyn(usize[d:shp] a, usize[d:shp] b) -> usize[d:shp] {
     a + b
 }
 
-
 fn reverse(usize[n] shp) -> usize[n] {
     { @selVxA([n-1-iv[[0]]], shp) | iv < [n] }
 }
