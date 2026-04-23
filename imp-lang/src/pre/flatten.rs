@@ -37,7 +37,7 @@ struct Flatten<'ast> {
     uid: usize,
     decs_arena: Arena<VarInfo<'ast, ParsedAst>>,
     expr_arena: Arena<Expr<'ast, ParsedAst>>,
-    new_assigns: Vec<Stmt<'ast, ParsedAst>>,
+    new_assigns: Vec<Assign<'ast, ParsedAst>>,
     env_stack: Vec<HashMap<String, Id<'ast, ParsedAst>>>,
 }
 
@@ -90,7 +90,7 @@ impl<'ast> Flatten<'ast> {
         let name = self.fresh_uid();
         let lvis = self.alloc_lvis(name.clone(), None);
         let rhs = self.alloc_expr(expr);
-        self.new_assigns.push(Stmt::Assign(Assign { lhs: lvis, expr: rhs }));
+        self.new_assigns.push(Assign { lhs: lvis, expr: rhs });
 
         let id = Id::Var(name.clone());
         self.bind_env(name, id.clone());
@@ -111,12 +111,7 @@ impl<'ast> Flatten<'ast> {
         for assign in &fundef.shape_prelude {
             let assign = self.trav_assign(*assign);
             let new_assigns = mem::take(&mut self.new_assigns);
-            for stmt in new_assigns {
-                match stmt {
-                    Stmt::Assign(n) => shape_prelude.push(n),
-                    Stmt::Printf(_) => unreachable!(),
-                }
-            }
+            shape_prelude.extend(new_assigns);
             shape_prelude.push(assign);
         }
 
@@ -164,12 +159,16 @@ impl<'ast> Flatten<'ast> {
 
         for stmt in body.stmts {
             let stmt = self.trav_stmt(stmt);
-            stmts.extend(mem::take(&mut self.new_assigns));
+            for new_assign in mem::take(&mut self.new_assigns) {
+                stmts.push(Stmt::Assign(new_assign));
+            }
             stmts.push(stmt);
         }
 
         let ret = self.trav_expr((*body.ret).clone());
-        stmts.extend(mem::take(&mut self.new_assigns));
+        for new_assign in mem::take(&mut self.new_assigns) {
+            stmts.push(Stmt::Assign(new_assign));
+        }
 
         self.new_assigns = old_assigns;
         Body { stmts, ret }
