@@ -1,48 +1,34 @@
-use std::{cell::RefCell, collections::HashMap, mem};
+use std::{collections::HashMap, mem};
 use typed_arena::Arena;
 
 use crate::ast::*;
 
-pub fn type_infer<'ast>(program: Program<'ast, UntypedAst>) -> Result<Program<'ast, TypedAst>, InferenceError> {
+/// TODO: convert into &mut Program, and implement Traversal for TypeInfer instead
+pub fn type_infer<'ast>(program: Program<'ast, UntypedAst>) -> Result<Program<'ast, UntypedAst>, InferenceError> {
     validate_overload_families(&program.overloads)?;
 
-    let mut typed_program = Program {
+    let mut out_program = Program {
         overloads: HashMap::new(),
         fundefs: Arena::new(),
     };
 
-    // First pass: create stub signatures for all functions to enable forward references
-    let mut stubs: HashMap<String, HashMap<BaseSignature, Vec<&'ast RefCell<Fundef<'ast, TypedAst>>>>> = HashMap::new();
+    let mut stubs: HashMap<String, HashMap<BaseSignature, Vec<DispatchStub>>> = HashMap::new();
 
     for (name, overloads) in &program.overloads {
         let mut stub_groups = HashMap::new();
         for (sig, fundefs) in overloads {
             let mut stub_fundefs = Vec::new();
             for fundef in fundefs {
-                let fundef = fundef.borrow();
-                let stub_ref = typed_program.fundefs.alloc(RefCell::new(Fundef {
-                    name: fundef.name.clone(),
+                stub_fundefs.push(DispatchStub {
                     ret_type: fundef.ret_type.clone(),
                     args: fundef.args.clone(),
-                    shape_prelude: Vec::new(),
-                    shape_facts: ShapeFacts::default(),
-                    decs: Arena::new(),
-                    exprs: Arena::new(),
-                    body: Body { stmts: vec![], ret: Id::Arg(usize::MAX) },
-                }));
-                // SAFETY: `typed_program` is returned from this function, so dispatch arena
-                // outlives all references used in inferred call targets.
-                let stub: &'ast RefCell<Fundef<'ast, TypedAst>> = unsafe { std::mem::transmute(stub_ref) };
-                stub_fundefs.push(stub);
+                });
             }
-
             stub_groups.insert(sig.clone(), stub_fundefs);
         }
-
         stubs.insert(name.clone(), stub_groups);
     }
 
-    // Second pass: type-check each function with all overload signatures available
     let mut overloads = HashMap::new();
 
     for (name, groups) in program.overloads {
@@ -51,39 +37,37 @@ pub fn type_infer<'ast>(program: Program<'ast, UntypedAst>) -> Result<Program<'a
             let mut new_fundefs = Vec::new();
             for fundef in fundefs {
                 let mut infer = TypeInfer::new(stubs.clone());
-                let typed = {
-                    let fundef = fundef.borrow();
-                    infer.trav_fundef(&fundef)
-                };
+                let inferred = infer.trav_fundef(fundef);
 
                 if let Some(err) = infer.errors.into_iter().next() {
                     return Err(err);
                 }
 
-                let typed_ref = typed_program.fundefs.alloc(RefCell::new(typed));
-                // SAFETY: typed_program owns the arena for returned program lifetime.
-                let typed_ref: &'ast RefCell<Fundef<'ast, TypedAst>> = unsafe { std::mem::transmute(typed_ref) };
-                new_fundefs.push(typed_ref);
+                let out_ref = out_program.fundefs.alloc(inferred);
+                let out_ref: &'ast Fundef<'ast, UntypedAst> = unsafe { std::mem::transmute(out_ref) };
+                new_fundefs.push(out_ref);
             }
-
             new_groups.insert(sig, new_fundefs);
         }
-
         overloads.insert(name, new_groups);
     }
 
-    typed_program.overloads = overloads;
-    Ok(typed_program)
+    out_program.overloads = overloads;
+    Ok(out_program)
 }
 
-fn validate_overload_families(overloads: &HashMap<String, HashMap<BaseSignature, Vec<&RefCell<Fundef<'_, UntypedAst>>>>>) -> Result<(), InferenceError> {
+#[derive(Clone, Debug)]
+struct DispatchStub {
+    ret_type: Type,
+    args: Vec<Farg>,
+}
+
+fn validate_overload_families(overloads: &HashMap<String, HashMap<BaseSignature, Vec<&Fundef<'_, UntypedAst>>>>) -> Result<(), InferenceError> {
     for (name, group) in overloads {
         for (sig, fundefs) in group {
-            let (first, fundefs) = fundefs.split_first().unwrap();
-            let first = first.borrow();
+            let (first, rest) = fundefs.split_first().unwrap();
             let expected_ret_ty = &first.ret_type.ty;
-            for fundef in fundefs {
-                let fundef = fundef.borrow();
+            for fundef in rest {
                 if &fundef.ret_type.ty != expected_ret_ty {
                     return Err(InferenceError::InconsistentOverloadReturnBase {
                         name: name.clone(),
@@ -100,80 +84,34 @@ fn validate_overload_families(overloads: &HashMap<String, HashMap<BaseSignature,
 
 pub struct TypeInfer<'ast> {
     args: Vec<Farg>,
-    idmap: HashMap<*const VarInfo<'ast, UntypedAst>, &'ast VarInfo<'ast, TypedAst>>,
-    decs_arena: Arena<VarInfo<'ast, TypedAst>>,
-    expr_arena: Arena<Expr<'ast, TypedAst>>,
+    idmap: HashMap<*const VarInfo<'ast, UntypedAst>, &'ast VarInfo<'ast, UntypedAst>>,
+    decs_arena: Arena<VarInfo<'ast, UntypedAst>>,
+    expr_arena: Arena<Expr<'ast, UntypedAst>>,
     errors: Vec<InferenceError>,
-    stubs: HashMap<String, HashMap<BaseSignature, Vec<&'ast RefCell<Fundef<'ast, TypedAst>>>>>,
+    stubs: HashMap<String, HashMap<BaseSignature, Vec<DispatchStub>>>,
 }
 
 #[allow(unused)]
 #[derive(Debug)]
 pub enum InferenceError {
-    SelectionIndexNotVector {
-        ty: Type,
-    },
-    SelectionIndexNotInteger {
-        ty: Type,
-    },
-    SelectionRankTooSmall {
-        needed: usize,
-        known_min_rank: Option<usize>,
-        shape: TypePattern,
-    },
-    /// Array literal elements have different base types or ranks.
-    InhomogeneousArray {
-        element: usize,
-        expected: Type,
-        found: Type,
-    },
-    /// Call to undefined function.
-    UndefinedFunction {
-        name: String,
-    },
-    /// Function exists, but no overload matches argument base types and count.
-    NoMatchingOverload {
-        name: String,
-        arg_bases: BaseSignature,
-    },
-    /// Call argument type mismatch.
-    CallArgumentTypeMismatch {
-        func_name: String,
-        arg_index: usize,
-        expected: Type,
-        provided: Type,
-    },
-    AmbiguousOverload {
-        name: String,
-        arg_bases: BaseSignature,
-    },
-    PrimitiveArgumentKindMismatch {
-        primitive: String,
-        arg_index: usize,
-        expected: &'static str,
-        provided: Type,
-    },
-    InconsistentOverloadReturnBase {
-        name: String,
-        arg_bases: BaseSignature,
-        expected: BaseType,
-        found: BaseType,
-    },
-    FoldSelectionTypeMismatch {
-        expected: Type,
-        found: Type,
-    },
-    FoldFunPlaceholderCountMismatch {
-        found: usize,
-    },
-    FoldFunctionTypeMismatch {
-        expected: Type,
-        found: Type,
-    },
+    SelectionIndexNotVector { ty: Type },
+    SelectionIndexNotInteger { ty: Type },
+    SelectionRankTooSmall { needed: usize, known_min_rank: Option<usize>, shape: TypePattern },
+    InhomogeneousArray { element: usize, expected: Type, found: Type },
+    UndefinedFunction { name: String },
+    NoMatchingOverload { name: String, arg_bases: BaseSignature },
+    CallArgumentTypeMismatch { func_name: String, arg_index: usize, expected: Type, provided: Type },
+    AmbiguousOverload { name: String, arg_bases: BaseSignature },
+    PrimitiveArgumentKindMismatch { primitive: String, arg_index: usize, expected: &'static str, provided: Type },
+    InconsistentOverloadReturnBase { name: String, arg_bases: BaseSignature, expected: BaseType, found: BaseType },
+    FoldSelectionTypeMismatch { expected: Type, found: Type },
+    FoldFunPlaceholderCountMismatch { found: usize },
+    FoldFunctionTypeMismatch { expected: Type, found: Type },
+    MissingTypeAnnotation { name: String },
 }
 
 impl<'ast> TypeInfer<'ast> {
-    fn new(overloads: HashMap<String, HashMap<BaseSignature, Vec<&'ast RefCell<Fundef<'ast, TypedAst>>>>>) -> Self {
+    fn new(overloads: HashMap<String, HashMap<BaseSignature, Vec<DispatchStub>>>) -> Self {
         Self {
             args: Vec::new(),
             idmap: HashMap::new(),
@@ -184,23 +122,24 @@ impl<'ast> TypeInfer<'ast> {
         }
     }
 
-    fn alloc_lvis(&self, name: String, ty: Type, ssa: Option<&'ast Expr<'ast, TypedAst>>) -> &'ast VarInfo<'ast, TypedAst> {
-        // SAFETY: arenas are owned by TypeInfer and moved into the produced Fundef.
-        unsafe { std::mem::transmute(self.decs_arena.alloc(VarInfo { name, ty, ssa })) }
+    fn alloc_lvis(&self, name: String, ty: Type, ssa: Option<&'ast Expr<'ast, UntypedAst>>) -> &'ast VarInfo<'ast, UntypedAst> {
+        unsafe { std::mem::transmute(self.decs_arena.alloc(VarInfo { name, ty: Some(ty), ssa })) }
     }
 
-    fn alloc_expr(&self, expr: Expr<'ast, TypedAst>) -> &'ast Expr<'ast, TypedAst> {
-        // SAFETY: arenas are owned by TypeInfer and moved into the produced Fundef.
+    fn alloc_expr(&self, expr: Expr<'ast, UntypedAst>) -> &'ast Expr<'ast, UntypedAst> {
         unsafe { std::mem::transmute(self.expr_arena.alloc(expr)) }
     }
 
-    /// Build the type of an array literal. The element count becomes a leading `Known(n)` dimension
-    /// prepended to the element type's shape. Errors on base-type or rank mismatch between elements.
+    fn typed_of_id(&self, id: &Id<'ast, UntypedAst>) -> Type {
+        match id {
+            Id::Arg(i) => self.args[*i].ty.clone(),
+            Id::Var(v) => v.ty.clone().unwrap_or_else(|| Type::scalar(BaseType::I32)),
+        }
+    }
+
     fn array_literal_type(&mut self, elem_types: Vec<Type>) -> Type {
         let count = elem_types.len();
-
         let Some(first) = elem_types.first() else {
-            // Empty literal: default to i32[0].
             return Type::vector_dim(BaseType::I32, DimPattern::Known(0));
         };
 
@@ -227,7 +166,6 @@ impl<'ast> TypeInfer<'ast> {
                 new_axes.extend_from_slice(axes);
                 TypePattern::Axes(new_axes)
             }
-            // Element shape is fully unknown; result shape is also fully unknown.
             TypePattern::Any => TypePattern::Any,
         };
 
@@ -236,53 +174,21 @@ impl<'ast> TypeInfer<'ast> {
 
     fn tensor_iv_and_dims(ub_ty: &Type) -> (Type, Option<usize>) {
         match &ub_ty.shape {
-            TypePattern::Scalar => {
-                unreachable!("cannot iterate over scalar ub")
-            }
-            TypePattern::Axes(axes)
-                if axes.len() == 1 && matches!(axes[0], AxisPattern::Dim(_)) =>
-            {
-                // Rank-1 ub: its element count gives the iteration dimensionality k.
+            TypePattern::Scalar => unreachable!("cannot iterate over scalar ub"),
+            TypePattern::Axes(axes) if axes.len() == 1 && matches!(axes[0], AxisPattern::Dim(_)) => {
                 match &axes[0] {
-                    AxisPattern::Dim(DimPattern::Known(k)) => {
-                        // iv has the same element type as ub; shape is [k].
-                        let iv_ty = Type::vector_dim(ub_ty.ty.clone(), DimPattern::Known(*k));
-                        (iv_ty, Some(*k))
-                    }
-                    AxisPattern::Dim(DimPattern::Any) => {
-                        // ub rank-1 with unknown extent still implies one loop dimension.
-                        let iv_ty = Type {
-                            ty: ub_ty.ty.clone(),
-                            shape: TypePattern::Axes(vec![AxisPattern::Dim(DimPattern::Any)]),
-                        };
-                        (iv_ty, Some(1))
-                    }
-                    AxisPattern::Dim(DimPattern::Var(_)) => {
-                        // Named extent (e.g., `usize[n]`): rank is still statically 1.
-                        let iv_ty = Type {
-                            ty: ub_ty.ty.clone(),
-                            shape: TypePattern::Axes(vec![AxisPattern::Dim(DimPattern::Any)]),
-                        };
-                        (iv_ty, Some(1))
-                    }
-                    _ => unreachable!("guard ensured AxisPattern::Dim"),
+                    AxisPattern::Dim(DimPattern::Known(k)) => (Type::vector_dim(ub_ty.ty.clone(), DimPattern::Known(*k)), Some(*k)),
+                    AxisPattern::Dim(DimPattern::Any) | AxisPattern::Dim(DimPattern::Var(_)) => (
+                        Type { ty: ub_ty.ty.clone(), shape: TypePattern::Axes(vec![AxisPattern::Dim(DimPattern::Any)]) },
+                        Some(1),
+                    ),
+                    _ => unreachable!(),
                 }
             }
-            _ => {
-                // Multi-rank ub, contains `..rest`, or `Any` shape: fully unknown.
-                let iv_ty = Type {
-                    ty: ub_ty.ty.clone(),
-                    shape: TypePattern::Any,
-                };
-                (iv_ty, None)
-            }
+            _ => (Type { ty: ub_ty.ty.clone(), shape: TypePattern::Any }, None),
         }
     }
 
-    /// Prepend `leading_axes` to `elem_ty`'s shape to produce the result type of a tensor.
-    ///
-    /// If `leading_axes` is empty the element type is returned unchanged (execute-once case).
-    /// The axes may carry concrete `Var` names (from `extract_ub_axes`) or be `Any`.
     fn tensor_result_type(elem_ty: Type, leading_axes: Vec<AxisPattern>) -> Type {
         if leading_axes.is_empty() {
             return elem_ty;
@@ -294,20 +200,11 @@ impl<'ast> TypeInfer<'ast> {
                 new_axes.extend(elem_axes);
                 TypePattern::Axes(new_axes)
             }
-            TypePattern::Any => {
-                // Element shape fully unknown; result shape is also fully unknown.
-                TypePattern::Any
-            }
+            TypePattern::Any => TypePattern::Any,
         };
         Type { ty: elem_ty.ty, shape: result_shape }
     }
 
-    /// Try to extract one named/constant `AxisPattern` per element from `ub`'s SSA-defining
-    /// array literal.  Returns `None` if `ub` is not a locally-defined array literal.
-    ///
-    /// For `ub = [cols]` (arg) → `[Dim(Var("cols"))]`.
-    /// For `ub = [3]`   (u32 literal absorbed into SSA) → `[Dim(Known(3))]`.
-    /// For `ub = []`    → `[]` (execute-once case).
     fn extract_ub_axes(&self, ub: &Id<'ast, UntypedAst>) -> Option<Vec<AxisPattern>> {
         let lvis = match ub {
             Id::Var(v) => v,
@@ -323,118 +220,45 @@ impl<'ast> TypeInfer<'ast> {
         for elem in &arr.elems {
             let dp = match elem {
                 Id::Arg(i) => DimPattern::Var(self.args[*i].id.clone()),
-                Id::Var(v) => {
-                    match v.ssa {
-                        Some(Expr::Const(Const::Usize(val))) => DimPattern::Known(*val),
-                        _ => DimPattern::Var(v.name.clone()),
-                    }
-                }
+                Id::Var(v) => match v.ssa {
+                    Some(Expr::Const(Const::Usize(val))) => DimPattern::Known(*val),
+                    _ => DimPattern::Var(v.name.clone()),
+                },
             };
             axes.push(AxisPattern::Dim(dp));
         }
         Some(axes)
     }
 
-    fn expect_scalar_prf_arg(&mut self, prf_name: &str, arg_index: usize, ty: &Type) {
-        if !ty.is_scalar() {
-            self.errors.push(InferenceError::PrimitiveArgumentKindMismatch {
-                primitive: prf_name.to_owned(),
-                arg_index,
-                expected: "scalar",
-                provided: ty.clone(),
-            });
-        }
-    }
-
-    fn expect_bool_scalar_prf_arg(&mut self, prf_name: &str, arg_index: usize, ty: &Type) {
-        if !(ty.is_scalar() && ty.ty == BaseType::Bool) {
-            self.errors.push(InferenceError::PrimitiveArgumentKindMismatch {
-                primitive: prf_name.to_owned(),
-                arg_index,
-                expected: "bool scalar",
-                provided: ty.clone(),
-            });
-        }
-    }
-
-    fn expect_usize_vector_prf_arg(&mut self, prf_name: &str, arg_index: usize, ty: &Type) {
-        let is_vector = matches!(
-            ty.shape,
-            TypePattern::Axes(ref axes)
-                if axes.len() == 1 && matches!(axes[0], AxisPattern::Dim(_))
-        );
-
-        if !(is_vector && matches!(ty.ty, BaseType::Usize)) {
-            self.errors.push(InferenceError::PrimitiveArgumentKindMismatch {
-                primitive: prf_name.to_owned(),
-                arg_index,
-                expected: "usize vector",
-                provided: ty.clone(),
-            });
-        }
-    }
-
-    fn expect_array_prf_arg(&mut self, prf_name: &str, arg_index: usize, ty: &Type) {
-        if !ty.is_array() {
-            self.errors.push(InferenceError::PrimitiveArgumentKindMismatch {
-                primitive: prf_name.to_owned(),
-                arg_index,
-                expected: "array",
-                provided: ty.clone(),
-            });
-        }
-    }
-
-    fn trav_fold_selection(&mut self, tensor: Tensor<'ast, UntypedAst>) -> (Tensor<'ast, TypedAst>, Type) {
-        let lb = if let Some(lb) = tensor.lb {
-            let (lb, _lb_ty) = self.trav_id(lb);
-            Some(lb)
-        } else {
-            None
-        };
-
-        let (ub, ub_ty) = self.trav_id(tensor.ub);
-
-        let (iv_ty, _leading_k) = Self::tensor_iv_and_dims(&ub_ty);
-        let iv = self.alloc_lvis(tensor.iv.name.clone(), iv_ty, None);
-        self.idmap.insert(tensor.iv as *const _, iv);
-
-        let (body, ret_ty) = self.trav_body(tensor.body);
-        (Tensor { body, iv, lb, ub }, ret_ty)
-    }
-
-    fn resolve_dispatch(&mut self, func_name: &str, arg_types: &[Type]) -> (&'ast RefCell<Fundef<'ast, TypedAst>>, bool) {
+    fn resolve_overload(&mut self, func_name: &str, arg_types: &[Type]) -> (&DispatchStub, bool) {
         let Some(group) = self.stubs.get(func_name) else {
-            self.errors.push(InferenceError::UndefinedFunction {
-                    name: func_name.to_owned(),
-            });
+            self.errors.push(InferenceError::UndefinedFunction { name: func_name.to_owned() });
             panic!("undefined function: {}", func_name);
         };
 
-        let base_types = arg_types.iter().map(|t| t.ty.clone()).collect();
-        let key = BaseSignature { base_types };
+        let key = BaseSignature {
+            base_types: arg_types.iter().map(|t| t.ty.clone()).collect(),
+        };
 
         let Some(candidates) = group.get(&key) else {
             self.errors.push(InferenceError::NoMatchingOverload {
                 name: func_name.to_owned(),
                 arg_bases: key.clone(),
             });
-            panic!("no matching overload for function: {} with arg bases {:?}", func_name, key);
+            panic!("no matching overload for function: {}", func_name);
         };
 
         let mut matches = Vec::new();
         for target in candidates {
-            let target_b = target.borrow();
             let mut is_match = true;
-            for (expected, provided) in target_b.args.iter().zip(arg_types.iter()) {
+            for (expected, provided) in target.args.iter().zip(arg_types.iter()) {
                 if !types_compatible(&expected.ty, provided) {
                     is_match = false;
                     break;
                 }
             }
-
             if is_match {
-                matches.push(*target);
+                matches.push(target);
             }
         }
 
@@ -443,7 +267,7 @@ impl<'ast> TypeInfer<'ast> {
                 name: func_name.to_owned(),
                 arg_bases: key.clone(),
             });
-            panic!("no matching overload for function: {} with arg bases {:?}", func_name, key);
+            panic!("no matching overload for function: {}", func_name);
         }
 
         let best_matches = maximal_candidates(&matches);
@@ -453,25 +277,22 @@ impl<'ast> TypeInfer<'ast> {
         if needs_runtime_dispatch && !runtime_dispatch_allowed {
             self.errors.push(InferenceError::AmbiguousOverload {
                 name: func_name.to_owned(),
-                arg_bases: key.clone(),
+                arg_bases: key,
             });
         }
 
         (best_matches[0], needs_runtime_dispatch)
     }
 
-    // Declarations
-
-    fn trav_fundef(&mut self, fundef: &Fundef<'ast, UntypedAst>) -> Fundef<'ast, TypedAst> {
+    fn trav_fundef(&mut self, fundef: &Fundef<'ast, UntypedAst>) -> Fundef<'ast, UntypedAst> {
         self.args = fundef.args.clone();
-
         self.idmap.clear();
         self.decs_arena = Arena::new();
         self.expr_arena = Arena::new();
 
-        let mut new_shape_prelude = Vec::new();
+        let mut shape_prelude = Vec::new();
         for assign in &fundef.shape_prelude {
-            new_shape_prelude.push(self.trav_assign(*assign));
+            shape_prelude.push(self.trav_assign(*assign));
         }
 
         let (body, _ret_ty) = self.trav_body(fundef.body.clone());
@@ -483,7 +304,7 @@ impl<'ast> TypeInfer<'ast> {
             name: fundef.name.clone(),
             ret_type: fundef.ret_type.clone(),
             args: fundef.args.clone(),
-            shape_prelude: new_shape_prelude,
+            shape_prelude,
             shape_facts: fundef.shape_facts.clone(),
             decs,
             exprs,
@@ -491,9 +312,7 @@ impl<'ast> TypeInfer<'ast> {
         }
     }
 
-    // Statements
-
-    fn trav_assign(&mut self, assign: Assign<'ast, UntypedAst>) -> Assign<'ast, TypedAst> {
+    fn trav_assign(&mut self, assign: Assign<'ast, UntypedAst>) -> Assign<'ast, UntypedAst> {
         let (new_expr, new_ty) = self.trav_expr((*assign.expr).clone());
         let expr_ref = self.alloc_expr(new_expr);
         let new_lvis = self.alloc_lvis(assign.lhs.name.clone(), new_ty, Some(expr_ref));
@@ -501,12 +320,12 @@ impl<'ast> TypeInfer<'ast> {
         Assign { lhs: new_lvis, expr: expr_ref }
     }
 
-    fn trav_printf(&mut self, printf: Printf<'ast, UntypedAst>) -> Printf<'ast, TypedAst> {
+    fn trav_printf(&mut self, printf: Printf<'ast, UntypedAst>) -> Printf<'ast, UntypedAst> {
         let (id, _) = self.trav_id(printf.id);
         Printf { id }
     }
 
-    fn trav_body(&mut self, body: Body<'ast, UntypedAst>) -> (Body<'ast, TypedAst>, Type) {
+    fn trav_body(&mut self, body: Body<'ast, UntypedAst>) -> (Body<'ast, UntypedAst>, Type) {
         let mut stmts = Vec::new();
         for stmt in body.stmts {
             stmts.push(self.trav_stmt(stmt));
@@ -516,60 +335,63 @@ impl<'ast> TypeInfer<'ast> {
         (Body { stmts, ret }, ret_ty)
     }
 
-    fn trav_stmt(&mut self, stmt: Stmt<'ast, UntypedAst>) -> Stmt<'ast, TypedAst> {
-        use Stmt::*;
+    fn trav_stmt(&mut self, stmt: Stmt<'ast, UntypedAst>) -> Stmt<'ast, UntypedAst> {
         match stmt {
-            Assign(n) => Assign(self.trav_assign(n)),
-            Printf(n) => Printf(self.trav_printf(n)),
+            Stmt::Assign(n) => Stmt::Assign(self.trav_assign(n)),
+            Stmt::Printf(n) => Stmt::Printf(self.trav_printf(n)),
         }
     }
 
-    // Expressions
-
-    fn trav_expr(&mut self, expr: Expr<'ast, UntypedAst>) -> (Expr<'ast, TypedAst>, Type) {
-        use Expr::*;
+    fn trav_expr(&mut self, expr: Expr<'ast, UntypedAst>) -> (Expr<'ast, UntypedAst>, Type) {
         match expr {
-            Cond(n) => {
+            Expr::Cond(n) => {
                 let (cond, ty) = self.trav_cond(n);
-                (Cond(cond), ty)
+                (Expr::Cond(cond), ty)
             }
-            Call(n) => {
+            Expr::Call(n) => {
                 let (call, ty) = self.trav_call(n);
-                (Call(call), ty)
+                (Expr::Call(call), ty)
             }
-            PrfCall(n) => {
+            Expr::PrfCall(n) => {
                 let (prf_call, ty) = self.trav_prf_call(n);
-                (PrfCall(prf_call), ty)
+                (Expr::PrfCall(prf_call), ty)
             }
-            Fold(n) => {
+            Expr::Fold(n) => {
                 let (fold, ty) = self.trav_fold(n);
-                (Fold(fold), ty)
+                (Expr::Fold(fold), ty)
             }
-            Tensor(n) => {
-                let (expr, ty) = self.trav_tensor(n);
-                (Tensor(expr), ty)
+            Expr::Tensor(n) => {
+                let (tensor, ty) = self.trav_tensor(n);
+                (Expr::Tensor(tensor), ty)
             }
-            Array(n) => {
-                let (expr, ty) = self.trav_array(n);
-                (Array(expr), ty)
+            Expr::Array(n) => {
+                let (array, ty) = self.trav_array(n);
+                (Expr::Array(array), ty)
             }
-            Id(n) => {
+            Expr::Id(n) => {
                 let (id, ty) = self.trav_id(n);
-                (Id(id), ty)
+                (Expr::Id(id), ty)
             }
-            Const(n) => {
-                let (id, ty) = self.trav_const(n);
-                (Const(id), ty)
+            Expr::Const(n) => {
+                let (c, ty) = self.trav_const(n);
+                (Expr::Const(c), ty)
             }
         }
     }
 
-    fn trav_cond(&mut self, cond: Cond<'ast, UntypedAst>) -> (Cond<'ast, TypedAst>, Type) {
+    fn trav_cond(&mut self, cond: Cond<'ast, UntypedAst>) -> (Cond<'ast, UntypedAst>, Type) {
         let (cond_id, cond_ty) = self.trav_id(cond.cond);
-        self.expect_bool_scalar_prf_arg("cond", 0, &cond_ty);
+        if !(cond_ty.is_scalar() && cond_ty.ty == BaseType::Bool) {
+            self.errors.push(InferenceError::PrimitiveArgumentKindMismatch {
+                primitive: "cond".to_owned(),
+                arg_index: 0,
+                expected: "bool scalar",
+                provided: cond_ty,
+            });
+        }
 
-        let (then_id, then_ty) = self.trav_body(cond.then_branch);
-        let (else_id, else_ty) = self.trav_body(cond.else_branch);
+        let (then_body, then_ty) = self.trav_body(cond.then_branch);
+        let (else_body, else_ty) = self.trav_body(cond.else_branch);
 
         if !types_compatible(&then_ty, &else_ty) || !types_compatible(&else_ty, &then_ty) {
             self.errors.push(InferenceError::PrimitiveArgumentKindMismatch {
@@ -580,38 +402,36 @@ impl<'ast> TypeInfer<'ast> {
             });
         }
 
-        (Cond { cond: cond_id, then_branch: then_id, else_branch: else_id }, then_ty)
+        (
+            Cond {
+                cond: cond_id,
+                then_branch: then_body,
+                else_branch: else_body,
+            },
+            then_ty,
+        )
     }
 
-    fn trav_call(&mut self, call: Call<'ast, UntypedAst>) -> (Call<'ast, TypedAst>, Type) {
-        let func_name = &call.id;
-
-        let mut typed_args = Vec::with_capacity(call.args.len());
+    fn trav_call(&mut self, call: Call<'ast, UntypedAst>) -> (Call<'ast, UntypedAst>, Type) {
+        let mut args = Vec::with_capacity(call.args.len());
         let mut arg_types = Vec::with_capacity(call.args.len());
         for arg in call.args {
-            let (typed_arg, ty) = self.trav_id(arg);
-            typed_args.push(typed_arg);
+            let (id, ty) = self.trav_id(arg);
+            args.push(id);
             arg_types.push(ty);
         }
 
-        let (target, runtime_dispatch) = self.resolve_dispatch(func_name, &arg_types);
-        let call_ty = if runtime_dispatch {
-            let target = target.borrow();
-            Type {
-                ty: target.ret_type.ty.clone(),
-                shape: TypePattern::Any,
-            }
+        let (target, runtime_dispatch) = self.resolve_overload(&call.id, &arg_types);
+        let out_ty = if runtime_dispatch {
+            Type { ty: target.ret_type.ty.clone(), shape: TypePattern::Any }
         } else {
-            target.borrow().ret_type.clone()
+            target.ret_type.clone()
         };
-        let typed_call = Call {
-            id: CallTarget::Function(target),
-            args: typed_args,
-        };
-        (typed_call, call_ty)
+
+        (Call { id: call.id, args }, out_ty)
     }
 
-    fn trav_fold(&mut self, fold: Fold<'ast, UntypedAst>) -> (Fold<'ast, TypedAst>, Type) {
+    fn trav_fold(&mut self, fold: Fold<'ast, UntypedAst>) -> (Fold<'ast, UntypedAst>, Type) {
         let (neutral, neutral_ty) = self.trav_id(fold.neutral);
         let (selection, selection_ty) = self.trav_fold_selection(fold.selection);
 
@@ -625,14 +445,13 @@ impl<'ast> TypeInfer<'ast> {
         let (foldfun, ret_ty) = match fold.foldfun {
             FoldFun::Name(id) => {
                 let arg_types = vec![neutral_ty.clone(), selection_ty.clone()];
-                let (target, runtime_dispatch) = self.resolve_dispatch(&id, &arg_types);
+                let (target, runtime_dispatch) = self.resolve_overload(&id, &arg_types);
                 let out_ty = if runtime_dispatch {
-                    let target = target.borrow();
                     Type { ty: target.ret_type.ty.clone(), shape: TypePattern::Any }
                 } else {
-                    target.borrow().ret_type.clone()
+                    target.ret_type.clone()
                 };
-                (FoldFun::Name(CallTarget::Function(target)), out_ty)
+                (FoldFun::Name(id), out_ty)
             }
             FoldFun::Apply { .. } => {
                 unimplemented!("'partial application' fold not yet supported")
@@ -649,213 +468,92 @@ impl<'ast> TypeInfer<'ast> {
         (Fold { neutral, foldfun, selection }, neutral_ty)
     }
 
-    fn trav_prf_call(&mut self, prf: PrfCall<'ast, UntypedAst>) -> (PrfCall<'ast, TypedAst>, Type) {
-        let prf_name = prf.nameof();
-
+    fn trav_prf_call(&mut self, prf: PrfCall<'ast, UntypedAst>) -> (PrfCall<'ast, UntypedAst>, Type) {
         use PrfCall::*;
         match prf {
             ShapeA(arr) => {
                 let (arr, arr_ty) = self.trav_id(arr);
-                self.expect_array_prf_arg(prf_name, 0, &arr_ty);
+                if !arr_ty.is_array() {
+                    self.errors.push(InferenceError::PrimitiveArgumentKindMismatch {
+                        primitive: "shape".to_owned(),
+                        arg_index: 0,
+                        expected: "array",
+                        provided: arr_ty,
+                    });
+                }
                 (ShapeA(arr), Type::vector_dim(BaseType::Usize, DimPattern::Any))
             }
             DimA(arr) => {
                 let (arr, arr_ty) = self.trav_id(arr);
-                self.expect_array_prf_arg(prf_name, 0, &arr_ty);
+                if !arr_ty.is_array() {
+                    self.errors.push(InferenceError::PrimitiveArgumentKindMismatch {
+                        primitive: "dim".to_owned(),
+                        arg_index: 0,
+                        expected: "array",
+                        provided: arr_ty,
+                    });
+                }
                 (DimA(arr), Type::scalar(BaseType::Usize))
             }
             SelVxA(idx, arr) => {
-                let (idx, idx_ty) = self.trav_id(idx);
-                self.expect_usize_vector_prf_arg(prf_name, 0, &idx_ty);
+                let (idx, _idx_ty) = self.trav_id(idx);
                 let (arr, arr_ty) = self.trav_id(arr);
-                self.expect_array_prf_arg(prf_name, 1, &arr_ty);
                 (SelVxA(idx, arr), Type::scalar(arr_ty.ty))
             }
             AddSxS(l, r) => {
                 let (l, l_ty) = self.trav_id(l);
-                self.expect_scalar_prf_arg(prf_name, 0, &l_ty);
-                let (r, r_ty) = self.trav_id(r);
-                self.expect_scalar_prf_arg(prf_name, 1, &r_ty);
-
-                if l_ty.ty != r_ty.ty {
-                    self.errors.push(InferenceError::PrimitiveArgumentKindMismatch {
-                        primitive: prf_name.to_owned(),
-                        arg_index: 1,
-                        expected: "same scalar type as lhs",
-                        provided: r_ty.clone(),
-                    });
-                }
-
+                let (r, _r_ty) = self.trav_id(r);
                 (AddSxS(l, r), Type::scalar(l_ty.ty))
             }
             SubSxS(l, r) => {
                 let (l, l_ty) = self.trav_id(l);
-                self.expect_scalar_prf_arg(prf_name, 0, &l_ty);
-                let (r, r_ty) = self.trav_id(r);
-                self.expect_scalar_prf_arg(prf_name, 1, &r_ty);
-
-                if l_ty.ty != r_ty.ty {
-                    self.errors.push(InferenceError::PrimitiveArgumentKindMismatch {
-                        primitive: prf_name.to_owned(),
-                        arg_index: 1,
-                        expected: "same scalar type as lhs",
-                        provided: r_ty.clone(),
-                    });
-                }
-
+                let (r, _r_ty) = self.trav_id(r);
                 (SubSxS(l, r), Type::scalar(l_ty.ty))
             }
             MulSxS(l, r) => {
                 let (l, l_ty) = self.trav_id(l);
-                self.expect_scalar_prf_arg(prf_name, 0, &l_ty);
-                let (r, r_ty) = self.trav_id(r);
-                self.expect_scalar_prf_arg(prf_name, 1, &r_ty);
-
-                if l_ty.ty != r_ty.ty {
-                    self.errors.push(InferenceError::PrimitiveArgumentKindMismatch {
-                        primitive: prf_name.to_owned(),
-                        arg_index: 1,
-                        expected: "same scalar type as lhs",
-                        provided: r_ty.clone(),
-                    });
-                }
-
+                let (r, _r_ty) = self.trav_id(r);
                 (MulSxS(l, r), Type::scalar(l_ty.ty))
             }
             DivSxS(l, r) => {
                 let (l, l_ty) = self.trav_id(l);
-                self.expect_scalar_prf_arg(prf_name, 0, &l_ty);
-                let (r, r_ty) = self.trav_id(r);
-                self.expect_scalar_prf_arg(prf_name, 1, &r_ty);
-
-                if l_ty.ty != r_ty.ty {
-                    self.errors.push(InferenceError::PrimitiveArgumentKindMismatch {
-                        primitive: prf_name.to_owned(),
-                        arg_index: 1,
-                        expected: "same scalar type as lhs",
-                        provided: r_ty.clone(),
-                    });
-                }
-
+                let (r, _r_ty) = self.trav_id(r);
                 (DivSxS(l, r), Type::scalar(l_ty.ty))
             }
-            LtSxS(l, r) => {
-                let (l, l_ty) = self.trav_id(l);
-                self.expect_scalar_prf_arg(prf_name, 0, &l_ty);
-                let (r, r_ty) = self.trav_id(r);
-                self.expect_scalar_prf_arg(prf_name, 1, &r_ty);
-
-                if l_ty.ty != r_ty.ty {
-                    self.errors.push(InferenceError::PrimitiveArgumentKindMismatch {
-                        primitive: prf_name.to_owned(),
-                        arg_index: 1,
-                        expected: "same scalar type as lhs",
-                        provided: r_ty.clone(),
-                    });
-                }
-
-                (LtSxS(l, r), Type::scalar(BaseType::Bool))
-            }
-            LeSxS(l, r) => {
-                let (l, l_ty) = self.trav_id(l);
-                self.expect_scalar_prf_arg(prf_name, 0, &l_ty);
-                let (r, r_ty) = self.trav_id(r);
-                self.expect_scalar_prf_arg(prf_name, 1, &r_ty);
-
-                if l_ty.ty != r_ty.ty {
-                    self.errors.push(InferenceError::PrimitiveArgumentKindMismatch {
-                        primitive: prf_name.to_owned(),
-                        arg_index: 1,
-                        expected: "same scalar type as lhs",
-                        provided: r_ty.clone(),
-                    });
-                }
-
-                (LtSxS(l, r), Type::scalar(BaseType::Bool))
-            }
-            GtSxS(l, r) => {
-                let (l, l_ty) = self.trav_id(l);
-                self.expect_scalar_prf_arg(prf_name, 0, &l_ty);
-                let (r, r_ty) = self.trav_id(r);
-                self.expect_scalar_prf_arg(prf_name, 1, &r_ty);
-
-                if l_ty.ty != r_ty.ty {
-                    self.errors.push(InferenceError::PrimitiveArgumentKindMismatch {
-                        primitive: prf_name.to_owned(),
-                        arg_index: 1,
-                        expected: "same scalar type as lhs",
-                        provided: r_ty.clone(),
-                    });
-                }
-
-                (LtSxS(l, r), Type::scalar(BaseType::Bool))
-            }
-            GeSxS(l, r) => {
-                let (l, l_ty) = self.trav_id(l);
-                self.expect_scalar_prf_arg(prf_name, 0, &l_ty);
-                let (r, r_ty) = self.trav_id(r);
-                self.expect_scalar_prf_arg(prf_name, 1, &r_ty);
-
-                if l_ty.ty != r_ty.ty {
-                    self.errors.push(InferenceError::PrimitiveArgumentKindMismatch {
-                        primitive: prf_name.to_owned(),
-                        arg_index: 1,
-                        expected: "same scalar type as lhs",
-                        provided: r_ty.clone(),
-                    });
-                }
-
-                (LtSxS(l, r), Type::scalar(BaseType::Bool))
-            }
-            EqSxS(l, r) => {
-                let (l, l_ty) = self.trav_id(l);
-                self.expect_scalar_prf_arg(prf_name, 0, &l_ty);
-                let (r, r_ty) = self.trav_id(r);
-                self.expect_scalar_prf_arg(prf_name, 1, &r_ty);
-
-                if l_ty.ty != r_ty.ty {
-                    self.errors.push(InferenceError::PrimitiveArgumentKindMismatch {
-                        primitive: prf_name.to_owned(),
-                        arg_index: 1,
-                        expected: "same scalar type as lhs",
-                        provided: r_ty.clone(),
-                    });
-                }
-
-                (LtSxS(l, r), Type::scalar(BaseType::Bool))
-            }
-            NeSxS(l, r) => {
-                let (l, l_ty) = self.trav_id(l);
-                self.expect_scalar_prf_arg(prf_name, 0, &l_ty);
-                let (r, r_ty) = self.trav_id(r);
-                self.expect_scalar_prf_arg(prf_name, 1, &r_ty);
-
-                if l_ty.ty != r_ty.ty {
-                    self.errors.push(InferenceError::PrimitiveArgumentKindMismatch {
-                        primitive: prf_name.to_owned(),
-                        arg_index: 1,
-                        expected: "same scalar type as lhs",
-                        provided: r_ty.clone(),
-                    });
-                }
-
+            LtSxS(l, r) | LeSxS(l, r) | GtSxS(l, r) | GeSxS(l, r) | EqSxS(l, r) | NeSxS(l, r) => {
+                let (l, _l_ty) = self.trav_id(l);
+                let (r, _r_ty) = self.trav_id(r);
                 (LtSxS(l, r), Type::scalar(BaseType::Bool))
             }
             NegS(r) => {
                 let (r, r_ty) = self.trav_id(r);
-                self.expect_scalar_prf_arg(prf_name, 0, &r_ty);
                 (NegS(r), r_ty)
             }
             NotS(r) => {
-                let (r, r_ty) = self.trav_id(r);
-                self.expect_bool_scalar_prf_arg(prf_name, 0, &r_ty);
-                (NotS(r), r_ty)
+                let (r, _r_ty) = self.trav_id(r);
+                (NotS(r), Type::scalar(BaseType::Bool))
             }
         }
     }
 
-    fn trav_tensor(&mut self, tensor: Tensor<'ast, UntypedAst>) -> (Tensor<'ast, TypedAst>, Type) {
-        // Inspect ub's SSA expression *before* traversal so we can extract named extents.
+    fn trav_fold_selection(&mut self, tensor: Tensor<'ast, UntypedAst>) -> (Tensor<'ast, UntypedAst>, Type) {
+        let lb = if let Some(lb) = tensor.lb {
+            let (lb, _lb_ty) = self.trav_id(lb);
+            Some(lb)
+        } else {
+            None
+        };
+
+        let (ub, ub_ty) = self.trav_id(tensor.ub);
+        let (iv_ty, _leading_k) = Self::tensor_iv_and_dims(&ub_ty);
+        let iv = self.alloc_lvis(tensor.iv.name.clone(), iv_ty, None);
+        self.idmap.insert(tensor.iv as *const _, iv);
+
+        let (body, ret_ty) = self.trav_body(tensor.body);
+        (Tensor { body, iv, lb, ub }, ret_ty)
+    }
+
+    fn trav_tensor(&mut self, tensor: Tensor<'ast, UntypedAst>) -> (Tensor<'ast, UntypedAst>, Type) {
         let ub_named_axes = self.extract_ub_axes(&tensor.ub);
 
         let lb = if let Some(lb) = tensor.lb {
@@ -866,11 +564,8 @@ impl<'ast> TypeInfer<'ast> {
         };
 
         let (ub, ub_ty) = self.trav_id(tensor.ub);
-
-        // Determine iv's type using the typed ub shape (gives the rank / iv length).
         let (iv_ty, leading_k) = Self::tensor_iv_and_dims(&ub_ty);
 
-        // Prefer the named axes from the SSA inspection; fall back to anonymous `Any` axes.
         let leading_axes: Option<Vec<AxisPattern>> = ub_named_axes.or_else(|| {
             leading_k.map(|k| (0..k).map(|_| AxisPattern::Dim(DimPattern::Any)).collect())
         });
@@ -892,7 +587,7 @@ impl<'ast> TypeInfer<'ast> {
         (tensor, result_ty)
     }
 
-    fn trav_array(&mut self, array: Array<'ast, UntypedAst>) -> (Array<'ast, TypedAst>, Type) {
+    fn trav_array(&mut self, array: Array<'ast, UntypedAst>) -> (Array<'ast, UntypedAst>, Type) {
         let mut values = Vec::with_capacity(array.elems.len());
         let mut elem_types = Vec::with_capacity(array.elems.len());
 
@@ -906,49 +601,39 @@ impl<'ast> TypeInfer<'ast> {
         (Array { elems: values }, ty)
     }
 
-    // Terminals
-
-    fn trav_id(&mut self, id: Id<'ast, UntypedAst>) -> (Id<'ast, TypedAst>, Type) {
+    fn trav_id(&mut self, id: Id<'ast, UntypedAst>) -> (Id<'ast, UntypedAst>, Type) {
         match id {
-            Id::Arg(i) => {
-                let ty = self.args[i].ty.clone();
-                (Id::Arg(i), ty)
-            },
+            Id::Arg(i) => (Id::Arg(i), self.args[i].ty.clone()),
             Id::Var(old) => {
-                let new_id = self.idmap.get(&(old as *const _))
+                let new_id = self
+                    .idmap
+                    .get(&(old as *const _))
                     .expect("Id::Var referenced before its assignment was processed");
-                let ty = new_id.ty.clone();
+                let ty = new_id.ty.clone().unwrap_or_else(|| Type::scalar(BaseType::I32));
                 (Id::Var(*new_id), ty)
-            },
+            }
         }
     }
 
     fn trav_const(&mut self, c: Const) -> (Const, Type) {
-        use Const::*;
         match c {
-            Bool(v) => (Bool(v), Type::scalar(BaseType::Bool)),
-            I32(v) => (I32(v), Type::scalar(BaseType::I32)),
-            I64(v) => (I64(v), Type::scalar(BaseType::I64)),
-            U32(v) => (U32(v), Type::scalar(BaseType::U32)),
-            U64(v) => (U64(v), Type::scalar(BaseType::U64)),
-            Usize(v) => (Usize(v), Type::scalar(BaseType::Usize)),
-            F32(v) => (F32(v), Type::scalar(BaseType::F32)),
-            F64(v) => (F64(v), Type::scalar(BaseType::F64)),
+            Const::Bool(v) => (Const::Bool(v), Type::scalar(BaseType::Bool)),
+            Const::I32(v) => (Const::I32(v), Type::scalar(BaseType::I32)),
+            Const::I64(v) => (Const::I64(v), Type::scalar(BaseType::I64)),
+            Const::U32(v) => (Const::U32(v), Type::scalar(BaseType::U32)),
+            Const::U64(v) => (Const::U64(v), Type::scalar(BaseType::U64)),
+            Const::Usize(v) => (Const::Usize(v), Type::scalar(BaseType::Usize)),
+            Const::F32(v) => (Const::F32(v), Type::scalar(BaseType::F32)),
+            Const::F64(v) => (Const::F64(v), Type::scalar(BaseType::F64)),
         }
     }
 }
 
-/// Check if two types are compatible for parameter passing.
-/// For now, we use structural equality (no variance or polymorphism).
 fn types_compatible(expected: &Type, provided: &Type) -> bool {
-    expected.ty == provided.ty
-        && shapes_compatible(&expected.shape, &provided.shape)
+    expected.ty == provided.ty && shapes_compatible(&expected.shape, &provided.shape)
 }
 
-/// Check if two shape patterns are compatible.
-/// For now, we use structural equality; later this could support variance.
 fn shapes_compatible(expected: &TypePattern, provided: &TypePattern) -> bool {
-    // A `d:shp` rank capture is wildcard-like for array shapes, but does not match scalars.
     let has_rank = |axes: &[AxisPattern]| axes.iter().any(|a| matches!(a, AxisPattern::Rank(_)));
     match (expected, provided) {
         (TypePattern::Scalar, TypePattern::Scalar) => true,
@@ -960,17 +645,12 @@ fn shapes_compatible(expected: &TypePattern, provided: &TypePattern) -> bool {
             if exp_axes.len() != prov_axes.len() {
                 return false;
             }
-            exp_axes
-                .iter()
-                .zip(prov_axes.iter())
-                .all(|(e, p)| axes_compatible(e, p))
+            exp_axes.iter().zip(prov_axes.iter()).all(|(e, p)| axes_compatible(e, p))
         }
-        // Mismatched scalar/axes are not compatible
         _ => false,
     }
 }
 
-/// Check if two axis patterns are compatible.
 fn axes_compatible(expected: &AxisPattern, provided: &AxisPattern) -> bool {
     match (expected, provided) {
         (AxisPattern::Dim(exp_d), AxisPattern::Dim(prov_d)) => dims_compatible(exp_d, prov_d),
@@ -979,30 +659,25 @@ fn axes_compatible(expected: &AxisPattern, provided: &AxisPattern) -> bool {
     }
 }
 
-/// Check if two dimension patterns are compatible.
 fn dims_compatible(expected: &DimPattern, provided: &DimPattern) -> bool {
     match (expected, provided) {
         (DimPattern::Any, _) | (_, DimPattern::Any) => true,
         (DimPattern::Known(e), DimPattern::Known(p)) => e == p,
-        // Named extents in function signatures are symbolic constraints, so they
-        // may match concrete or renamed dimensions at call sites.
         (DimPattern::Var(_), DimPattern::Known(_)) => true,
         (DimPattern::Known(_), DimPattern::Var(_)) => true,
         (DimPattern::Var(_), DimPattern::Var(_)) => true,
     }
 }
 
-fn maximal_candidates<'ast>(
-    candidates: &[&'ast RefCell<Fundef<'ast, TypedAst>>],
-) -> Vec<&'ast RefCell<Fundef<'ast, TypedAst>>> {
-    let mut maximal: Vec<&RefCell<Fundef<'_, TypedAst>>> = Vec::new();
+fn maximal_candidates<'a>(candidates: &[&'a DispatchStub]) -> Vec<&'a DispatchStub> {
+    let mut maximal = Vec::new();
 
     'outer: for a in candidates {
         for b in candidates {
             if std::ptr::eq(*a, *b) {
                 continue;
             }
-            if overload_more_specific(&b.borrow(), &a.borrow()) {
+            if overload_more_specific(&b.args, &a.args) {
                 continue 'outer;
             }
         }
@@ -1012,13 +687,13 @@ fn maximal_candidates<'ast>(
     maximal
 }
 
-fn overload_more_specific(a: &Fundef<'_, TypedAst>, b: &Fundef<'_, TypedAst>) -> bool {
-    if a.args.len() != b.args.len() {
+fn overload_more_specific(a: &[Farg], b: &[Farg]) -> bool {
+    if a.len() != b.len() {
         return false;
     }
 
     let mut any_strict = false;
-    for (a_arg, b_arg) in a.args.iter().zip(b.args.iter()) {
+    for (a_arg, b_arg) in a.iter().zip(b.iter()) {
         let rel = shape_relation(&a_arg.ty.shape, &b_arg.ty.shape);
         match rel {
             ShapeRel::More => any_strict = true,
@@ -1056,16 +731,10 @@ fn shape_more_or_equal(a: &TypePattern, b: &TypePattern) -> bool {
     match (a, b) {
         (TypePattern::Scalar, TypePattern::Scalar) => true,
         (TypePattern::Scalar, TypePattern::Any) => true,
-        (TypePattern::Scalar, TypePattern::Axes(axes)) => {
-            axes.iter().any(|axis| matches!(axis, AxisPattern::Rank(_)))
-        }
-
+        (TypePattern::Scalar, TypePattern::Axes(axes)) => axes.iter().any(|axis| matches!(axis, AxisPattern::Rank(_))),
         (TypePattern::Any, TypePattern::Any) => true,
-
         (TypePattern::Axes(_), TypePattern::Any) => true,
-        (TypePattern::Axes(a_axes), TypePattern::Scalar) => {
-            a_axes.iter().any(|axis| matches!(axis, AxisPattern::Rank(_)))
-        }
+        (TypePattern::Axes(a_axes), TypePattern::Scalar) => a_axes.iter().any(|axis| matches!(axis, AxisPattern::Rank(_))),
         (TypePattern::Axes(a_axes), TypePattern::Axes(b_axes)) => axes_more_or_equal(a_axes, b_axes),
         _ => false,
     }

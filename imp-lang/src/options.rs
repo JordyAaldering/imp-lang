@@ -63,6 +63,8 @@ pub enum Phase {
     SSA,
     /// Type inference
     TI,
+    /// Function dispatch resolution
+    DR,
     /// Constant folding
     CF,
     /// Dead code removal

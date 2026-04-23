@@ -38,8 +38,6 @@ impl<'ast> Traverse<'ast> for CompileFfi {
         for (_name, overloads) in &program.overloads {
             for (_sig, fundefs) in overloads {
                 for fundef in fundefs {
-                    let fundef = fundef.borrow();
-
                     self.push(&format!("    fn IMP_{}(", fundef.name));
                     self.push(&join_args(&fundef.args, rust_ffi_type));
                     self.push(&format!(") -> {};\n", rust_ffi_type(&fundef.ret_type)));
@@ -55,8 +53,8 @@ impl<'ast> Traverse<'ast> for CompileFfi {
                 if overloads.len() > 1 || fundefs.len() > 1 {
                     self.emit_family_wrapper(&name, sig, fundefs);
                 } else {
-                    let fundef = fundefs[0].borrow();
-                    self.emit_direct_wrapper(&name, &fundef);
+                    let fundef = fundefs[0];
+                    self.emit_direct_wrapper(&name, fundef);
                 }
             }
         }
@@ -84,7 +82,7 @@ impl CompileFfi {
         self.push("}\n");
     }
 
-    fn emit_family_wrapper(&mut self, base_name: &str, sig: &BaseSignature, fundefs: &Vec<&std::cell::RefCell<Fundef<'_, TypedAst>>>) {
+    fn emit_family_wrapper(&mut self, base_name: &str, sig: &BaseSignature, fundefs: &Vec<&Fundef<'_, TypedAst>>) {
         let sig_str = sig.base_types.iter().map(rust_base_type).collect::<Vec<_>>();
         let fargs = sig.base_types.iter()
             .enumerate()
@@ -94,7 +92,7 @@ impl CompileFfi {
 
         self.push(&format!("fn {}_{}(", rust_wrapper_name(base_name), sig_str.join("_")));
         self.push(&fargs);
-        let first = fundefs[0].borrow();
+        let first = fundefs[0];
         self.push(&format!(") -> {} {{\n", rust_api_ret_type(&first.ret_type)));
 
         let match_args = &(0..sig.base_types.len())
@@ -106,7 +104,6 @@ impl CompileFfi {
         self.push(") {\n");
 
         for fundef in fundefs {
-            let fundef = fundef.borrow();
             let pattern = fundef.args.iter()
                 .enumerate()
                 .map(|(i, arg)| family_match_pattern(i, &arg.ty))

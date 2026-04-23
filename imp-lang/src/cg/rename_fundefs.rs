@@ -2,6 +2,10 @@ use std::collections::HashSet;
 
 use crate::{ast::*, Traverse};
 
+pub fn rename_fundefs<'ast>(program: &mut Program<'ast, TypedAst>) {
+    RenameFundefs::new().trav_program(program);
+}
+
 /// Functions may be overloaded, e.g.
 ///
 /// ```imp
@@ -47,10 +51,6 @@ pub struct RenameFundefs {
     used_names: HashSet<String>,
 }
 
-pub fn rename_fundefs<'ast>(program: &mut Program<'ast, TypedAst>) {
-    RenameFundefs::new().trav_program(program);
-}
-
 impl RenameFundefs {
     pub fn new() -> Self {
         Self {
@@ -64,7 +64,10 @@ impl<'ast> Traverse<'ast> for RenameFundefs {
     type Ast = TypedAst;
 
     fn trav_fundef(&mut self, fundef: &mut Fundef<'ast, Self::Ast>) {
+        let old = fundef.name.clone();
         fundef.name = mangle_fundef_name(&fundef.name, &fundef.args);
+
+        eprintln!("rename {} to {}", old, fundef.name);
 
         #[cfg(debug_assertions)]
         if !self.used_names.insert(fundef.name.clone()) {

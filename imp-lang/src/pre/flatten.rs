@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap, mem};
+use std::{collections::HashMap, mem};
 
 use typed_arena::Arena;
 
@@ -6,7 +6,7 @@ use crate::ast::*;
 
 pub fn flatten<'ast>(program: Program<'ast, ParsedAst>) -> Program<'ast, FlattenedAst> {
         let mut overloads = HashMap::new();
-        let fundefs_arena: Arena<RefCell<Fundef<'ast, FlattenedAst>>> = Arena::new();
+    let fundefs_arena: Arena<Fundef<'ast, FlattenedAst>> = Arena::new();
 
         for (name, groups) in program.overloads {
             let mut new_groups = HashMap::new();
@@ -15,10 +15,9 @@ pub fn flatten<'ast>(program: Program<'ast, ParsedAst>) -> Program<'ast, Flatten
                 let mut new_fundefs = Vec::new();
 
                 for fundef in fundefs {
-                    let fundef = fundef.borrow();
-                    let out_fundef = Flatten::new().trav_fundef(&fundef);
-                    let out_ref = fundefs_arena.alloc(RefCell::new(out_fundef));
-                    let out_ref: &'ast RefCell<Fundef<'ast, FlattenedAst>> = unsafe { std::mem::transmute(out_ref) };
+                    let out_fundef = Flatten::new().trav_fundef(fundef);
+                    let out_ref = fundefs_arena.alloc(out_fundef);
+                    let out_ref: &'ast Fundef<'ast, FlattenedAst> = unsafe { std::mem::transmute(out_ref) };
                     new_fundefs.push(out_ref);
                 }
 

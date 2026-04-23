@@ -112,14 +112,8 @@ impl<'ast> Traverse<'ast> for CompileH {
     fn trav_program(&mut self, program: &mut Program<'ast, TypedAst>) {
         self.output.push_str(HEADER);
 
-        for (_name, overloads) in &mut program.overloads {
-            for (_sig, fundefs) in overloads {
-                for fundef in fundefs {
-                    self.output.push('\n');
-                    let mut fundef = fundef.borrow_mut();
-                    self.trav_fundef(&mut fundef);
-                }
-            }
+        for fundef in program.fundefs.iter_mut() {
+            self.trav_fundef(fundef);
         }
     }
 

@@ -53,8 +53,15 @@ pub fn compile(options: Options) {
         return;
     }
 
-    let mut ast = tc::type_infer(ast).unwrap();
+    let ast = tc::type_infer(ast).unwrap();
     if matches!(options.b, Some(Phase::TI)) {
+        let mut ast = ast;
+        print!("{}", show::show(&mut ast));
+        return;
+    }
+
+    let mut ast = tc::resolve_dispatch(ast).unwrap();
+    if matches!(options.b, Some(Phase::DR)) {
         print!("{}", show::show(&mut ast));
         return;
     }

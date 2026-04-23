@@ -89,7 +89,7 @@ impl CompileC {
             dyn_ctype(ret_ty), base_name, sig_str.join("_"), fargs.join(", ")));
     }
 
-    fn emit_wrapper_function(&mut self, base_name: &str, sig: &BaseSignature, family: &Vec<&std::cell::RefCell<Fundef<'_, TypedAst>>>) {
+    fn emit_wrapper_function(&mut self, base_name: &str, sig: &BaseSignature, family: &Vec<&Fundef<'_, TypedAst>>) {
         let sig_str = sig.base_types.iter().map(base_rstype).collect::<Vec<_>>();
         let fargs: Vec<String> = sig.base_types
             .iter()
@@ -97,13 +97,12 @@ impl CompileC {
             .map(|(i, base)| format!("{} arg{i}", dyn_ctype(base)))
             .collect();
 
-        let first = family[0].borrow();
+        let first = family[0];
         self.push_line(&format!("{} IMP_{}_{}({}) {{",
             dyn_ctype(&first.ret_type.ty), base_name, sig_str.join("_"), fargs.join(", ")));
 
         self.indent += 1;
         for (idx, fundef) in family.iter().enumerate() {
-            let fundef = fundef.borrow();
             let condition = fundef.args
                 .iter()
                 .enumerate()
@@ -236,8 +235,7 @@ impl<'ast> Traverse<'ast> for CompileC {
             for (_sig, fundefs) in overloads {
                 for fundef in fundefs {
                     self.output.push('\n');
-                    let fundef = fundef.borrow();
-                    self.emit_function_prototype(&fundef);
+                    self.emit_function_prototype(fundef);
                 }
             }
         }
@@ -247,21 +245,14 @@ impl<'ast> Traverse<'ast> for CompileC {
             for (sig, fundefs) in overloads {
                 if overloads.len() > 1 || fundefs.len() > 1 {
                     self.output.push('\n');
-                    let first = fundefs[0].borrow();
+                    let first = fundefs[0];
                     self.emit_wrapper_prototype(&name, sig, &first.ret_type.ty);
                 }
             }
         }
 
-
-        for (_name, overloads) in &mut program.overloads {
-            for (_sig, fundefs) in overloads {
-                for fundef in fundefs {
-                    self.output.push('\n');
-                    let mut fundef = fundef.borrow_mut();
-                    self.trav_fundef(&mut fundef);
-                }
-            }
+        for fundef in program.fundefs.iter_mut() {
+            self.trav_fundef(fundef);
         }
 
         for (name, overloads) in &program.overloads {
@@ -539,13 +530,13 @@ impl<'ast> Traverse<'ast> for CompileC {
         let (fold_name, call_args) = match &fold.foldfun {
             FoldFun::Name(id) => {
                 let name = match id {
-                    CallTarget::Function(f) => rename_fundefs::mangle_fundef_name(&f.borrow().name, &f.borrow().args),
+                    CallTarget::Function(f) => rename_fundefs::mangle_fundef_name(&f.name, &f.args),
                 };
                 (name, vec![target_name.clone(), sel_expr])
             }
             FoldFun::Apply { id, args } => {
                 let name = match id {
-                    CallTarget::Function(f) => rename_fundefs::mangle_fundef_name(&f.borrow().name, &f.borrow().args),
+                    CallTarget::Function(f) => rename_fundefs::mangle_fundef_name(&f.name, &f.args),
                 };
                 let mut hole = 0usize;
                 let mut out = Vec::with_capacity(args.len());
@@ -583,8 +574,8 @@ impl<'ast> Traverse<'ast> for CompileC {
     fn trav_call(&mut self, call: &mut Call<'ast, TypedAst>) {
         let (target_base_name, target_symbol) = match &call.id {
             CallTarget::Function(f) => (
-                f.borrow().name.clone(),
-                rename_fundefs::mangle_fundef_name(&f.borrow().name, &f.borrow().args),
+                f.name.clone(),
+                rename_fundefs::mangle_fundef_name(&f.name, &f.args),
             ),
         };
         let arg_types: Vec<Type> = call.args.iter().map(|id| match id {

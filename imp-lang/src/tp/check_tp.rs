@@ -21,8 +21,7 @@ impl CheckTypePatterns {
         for (_, groups) in &program.overloads {
             for (_, fundefs) in groups {
                 for fundef in fundefs {
-					let fundef = fundef.borrow();
-					self.check_fundef(&fundef);
+					self.check_fundef(fundef);
                 }
             }
         }

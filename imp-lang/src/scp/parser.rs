@@ -1,5 +1,4 @@
 use std::{collections::HashMap, iter::Peekable};
-use std::cell::RefCell;
 use typed_arena::Arena;
 
 use super::{lexer::*, operator::*, span::*};
@@ -72,7 +71,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
 
     pub fn parse_program(&mut self) -> ParseResult<Program<'ast, ParsedAst>> {
         let mut overloads = HashMap::new();
-        let fundefs_arena: Arena<RefCell<Fundef<'ast, ParsedAst>>> = Arena::new();
+        let fundefs_arena: Arena<Fundef<'ast, ParsedAst>> = Arena::new();
 
         while let Some((token, _)) = self.lexer.peek() {
             match token {
@@ -80,9 +79,9 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                     let fundef = self.parse_fundef()?;
                     let name = fundef.name.clone();
                     let sig = fundef.signature();
-                    let fundef_ref = fundefs_arena.alloc(RefCell::new(fundef));
+                    let fundef_ref = fundefs_arena.alloc(fundef);
                     // SAFETY: fundefs_arena is moved into Program before return.
-                    let fundef_ref: &'ast RefCell<Fundef<'ast, ParsedAst>> = unsafe { std::mem::transmute(fundef_ref) };
+                    let fundef_ref: &'ast Fundef<'ast, ParsedAst> = unsafe { std::mem::transmute(fundef_ref) };
                     let group = overloads.entry(name).or_insert(HashMap::new());
                     let fundefs = group.entry(sig).or_insert(Vec::new());
                     fundefs.push(fundef_ref);

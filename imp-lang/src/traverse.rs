@@ -8,13 +8,8 @@ pub trait Traverse<'ast> {
     // Declarations
 
     fn trav_program(&mut self, program: &mut Program<'ast, Self::Ast>) {
-        for (_, groups) in &mut program.overloads {
-            for (_, fundefs) in groups {
-                for fundef in fundefs {
-                    let mut fundef = fundef.borrow_mut();
-                    self.trav_fundef(&mut fundef);
-                }
-            }
+        for fundef in program.fundefs.iter_mut() {
+            self.trav_fundef(fundef);
         }
     }
 
