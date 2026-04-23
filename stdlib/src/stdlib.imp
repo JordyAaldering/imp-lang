@@ -118,7 +118,7 @@ fn genarray(usize[n] shp, i32 v) -> i32[n:shp] {
     { v | iv < shp }
 }
 
-//fn genarray(usize[n] shp, i32[i:ishp] v) -> i32[n:shp,i:ishp] {
+//fn genarray(usize[n] shp, i32[i>0:ishp] v) -> i32[n:shp,i:ishp] {
 //    { v | iv < shp }
 //}
 
@@ -126,7 +126,7 @@ fn genarray(usize[n] shp, usize v) -> usize[n:shp] {
     { v | iv < shp }
 }
 
-//fn genarray(usize[n] shp, usize[i:ishp] v) -> usize[n:shp,i:ishp] {
+//fn genarray(usize[n] shp, usize[i>0:ishp] v) -> usize[n:shp,i>0:ishp] {
 //    { v | iv < shp }
 //}
 

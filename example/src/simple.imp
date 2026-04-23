@@ -39,7 +39,7 @@ fn @mul(usize a, usize b) -> usize {
     @mulSxS(a, b)
 }
 
-fn @add(i32[d:shp] a, i32[d:shp] b) -> i32[d:shp] {
+fn @add(i32[d>0:shp] a, i32[d>0:shp] b) -> i32[d>0:shp] {
     { @selVxA(iv, a) + @selVxA(iv, b) | iv < shp }
 }
 
@@ -119,11 +119,7 @@ fn @sel(usize[n] idx, usize[n:shp] arr) -> usize {
     @selVxA(idx, arr)
 }
 
-fn @sel(usize[n] idx, usize arr) -> usize {
-    arr
-}
-
-fn @sel(usize[n] idx, u32[n:shp] arr) -> u32 {
+fn @sel(usize[n] idx, u32[n>0:shp] arr) -> u32 {
     @selVxA(idx, arr)
 }
 

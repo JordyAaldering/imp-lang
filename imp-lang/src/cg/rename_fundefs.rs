@@ -64,7 +64,6 @@ impl<'ast> Traverse<'ast> for RenameFundefs {
     type Ast = TypedAst;
 
     fn trav_fundef(&mut self, fundef: &mut Fundef<'ast, Self::Ast>) {
-        let old = fundef.name.clone();
         fundef.name = mangle_fundef_name(&fundef.name, &fundef.args);
 
         #[cfg(debug_assertions)]
