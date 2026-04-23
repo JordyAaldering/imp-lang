@@ -184,11 +184,11 @@ fn rust_base_type(ty: &BaseType) -> String {
     use BaseType::*;
     match ty {
         Bool => "bool".to_owned(),
-        I32 => "i32".to_owned(),
-        I64 => "i64".to_owned(),
+        Usize => "usize".to_owned(),
         U32 => "u32".to_owned(),
         U64 => "u64".to_owned(),
-        Usize => "usize".to_owned(),
+        I32 => "i32".to_owned(),
+        I64 => "i64".to_owned(),
         F32 => "f32".to_owned(),
         F64 => "f64".to_owned(),
         Udf(udf) => udf.to_owned(),

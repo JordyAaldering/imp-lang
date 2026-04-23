@@ -131,11 +131,11 @@ fn base_ctype(ty: &Type) -> String {
     use BaseType::*;
     match &ty.ty {
         Bool => "bool".to_owned(),
-        I32 => "int32_t".to_owned(),
-        I64 => "int64_t".to_owned(),
+        Usize => "size_t".to_owned(),
         U32 => "uint32_t".to_owned(),
         U64 => "uint64_t".to_owned(),
-        Usize => "size_t".to_owned(),
+        I32 => "int32_t".to_owned(),
+        I64 => "int64_t".to_owned(),
         F32 => "float".to_owned(),
         F64 => "double".to_owned(),
         Udf(udf) => udf.to_owned(),
@@ -147,11 +147,11 @@ fn dyn_ctype(ty: &Type) -> String {
         use BaseType::*;
         match &ty.ty {
             Bool => "ImpDynBool".to_owned(),
-            I32 => "ImpDynI32".to_owned(),
-            I64 => "ImpDynI64".to_owned(),
+            Usize => "ImpDynUsize".to_owned(),
             U32 => "ImpDynU32".to_owned(),
             U64 => "ImpDynU64".to_owned(),
-            Usize => "ImpDynUsize".to_owned(),
+            I32 => "ImpDynI32".to_owned(),
+            I64 => "ImpDynI64".to_owned(),
             F32 => "ImpDynF32".to_owned(),
             F64 => "ImpDynF64".to_owned(),
             Udf(udf) => format!("ImpDyn{}", udf),
