@@ -47,7 +47,7 @@ pub struct RenameFundefs {
     used_names: HashSet<String>,
 }
 
-pub fn rename_fundefs<'ast>(mut program: &mut Program<'ast, TypedAst>) {
+pub fn rename_fundefs<'ast>(program: &mut Program<'ast, TypedAst>) {
     RenameFundefs::new().trav_program(program);
 }
 

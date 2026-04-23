@@ -85,11 +85,11 @@ impl<'ast, Ast: AstConfig + 'ast> Traverse<'ast> for Show<'ast, Ast> {
         self.indent();
         self.write(&assign.lhs.name);
         self.write(" = ");
-        *assign.expr = self.trav_expr(*assign.expr);
+        self.trav_expr(assign.expr);
         self.write(";\n");
     }
 
-    fn trav_cond(&mut self, mut cond: Cond<'ast, Self::Ast>) -> Expr<'ast, Ast> {
+    fn trav_cond(&mut self, cond: &mut Cond<'ast, Self::Ast>) {
         self.write("if ");
         Self::Ast::trav_operand(self, &mut cond.cond);
         self.write(" {\n");
@@ -99,11 +99,9 @@ impl<'ast, Ast: AstConfig + 'ast> Traverse<'ast> for Show<'ast, Ast> {
         self.write("} else {\n");
         self.trav_body(&mut cond.else_branch);
         self.write("}");
-
-        Expr::Cond(cond)
     }
 
-    fn trav_call(&mut self, mut call: Call<'ast, Self::Ast>) -> Expr<'ast, Ast> {
+    fn trav_call(&mut self, call: &mut Call<'ast, Self::Ast>) {
         self.write(&Self::Ast::dispatch_name(&call.id));
 
         self.write("(");
@@ -113,11 +111,9 @@ impl<'ast, Ast: AstConfig + 'ast> Traverse<'ast> for Show<'ast, Ast> {
         }
 
         self.write(")");
-
-        Expr::Call(call)
     }
 
-    fn trav_prf(&mut self, mut prf: PrfCall<'ast, Self::Ast>) -> Expr<'ast, Ast> {
+    fn trav_prf(&mut self, prf: &mut PrfCall<'ast, Self::Ast>) {
         self.write(prf.nameof());
         self.write("(");
         for arg in prf.args_mut() {
@@ -125,11 +121,9 @@ impl<'ast, Ast: AstConfig + 'ast> Traverse<'ast> for Show<'ast, Ast> {
             self.write(", ");
         }
         self.write(")");
-
-        Expr::PrfCall(prf)
     }
 
-    fn trav_fold(&mut self, mut fold: Fold<'ast, Self::Ast>) -> Expr<'ast, Ast> {
+    fn trav_fold(&mut self, fold: &mut Fold<'ast, Self::Ast>) {
         self.write("fold(");
 
         Ast::trav_operand(self, &mut fold.neutral);
@@ -153,17 +147,12 @@ impl<'ast, Ast: AstConfig + 'ast> Traverse<'ast> for Show<'ast, Ast> {
 
         self.write(", ");
 
-        fold.selection = match self.trav_tensor(fold.selection) {
-            Expr::Tensor(tensor) => tensor,
-            _ => unreachable!("trav_tensor must return Tensor"),
-        };
+        self.trav_tensor(&mut fold.selection);
 
         self.write(")");
-
-        Expr::Fold(fold)
     }
 
-    fn trav_tensor(&mut self, mut tensor: Tensor<'ast, Self::Ast>) -> Expr<'ast, Ast> {
+    fn trav_tensor(&mut self, tensor: &mut Tensor<'ast, Self::Ast>) {
         self.write("{\n");
         self.trav_body(&mut tensor.body);
         self.write(" | ");
@@ -177,19 +166,15 @@ impl<'ast, Ast: AstConfig + 'ast> Traverse<'ast> for Show<'ast, Ast> {
         self.write(" < ");
         Ast::trav_operand(self, &mut tensor.ub);
         self.write(" }");
-
-        Expr::Tensor(tensor)
     }
 
-    fn trav_array(&mut self, mut array: Array<'ast, Self::Ast>) -> Expr<'ast, Ast> {
+    fn trav_array(&mut self, array: &mut Array<'ast, Self::Ast>) {
         self.write("[");
         for v in &mut array.elems {
             Ast::trav_operand(self, v);
             self.write(", ");
         }
         self.write("]");
-
-        Expr::Array(array)
     }
 
     fn trav_id(&mut self, id: &mut Id<'ast, Self::Ast>) {

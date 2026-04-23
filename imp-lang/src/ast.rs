@@ -107,7 +107,7 @@ impl AstConfig for ParsedAst {
     where
         V: Traverse<'ast, Ast = Self> + ?Sized,
     {
-        *operand = trav.trav_expr(*operand);
+        trav.trav_expr(operand);
     }
 }
 

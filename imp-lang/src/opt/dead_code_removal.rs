@@ -1,7 +1,5 @@
 use std::{collections::HashSet, mem};
 
-use typed_arena::Arena;
-
 use crate::{ast::*, Traverse};
 
 pub fn dead_code_removal<'ast>(program: &mut Program<'ast, TypedAst>) {
@@ -10,25 +8,13 @@ pub fn dead_code_removal<'ast>(program: &mut Program<'ast, TypedAst>) {
 
 struct DeadCodeRemoval {
     used: HashSet<*const ()>,
-    expr_arena: *const (),
 }
 
 impl DeadCodeRemoval {
     fn new() -> Self {
         Self {
             used: HashSet::new(),
-            expr_arena: std::ptr::null(),
         }
-    }
-
-    fn set_expr_arena<'ast>(&mut self, arena: &Arena<Expr<'ast, TypedAst>>) {
-        self.expr_arena = arena as *const _ as *const ();
-    }
-
-    fn alloc_expr_in_arena<'ast>(&self, expr: Expr<'ast, TypedAst>) -> &'ast Expr<'ast, TypedAst> {
-        let arena = unsafe { &*(self.expr_arena as *const Arena<Expr<'ast, TypedAst>>) };
-        // SAFETY: arena belongs to current fundef and outlives produced expr references.
-        unsafe { std::mem::transmute(arena.alloc(expr)) }
     }
 
     fn ptr<'ast>(lvis: &VarInfo<'ast, TypedAst>) -> *const () {
@@ -41,13 +27,11 @@ impl<'ast> Traverse<'ast> for DeadCodeRemoval {
 
     fn trav_fundef(&mut self, fundef: &mut Fundef<'ast, Self::Ast>) {
         self.used.clear();
-        self.set_expr_arena(&fundef.exprs);
         self.trav_body(&mut fundef.body);
     }
 
     fn trav_assign(&mut self, assign: &mut Assign<'ast, Self::Ast>) {
-        let new_expr = self.trav_expr((*assign.expr).clone());
-        assign.expr = self.alloc_expr_in_arena(new_expr);
+        self.trav_expr(assign.expr);
     }
 
     fn trav_body(&mut self, body: &mut Body<'ast, Self::Ast>) {
@@ -73,7 +57,7 @@ impl<'ast> Traverse<'ast> for DeadCodeRemoval {
         body.stmts = kept_rev;
     }
 
-    fn trav_tensor(&mut self, mut tensor: Tensor<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
+    fn trav_tensor_expr(&mut self, mut tensor: Tensor<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
         let outer_used = mem::take(&mut self.used);
 
         if let Some(lb) = &mut tensor.lb {
@@ -93,7 +77,7 @@ impl<'ast> Traverse<'ast> for DeadCodeRemoval {
         Expr::Tensor(tensor)
     }
 
-    fn trav_fold(&mut self, mut fold: Fold<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
+    fn trav_fold_expr(&mut self, mut fold: Fold<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
         self.trav_id(&mut fold.neutral);
 
         fold.foldfun = match fold.foldfun {
@@ -108,19 +92,15 @@ impl<'ast> Traverse<'ast> for DeadCodeRemoval {
             }
         };
 
-        fold.selection = match self.trav_tensor(fold.selection) {
-            Expr::Tensor(tensor) => tensor,
-            _ => unreachable!("trav_tensor must return Tensor"),
-        };
+        self.trav_tensor(&mut fold.selection);
 
         Expr::Fold(fold)
     }
 
-    fn trav_array(&mut self, mut array: Array<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
+    fn trav_array(&mut self, array: &mut Array<'ast, Self::Ast>) {
         for value in &mut array.elems {
             self.trav_id(value);
         }
-        Expr::Array(array)
     }
 
     fn trav_id(&mut self, id: &mut Id<'ast, Self::Ast>) {

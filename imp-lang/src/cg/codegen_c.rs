@@ -45,9 +45,9 @@ impl CompileC {
         self.output.push('\n');
     }
 
-    fn render_expr(&mut self, expr: &Expr<'_, TypedAst>) -> String {
-        self.trav_expr(expr);
-        self.expr_stack.pop().expect("expression stack underflow")
+    fn render_id(&mut self, mut id: Id<'_, TypedAst>) -> String {
+        self.trav_id(&mut id);
+        self.expr_stack.pop().expect("ID stack underflow")
     }
 
     fn id_type(&self, id: &Id<'_, TypedAst>) -> Type {
@@ -152,7 +152,7 @@ impl CompileC {
     }
 
     fn emit_return(&mut self, ret: Id<'_, TypedAst>) {
-        let name = self.render_expr(&Expr::Id(ret));
+        let name = self.render_id(ret);
         let declared_ty = self.ret_type.clone().unwrap_or_else(|| self.id_type(&ret));
         let value_ty = self.id_type(&ret);
 
@@ -306,23 +306,18 @@ impl<'ast> Traverse<'ast> for CompileC {
         unreachable!("needs to be implemented in a case-by-case basis")
     }
 
-    fn trav_assign(&mut self, mut assign: &mut Assign<'ast, Self::Ast>) {
+    fn trav_assign(&mut self, assign: &mut Assign<'ast, Self::Ast>) {
         let prev_lhs_target = self.lhs_target.take();
         self.lhs_target = Some((assign.lhs.name.clone(), assign.lhs.ty.clone()));
 
         let ty = assign.lhs.ty.clone();
         let name = assign.lhs.name.clone();
 
-        assign.expr = match *assign.expr {
-            e if matches!(e, Expr::Tensor(_) | Expr::Fold(_) | Expr::Array(_)) => {
-                self.trav_expr(e)
-            }
-            e => {
-                let rhs = self.render_expr(&e);
-                self.push_line(&format!("{} {} = {};", full_ctype(&ty), name, rhs));
-                e
-            }
-        };
+        self.trav_expr(assign.expr);
+        if !matches!(assign.expr, Expr::Tensor(_) | Expr::Fold(_) | Expr::Array(_)) {
+            let rhs = self.expr_stack.pop().expect("expression stack underflow");
+            self.push_line(&format!("{} {} = {};", full_ctype(&ty), name, rhs));
+        }
 
         self.lhs_target = prev_lhs_target;
     }
@@ -332,7 +327,7 @@ impl<'ast> Traverse<'ast> for CompileC {
         self.push_line(&format!("printf(\"Hello, {}\\n\");", id));
     }
 
-    fn trav_cond(&mut self, mut cond: Cond<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
+    fn trav_cond(&mut self, cond: &mut Cond<'ast, Self::Ast>) {
         if cond.then_branch.stmts.is_empty() && cond.else_branch.stmts.is_empty() {
             let c = self.nameof(&cond.cond);
             let t = self.nameof(&cond.then_branch.ret);
@@ -366,11 +361,9 @@ impl<'ast> Traverse<'ast> for CompileC {
 
             self.expr_stack.push("cond_ret".to_string());
         }
-
-        Expr::Cond(cond)
     }
 
-    fn trav_tensor(&mut self, mut tensor: Tensor<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
+    fn trav_tensor(&mut self, tensor: &mut Tensor<'ast, Self::Ast>) {
         let (target_name, target_ty) = self.lhs_target.clone().expect("tensor target must be set");
         let base = base_ctype(&target_ty);
         let iv_name = tensor.iv.name.clone();
@@ -471,7 +464,7 @@ impl<'ast> Traverse<'ast> for CompileC {
         }
 
         // Store element into the flat result buffer.
-        let mut ret = self.render_expr(&Expr::Id(tensor.body.ret));
+        let mut ret = self.render_id(tensor.body.ret);
         if rank == 1 && ret == iv_name {
             ret = format!("(({iv_elem}*){iv_name}.data)[0]");
         }
@@ -486,11 +479,9 @@ impl<'ast> Traverse<'ast> for CompileC {
         self.push_line(&format!(
             "ImpArrayRaw {target_name} = (ImpArrayRaw) {{ .len = {len_name}, .shp = {shp_name}, .dim = {rank}, .data = (void *){data_name} }};"
         ));
-
-        Expr::Tensor(tensor)
     }
 
-    fn trav_fold(&mut self, mut fold: Fold<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
+    fn trav_fold(&mut self, fold: &mut Fold<'ast, Self::Ast>) {
         let (target_name, target_ty, push_result) = if let Some((name, ty)) = self.lhs_target.clone() {
             (name, ty, false)
         } else {
@@ -505,7 +496,7 @@ impl<'ast> Traverse<'ast> for CompileC {
         self.tensor_uid += 1;
         let t_uid = self.tensor_uid;
 
-        let neutral_expr = self.render_expr(&Expr::Id(fold.neutral));
+        let neutral_expr = self.render_id(fold.neutral);
         self.push_line(&format!("{} {} = {};", full_ctype(&target_ty), target_name, neutral_expr));
 
         for d in 0..rank {
@@ -543,7 +534,7 @@ impl<'ast> Traverse<'ast> for CompileC {
             self.trav_stmt(stmt);
         }
 
-        let sel_expr = self.render_expr(&Expr::Id(fold.selection.body.ret));
+        let sel_expr = self.render_id(fold.selection.body.ret);
 
         let (fold_name, call_args) = match &fold.foldfun {
             FoldFun::Name(id) => {
@@ -569,7 +560,7 @@ impl<'ast> Traverse<'ast> for CompileC {
                             }
                         }
                         FoldFunArg::Bound(bound) => {
-                            out.push(self.render_expr(&Expr::Id(bound.clone())));
+                            out.push(self.render_id(bound.clone()));
                         }
                     }
                 }
@@ -587,11 +578,9 @@ impl<'ast> Traverse<'ast> for CompileC {
         if push_result {
             self.expr_stack.push(target_name);
         }
-
-        Expr::Fold(fold)
     }
 
-    fn trav_call(&mut self, call: Call<'ast, TypedAst>) -> Expr<'ast, Self::Ast> {
+    fn trav_call(&mut self, call: &mut Call<'ast, TypedAst>) {
         let (target_base_name, target_symbol) = match &call.id {
             CallTarget::Function(f) => (
                 f.borrow().name.clone(),
@@ -616,22 +605,20 @@ impl<'ast> Traverse<'ast> for CompileC {
         };
 
         let args: Vec<String> = call.args.iter()
-            .map(|arg| self.render_expr(&Expr::Id(*arg)))
+            .map(|arg| self.render_id(*arg))
             .collect();
         self.expr_stack.push(format!("IMP_{}({})", name, args.join(", ")));
-
-        Expr::Call(call)
     }
 
-    fn trav_prf(&mut self, prf: PrfCall<'ast, TypedAst>) -> Expr<'ast, Self::Ast> {
+    fn trav_prf(&mut self, prf: &mut PrfCall<'ast, TypedAst>) {
         use PrfCall::*;
         let rendered = match &prf {
             DimA(arr) => {
-                let arg = self.render_expr(&Expr::Id(*arr));
+                let arg = self.render_id(*arr);
                 format!("{arg}.dim")
             }
             ShapeA(arr) => {
-                let arg = self.render_expr(&Expr::Id(*arr));
+                let arg = self.render_id(*arr);
                 self.shp_uid += 1;
                 let uid = self.shp_uid;
                 let meta = format!("_shp{uid}_meta");
@@ -647,31 +634,29 @@ impl<'ast> Traverse<'ast> for CompileC {
                 wrap
             }
             SelVxA(idx, arr) => {
-                let arr_name = self.render_expr(&Expr::Id(*arr));
-                let idx_name = self.render_expr(&Expr::Id(*idx));
+                let arr_name = self.render_id(*arr);
+                let idx_name = self.render_id(*idx);
                 let elem_base = elem_ctype_of_id(arr);
                 format!("(({elem_base} *){arr_name}.data)[imp_flat_index({arr_name}, {idx_name})]")
             }
-            AddSxS(a, b) => format!("{} + {}", self.render_expr(&Expr::Id(*a)), self.render_expr(&Expr::Id(*b))),
-            SubSxS(a, b) => format!("{} - {}", self.render_expr(&Expr::Id(*a)), self.render_expr(&Expr::Id(*b))),
-            MulSxS(a, b) => format!("{} * {}", self.render_expr(&Expr::Id(*a)), self.render_expr(&Expr::Id(*b))),
-            DivSxS(a, b) => format!("{} / {}", self.render_expr(&Expr::Id(*a)), self.render_expr(&Expr::Id(*b))),
-            LtSxS(a, b) => format!("{} < {}", self.render_expr(&Expr::Id(*a)), self.render_expr(&Expr::Id(*b))),
-            LeSxS(a, b) => format!("{} <= {}", self.render_expr(&Expr::Id(*a)), self.render_expr(&Expr::Id(*b))),
-            GtSxS(a, b) => format!("{} > {}", self.render_expr(&Expr::Id(*a)), self.render_expr(&Expr::Id(*b))),
-            GeSxS(a, b) => format!("{} >= {}", self.render_expr(&Expr::Id(*a)), self.render_expr(&Expr::Id(*b))),
-            EqSxS(a, b) => format!("{} == {}", self.render_expr(&Expr::Id(*a)), self.render_expr(&Expr::Id(*b))),
-            NeSxS(a, b) => format!("{} != {}", self.render_expr(&Expr::Id(*a)), self.render_expr(&Expr::Id(*b))),
-            NegS(a) => format!("-{}", self.render_expr(&Expr::Id(*a))),
-            NotS(a) => format!("!{}", self.render_expr(&Expr::Id(*a))),
+            AddSxS(a, b) => format!("{} + {}", self.render_id(*a), self.render_id(*b)),
+            SubSxS(a, b) => format!("{} - {}", self.render_id(*a), self.render_id(*b)),
+            MulSxS(a, b) => format!("{} * {}", self.render_id(*a), self.render_id(*b)),
+            DivSxS(a, b) => format!("{} / {}", self.render_id(*a), self.render_id(*b)),
+            LtSxS(a, b) => format!("{} < {}", self.render_id(*a), self.render_id(*b)),
+            LeSxS(a, b) => format!("{} <= {}", self.render_id(*a), self.render_id(*b)),
+            GtSxS(a, b) => format!("{} > {}", self.render_id(*a), self.render_id(*b)),
+            GeSxS(a, b) => format!("{} >= {}", self.render_id(*a), self.render_id(*b)),
+            EqSxS(a, b) => format!("{} == {}", self.render_id(*a), self.render_id(*b)),
+            NeSxS(a, b) => format!("{} != {}", self.render_id(*a), self.render_id(*b)),
+            NegS(a) => format!("-{}", self.render_id(*a)),
+            NotS(a) => format!("!{}", self.render_id(*a)),
         };
 
         self.expr_stack.push(rendered);
-
-        Expr::PrfCall(prf)
     }
 
-    fn trav_array(&mut self, array: Array<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
+    fn trav_array(&mut self, array: &mut Array<'ast, Self::Ast>) {
         let (target_name, target_ty) = self.lhs_target.clone().expect("array target must be set");
         let data_name = format!("{}_data", target_name);
         let shp_name = format!("{}_shp", target_name);
@@ -682,7 +667,7 @@ impl<'ast> Traverse<'ast> for CompileC {
         self.push_line(&format!("{} *{} = ({} *)malloc({} * sizeof({}));", base, data_name, base, len_name, base));
 
         for (i, value) in array.elems.iter().enumerate() {
-            let rendered = self.render_expr(&Expr::Id(*value));
+            let rendered = self.render_id(*value);
             self.push_line(&format!("{}[{}] = {};", data_name, i, rendered));
         }
 
@@ -692,8 +677,6 @@ impl<'ast> Traverse<'ast> for CompileC {
             "ImpArrayRaw {} = (ImpArrayRaw) {{ .len = {}, .shp = {}, .dim = 1, .data = (void *){} }};",
             target_name, len_name, shp_name, data_name
         ));
-
-        Expr::Array(array)
     }
 
     fn trav_id(&mut self, id: &mut Id<'ast, Self::Ast>) {

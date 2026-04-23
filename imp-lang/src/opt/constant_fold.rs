@@ -1,6 +1,4 @@
 use std::collections::HashMap;
-use typed_arena::Arena;
-
 use crate::{ast::*, Traverse};
 
 pub fn constant_fold<'ast>(program: &mut Program<'ast, TypedAst>) {
@@ -9,25 +7,13 @@ pub fn constant_fold<'ast>(program: &mut Program<'ast, TypedAst>) {
 
 pub struct ConstantFold {
     known: HashMap<*const (), u32>,
-    expr_arena: *const (),
 }
 
 impl ConstantFold {
     pub fn new() -> Self {
         Self {
             known: HashMap::new(),
-            expr_arena: std::ptr::null(),
         }
-    }
-
-    fn set_expr_arena<'ast>(&mut self, arena: &Arena<Expr<'ast, TypedAst>>) {
-        self.expr_arena = arena as *const _ as *const ();
-    }
-
-    fn alloc_expr_in_arena<'ast>(&self, expr: Expr<'ast, TypedAst>) -> &'ast Expr<'ast, TypedAst> {
-        let arena = unsafe { &*(self.expr_arena as *const Arena<Expr<'ast, TypedAst>>) };
-        // SAFETY: arena belongs to current fundef and outlives produced expr references.
-        unsafe { std::mem::transmute(arena.alloc(expr)) }
     }
 
     fn ptr<'ast>(lvis: &VarInfo<'ast, TypedAst>) -> *const () {
@@ -45,18 +31,12 @@ impl ConstantFold {
 impl<'ast> Traverse<'ast> for ConstantFold {
     type Ast = TypedAst;
 
-    fn trav_fundef(&mut self, fundef: &mut Fundef<'ast, Self::Ast>) {
-        self.set_expr_arena(&fundef.exprs);
-        self.trav_body(&mut fundef.body);
-    }
-
     fn trav_assign(&mut self, assign: &mut Assign<'ast, Self::Ast>) {
-        let new_expr = self.trav_expr((*assign.expr).clone());
+        self.trav_expr(assign.expr);
 
-        match &new_expr {
+        match assign.expr {
             Expr::Const(Const::U32(v)) => {
                 self.known.insert(Self::ptr(assign.lhs), *v);
-                assign.expr = self.alloc_expr_in_arena(new_expr);
             }
             _ => {
                 debug_assert!(!self.known.contains_key(&Self::ptr(assign.lhs)));
@@ -64,7 +44,7 @@ impl<'ast> Traverse<'ast> for ConstantFold {
         }
     }
 
-    fn trav_prf(&mut self, prf: PrfCall<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
+    fn trav_prf_expr(&mut self, prf: PrfCall<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
         use PrfCall::*;
         match &prf {
             AddSxS(l, r) => {
