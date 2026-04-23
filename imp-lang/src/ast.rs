@@ -112,45 +112,6 @@ impl AstConfig for ParsedAst {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct FlattenedAst;
-
-impl AstConfig for FlattenedAst {
-    type VarType = Option<Type>;
-
-    type VarLink<'ast> = String;
-
-    type SsaLink<'ast> = ();
-
-    type Dispatch<'ast> = String;
-
-    type Operand<'ast> = Id<'ast, FlattenedAst>;
-
-    fn var_name<'ast>(link: &Self::VarLink<'ast>) -> String {
-        link.clone()
-    }
-
-    fn dispatch_name<'ast>(dispatch: &Self::Dispatch<'ast>) -> String {
-        dispatch.clone()
-    }
-
-    fn trav_type<'ast, V>(trav: &mut V, ty: &mut Self::VarType)
-    where
-        V: Traverse<'ast, Ast = Self> + ?Sized
-    {
-        if let Some(ty) = ty {
-            trav.trav_type(ty);
-        }
-    }
-
-    fn trav_operand<'ast, V>(trav: &mut V, operand: &mut Self::Operand<'ast>)
-    where
-        V: Traverse<'ast, Ast = Self> + ?Sized,
-    {
-        trav.trav_id(operand);
-    }
-}
-
-#[derive(Clone, Copy, Debug)]
 pub struct UntypedAst;
 
 impl AstConfig for UntypedAst {

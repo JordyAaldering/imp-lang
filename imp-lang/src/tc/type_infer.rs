@@ -3,7 +3,7 @@ use typed_arena::Arena;
 
 use crate::ast::*;
 
-/// TODO: convert into &mut Program, and implement Traversal for TypeInfer instead
+/// TODO: convert into &mut Program, and implement Traversal for TypeInfer
 pub fn type_infer<'ast>(program: Program<'ast, UntypedAst>) -> Result<Program<'ast, UntypedAst>, InferenceError> {
     validate_overload_families(&program.overloads)?;
 
@@ -128,13 +128,6 @@ impl<'ast> TypeInfer<'ast> {
 
     fn alloc_expr(&self, expr: Expr<'ast, UntypedAst>) -> &'ast Expr<'ast, UntypedAst> {
         unsafe { std::mem::transmute(self.expr_arena.alloc(expr)) }
-    }
-
-    fn typed_of_id(&self, id: &Id<'ast, UntypedAst>) -> Type {
-        match id {
-            Id::Arg(i) => self.args[*i].ty.clone(),
-            Id::Var(v) => v.ty.clone().unwrap_or_else(|| Type::scalar(BaseType::I32)),
-        }
     }
 
     fn array_literal_type(&mut self, elem_types: Vec<Type>) -> Type {

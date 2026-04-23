@@ -56,6 +56,7 @@ pub fn resolve_dispatch<'ast>(program: Program<'ast, UntypedAst>) -> Result<Prog
     Ok(out_program)
 }
 
+#[allow(unused)]
 #[derive(Debug)]
 pub enum DispatchError {
     MissingTypeAnnotation { name: String },

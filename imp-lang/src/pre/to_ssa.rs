@@ -4,34 +4,34 @@ use typed_arena::Arena;
 
 use crate::ast::*;
 
-pub fn to_ssa<'ast>(program: Program<'ast, FlattenedAst>) -> Program<'ast, UntypedAst> {
-        let mut overloads = HashMap::new();
+pub fn to_ssa<'ast>(program: Program<'ast, ParsedAst>) -> Program<'ast, UntypedAst> {
+    let mut overloads = HashMap::new();
     let fundefs_arena: Arena<Fundef<'ast, UntypedAst>> = Arena::new();
 
-        for (name, groups) in program.overloads {
-            let mut new_groups = HashMap::new();
+    for (name, groups) in program.overloads {
+        let mut new_groups = HashMap::new();
 
-            for (sig, fundefs) in groups {
-                let mut new_fundefs = Vec::new();
+        for (sig, fundefs) in groups {
+            let mut new_fundefs = Vec::new();
 
-                for fundef in fundefs {
-                    let out_fundef = ToSsa::new().trav_fundef(fundef);
-                    let out_ref = fundefs_arena.alloc(out_fundef);
-                    let out_ref: &'ast Fundef<'ast, UntypedAst> = unsafe { std::mem::transmute(out_ref) };
-                    new_fundefs.push(out_ref);
-                }
-
-                new_groups.insert(sig, new_fundefs);
+            for fundef in fundefs {
+                let out_fundef = ToSsa::new().trav_fundef(fundef);
+                let out_ref = fundefs_arena.alloc(out_fundef);
+                let out_ref: &'ast Fundef<'ast, UntypedAst> = unsafe { std::mem::transmute(out_ref) };
+                new_fundefs.push(out_ref);
             }
 
-            overloads.insert(name, new_groups);
+            new_groups.insert(sig, new_fundefs);
         }
 
-        Program {
-            overloads,
-            fundefs: fundefs_arena,
-        }
+        overloads.insert(name, new_groups);
     }
+
+    Program {
+        overloads,
+        fundefs: fundefs_arena,
+    }
+}
 
 pub struct ToSsa<'ast> {
     uid: usize,
@@ -58,18 +58,18 @@ impl<'ast> ToSsa<'ast> {
     }
 
     fn alloc_lvis(&self, name: String, ssa: Option<&'ast Expr<'ast, UntypedAst>>) -> &'ast VarInfo<'ast, UntypedAst> {
-        // SAFETY: The Arena is owned by ToSsa<'ast>, so it lives for 'ast.
-        // typed_arena uses interior mutability to allow allocation through &self.
-        // The returned reference is valid for 'ast because the Arena will not be dropped
-        // until the end of 'ast.
-        unsafe {
-            std::mem::transmute(self.decs_arena.alloc(VarInfo { name, ty: None, ssa }))
-        }
+        unsafe { std::mem::transmute(self.decs_arena.alloc(VarInfo { name, ty: None, ssa })) }
     }
 
     fn alloc_expr(&self, expr: Expr<'ast, UntypedAst>) -> &'ast Expr<'ast, UntypedAst> {
-        // SAFETY: The arena is owned by ToSsa<'ast> and moved into Fundef.
         unsafe { std::mem::transmute(self.expr_arena.alloc(expr)) }
+    }
+
+    fn unwrap_id_operand(&mut self, operand: &'ast Expr<'ast, ParsedAst>) -> Id<'ast, UntypedAst> {
+        match operand {
+            Expr::Id(id) => self.trav_id(id.clone()),
+            _ => panic!("to_ssa expected flattened Expr::Id operand"),
+        }
     }
 
     fn push_env(&mut self) {
@@ -93,8 +93,7 @@ impl<'ast> ToSsa<'ast> {
         None
     }
 
-    fn trav_fundef(&mut self, fundef: &Fundef<'ast, FlattenedAst>) -> Fundef<'ast, UntypedAst> {
-        // Fresh arena for this fundef's declarations
+    fn trav_fundef(&mut self, fundef: &Fundef<'ast, ParsedAst>) -> Fundef<'ast, UntypedAst> {
         self.decs_arena = Arena::new();
         self.expr_arena = Arena::new();
 
@@ -119,7 +118,6 @@ impl<'ast> ToSsa<'ast> {
 
         self.pop_env();
 
-        // Move the filled arena to Fundef; no cloning needed
         let decs = mem::take(&mut self.decs_arena);
         let exprs = mem::take(&mut self.expr_arena);
 
@@ -142,7 +140,7 @@ impl<'ast> ToSsa<'ast> {
         args
     }
 
-    fn trav_body(&mut self, body: Body<'ast, FlattenedAst>) -> Body<'ast, UntypedAst> {
+    fn trav_body(&mut self, body: Body<'ast, ParsedAst>) -> Body<'ast, UntypedAst> {
         let old_assigns = mem::take(&mut self.new_assigns);
 
         let mut stmts = Vec::new();
@@ -152,14 +150,14 @@ impl<'ast> ToSsa<'ast> {
             stmts.push(stmt);
         }
 
-        let ret = self.trav_id(body.ret);
+        let ret = self.unwrap_id_operand(body.ret);
         stmts.extend(mem::take(&mut self.new_assigns));
 
         self.new_assigns = old_assigns;
         Body { stmts, ret }
     }
 
-    fn trav_stmt(&mut self, stmt: Stmt<'ast, FlattenedAst>) -> Stmt<'ast, UntypedAst> {
+    fn trav_stmt(&mut self, stmt: Stmt<'ast, ParsedAst>) -> Stmt<'ast, UntypedAst> {
         use Stmt::*;
         match stmt {
             Assign(n) => Assign(self.trav_assign(n)),
@@ -167,7 +165,7 @@ impl<'ast> ToSsa<'ast> {
         }
     }
 
-    fn trav_assign(&mut self, assign: Assign<'ast, FlattenedAst>) -> Assign<'ast, UntypedAst> {
+    fn trav_assign(&mut self, assign: Assign<'ast, ParsedAst>) -> Assign<'ast, UntypedAst> {
         let old_name = assign.lhs.name.clone();
         let new_name = self.fresh_uid();
 
@@ -179,12 +177,12 @@ impl<'ast> ToSsa<'ast> {
         Assign { lhs: lvis, expr }
     }
 
-    fn trav_printf(&mut self, printf: Printf<'ast, FlattenedAst>) -> Printf<'ast, UntypedAst> {
+    fn trav_printf(&mut self, printf: Printf<'ast, ParsedAst>) -> Printf<'ast, UntypedAst> {
         let id = self.trav_id(printf.id);
         Printf { id }
     }
 
-    fn trav_expr(&mut self, expr: Expr<'ast, FlattenedAst>) -> Expr<'ast, UntypedAst> {
+    fn trav_expr(&mut self, expr: Expr<'ast, ParsedAst>) -> Expr<'ast, UntypedAst> {
         use Expr::*;
         match expr {
             Cond(n) => Cond(self.trav_cond(n)),
@@ -198,105 +196,50 @@ impl<'ast> ToSsa<'ast> {
         }
     }
 
-    fn trav_cond(&mut self, cond: Cond<'ast, FlattenedAst>) -> Cond<'ast, UntypedAst> {
-        let c = self.trav_id(cond.cond);
+    fn trav_cond(&mut self, cond: Cond<'ast, ParsedAst>) -> Cond<'ast, UntypedAst> {
+        let c = self.unwrap_id_operand(cond.cond);
         let t = self.trav_body(cond.then_branch);
         let e = self.trav_body(cond.else_branch);
-        Cond { cond: c, then_branch: t, else_branch: e }
-    }
-
-    fn trav_call(&mut self, call: Call<'ast, FlattenedAst>) -> Call<'ast, UntypedAst> {
-        let new_args = call.args.into_iter().map(|arg| self.trav_id(arg)).collect();
-        Call {
-            id: call.id,
-            args: new_args,
+        Cond {
+            cond: c,
+            then_branch: t,
+            else_branch: e,
         }
     }
 
-    fn trav_prf_call(&mut self, prf: PrfCall<'ast, FlattenedAst>) -> PrfCall<'ast, UntypedAst> {
+    fn trav_call(&mut self, call: Call<'ast, ParsedAst>) -> Call<'ast, UntypedAst> {
+        let args = call
+            .args
+            .into_iter()
+            .map(|arg| self.unwrap_id_operand(arg))
+            .collect();
+        Call { id: call.id, args }
+    }
+
+    fn trav_prf_call(&mut self, prf: PrfCall<'ast, ParsedAst>) -> PrfCall<'ast, UntypedAst> {
         use PrfCall::*;
         match prf {
-            DimA(a) => {
-                let a = self.trav_id(a.clone());
-                DimA(a)
-            }
-            ShapeA(a) => {
-                let a = self.trav_id(a.clone());
-                ShapeA(a)
-            }
-            SelVxA(a, b) => {
-                let a = self.trav_id(a.clone());
-                let b = self.trav_id(b.clone());
-                SelVxA(a, b)
-            }
-            AddSxS(l, r) => {
-                let l = self.trav_id(l.clone());
-                let r = self.trav_id(r.clone());
-                AddSxS(l, r)
-            }
-            SubSxS(l, r) => {
-                let l = self.trav_id(l.clone());
-                let r = self.trav_id(r.clone());
-                SubSxS(l, r)
-            }
-            MulSxS(l, r) => {
-                let l = self.trav_id(l.clone());
-                let r = self.trav_id(r.clone());
-                MulSxS(l, r)
-            }
-            DivSxS(l, r) => {
-                let l = self.trav_id(l.clone());
-                let r = self.trav_id(r.clone());
-                DivSxS(l, r)
-            }
-            LtSxS(a, b) => {
-                let a = self.trav_id(a.clone());
-                let b = self.trav_id(b.clone());
-                LtSxS(a, b)
-            }
-            LeSxS(a, b) => {
-                let a = self.trav_id(a.clone());
-                let b = self.trav_id(b.clone());
-                LeSxS(a, b)
-            }
-            GtSxS(a, b) => {
-                let a = self.trav_id(a.clone());
-                let b = self.trav_id(b.clone());
-                GtSxS(a, b)
-            }
-            GeSxS(a, b) => {
-                let a = self.trav_id(a.clone());
-                let b = self.trav_id(b.clone());
-                GeSxS(a, b)
-            }
-            EqSxS(a, b) => {
-                let a = self.trav_id(a.clone());
-                let b = self.trav_id(b.clone());
-                EqSxS(a, b)
-            }
-            NeSxS(a, b) => {
-                let a = self.trav_id(a.clone());
-                let b = self.trav_id(b.clone());
-                NeSxS(a, b)
-            }
-            NegS(a) => {
-                let a = self.trav_id(a.clone());
-                NegS(a)
-            }
-            NotS(a) => {
-                let a = self.trav_id(a.clone());
-                NotS(a)
-            }
+            DimA(a) => DimA(self.unwrap_id_operand(a)),
+            ShapeA(a) => ShapeA(self.unwrap_id_operand(a)),
+            SelVxA(a, b) => SelVxA(self.unwrap_id_operand(a), self.unwrap_id_operand(b)),
+            AddSxS(l, r) => AddSxS(self.unwrap_id_operand(l), self.unwrap_id_operand(r)),
+            SubSxS(l, r) => SubSxS(self.unwrap_id_operand(l), self.unwrap_id_operand(r)),
+            MulSxS(l, r) => MulSxS(self.unwrap_id_operand(l), self.unwrap_id_operand(r)),
+            DivSxS(l, r) => DivSxS(self.unwrap_id_operand(l), self.unwrap_id_operand(r)),
+            LtSxS(a, b) => LtSxS(self.unwrap_id_operand(a), self.unwrap_id_operand(b)),
+            LeSxS(a, b) => LeSxS(self.unwrap_id_operand(a), self.unwrap_id_operand(b)),
+            GtSxS(a, b) => GtSxS(self.unwrap_id_operand(a), self.unwrap_id_operand(b)),
+            GeSxS(a, b) => GeSxS(self.unwrap_id_operand(a), self.unwrap_id_operand(b)),
+            EqSxS(a, b) => EqSxS(self.unwrap_id_operand(a), self.unwrap_id_operand(b)),
+            NeSxS(a, b) => NeSxS(self.unwrap_id_operand(a), self.unwrap_id_operand(b)),
+            NegS(a) => NegS(self.unwrap_id_operand(a)),
+            NotS(a) => NotS(self.unwrap_id_operand(a)),
         }
     }
 
-    fn trav_tensor(&mut self, tensor: Tensor<'ast, FlattenedAst>) -> Tensor<'ast, UntypedAst> {
-        let lb = if let Some(lb) = tensor.lb {
-            Some(self.trav_id(lb))
-        } else {
-            None
-        };
-        let ub = self.trav_id(tensor.ub);
+    fn trav_tensor(&mut self, tensor: Tensor<'ast, ParsedAst>) -> Tensor<'ast, UntypedAst> {
+        let lb = tensor.lb.map(|lb| self.unwrap_id_operand(lb));
+        let ub = self.unwrap_id_operand(tensor.ub);
 
         let iv_lvis = self.alloc_lvis(tensor.iv.name.clone(), None);
 
@@ -307,11 +250,16 @@ impl<'ast> ToSsa<'ast> {
 
         self.pop_env();
 
-        Tensor { body, iv: iv_lvis, lb, ub }
+        Tensor {
+            body,
+            iv: iv_lvis,
+            lb,
+            ub,
+        }
     }
 
-    fn trav_fold(&mut self, fold: Fold<'ast, FlattenedAst>) -> Fold<'ast, UntypedAst> {
-        let neutral = self.trav_id(fold.neutral);
+    fn trav_fold(&mut self, fold: Fold<'ast, ParsedAst>) -> Fold<'ast, UntypedAst> {
+        let neutral = self.unwrap_id_operand(fold.neutral);
 
         let foldfun = match fold.foldfun {
             FoldFun::Name(id) => FoldFun::Name(id),
@@ -320,7 +268,7 @@ impl<'ast> ToSsa<'ast> {
                     .into_iter()
                     .map(|arg| match arg {
                         FoldFunArg::Placeholder => FoldFunArg::Placeholder,
-                        FoldFunArg::Bound(bound) => FoldFunArg::Bound(self.trav_id(bound)),
+                        FoldFunArg::Bound(bound) => FoldFunArg::Bound(self.unwrap_id_operand(bound)),
                     })
                     .collect();
                 FoldFun::Apply { id, args }
@@ -329,18 +277,23 @@ impl<'ast> ToSsa<'ast> {
 
         let selection = self.trav_tensor(fold.selection);
 
-        Fold { neutral, foldfun, selection }
-    }
-
-    fn trav_array(&mut self, array: Array<'ast, FlattenedAst>) -> Array<'ast, UntypedAst> {
-        let mut values = Vec::with_capacity(array.elems.len());
-        for value in array.elems {
-            values.push(self.trav_id(value));
+        Fold {
+            neutral,
+            foldfun,
+            selection,
         }
-        Array { elems: values }
     }
 
-    fn trav_id(&mut self, id: Id<'ast, FlattenedAst>) -> Id<'ast, UntypedAst> {
+    fn trav_array(&mut self, array: Array<'ast, ParsedAst>) -> Array<'ast, UntypedAst> {
+        let elems = array
+            .elems
+            .into_iter()
+            .map(|value| self.unwrap_id_operand(value))
+            .collect();
+        Array { elems }
+    }
+
+    fn trav_id(&mut self, id: Id<'ast, ParsedAst>) -> Id<'ast, UntypedAst> {
         match id {
             Id::Arg(i) => Id::Arg(i),
             Id::Var(v) => self
