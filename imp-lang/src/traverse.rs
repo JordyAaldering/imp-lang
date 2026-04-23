@@ -1,244 +1,157 @@
 use crate::ast::*;
 
-pub trait Visit<'ast> {
+pub trait Traverse<'ast> {
     type Ast: AstConfig + 'ast;
 
     // Declarations
 
-    fn visit_program(&mut self, program: &Program<'ast, Self::Ast>) {
-        for (_, groups) in &program.overloads {
+    fn trav_program(&mut self, program: &mut Program<'ast, Self::Ast>) {
+        for (_, groups) in &mut program.overloads {
             for (_, fundefs) in groups {
                 for fundef in fundefs {
-                    let fundef = fundef.borrow();
-                    self.visit_fundef(&fundef);
+                    let mut fundef = fundef.borrow_mut();
+                    self.trav_fundef(&mut fundef);
                 }
             }
         }
     }
 
-    fn visit_fundef(&mut self, fundef: &Fundef<'ast, Self::Ast>) {
-        self.visit_fargs(&fundef.args);
+    fn trav_fundef(&mut self, fundef: &mut Fundef<'ast, Self::Ast>) {
+        self.trav_fargs(&mut fundef.args);
 
-        for assign in &fundef.shape_prelude {
-            self.visit_assign(assign);
+        for vardec in fundef.decs.iter_mut() {
+            self.trav_vardec(vardec);
         }
 
-        self.visit_body(&fundef.body);
+        for assign in &mut fundef.shape_prelude {
+            self.trav_assign(assign);
+        }
+
+        self.trav_body(&mut fundef.body);
     }
 
-    fn visit_fargs(&mut self, args: &[Farg]) {
+    fn trav_fargs(&mut self, args: &mut [Farg]) {
         for arg in args {
-            self.visit_farg(arg);
+            self.trav_farg(arg);
         }
     }
 
-    fn visit_farg(&mut self, _arg: &Farg) { }
+    fn trav_farg(&mut self, _arg: &mut Farg) {}
 
-    fn visit_vardec(&mut self, _vardec: &'ast VarInfo<'ast, Self::Ast>) { }
+    fn trav_vardec(&mut self, _vardec: &mut VarInfo<'ast, Self::Ast>) {}
 
     // Statements
 
-    fn visit_body(&mut self, body: &Body<'ast, Self::Ast>) {
-        for stmt in &body.stmts {
-            self.visit_stmt(stmt);
+    fn trav_body(&mut self, body: &mut Body<'ast, Self::Ast>) {
+        for stmt in &mut body.stmts {
+            self.trav_stmt(stmt);
         }
-        Self::Ast::visit_operand(self, &body.ret);
+
+        Self::Ast::trav_operand(self, &mut body.ret);
     }
 
-    fn visit_stmt(&mut self, stmt: &Stmt<'ast, Self::Ast>) {
+    fn trav_stmt(&mut self, stmt: &mut Stmt<'ast, Self::Ast>) {
         use Stmt::*;
         match stmt {
-            Assign(n) => self.visit_assign(n),
-            Printf(n) => self.visit_printf(n),
+            Assign(n) => self.trav_assign(n),
+            Printf(n) => self.trav_printf(n),
         }
     }
 
-    fn visit_assign(&mut self, _assign: &Assign<'ast, Self::Ast>) { }
-
-    fn visit_printf(&mut self, printf: &Printf<'ast, Self::Ast>) {
-        self.visit_id(&printf.id);
+    fn trav_assign(&mut self, mut assign: &mut Assign<'ast, Self::Ast>) {
+        assign.expr = self.trav_expr(assign.expr);
+    }
+``
+    fn trav_printf(&mut self, printf: &mut Printf<'ast, Self::Ast>) {
+        self.trav_id(&mut printf.id);
     }
 
     // Expressions
 
-    fn visit_expr(&mut self, expr: &Expr<'ast, Self::Ast>) {
+    fn trav_expr(&mut self, expr: Expr<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
         use Expr::*;
         match expr {
-            Cond(n) => self.visit_cond(n),
-            Call(n) => self.visit_call(n),
-            PrfCall(n) => self.visit_prf_call(n),
-            Fold(n) => self.visit_fold(n),
-            Tensor(n) => self.visit_tensor(n),
-            Array(n) => self.visit_array(n),
-            Id(n) => self.visit_id(n),
-            Const(n) => self.visit_const(n),
+            Cond(n) => self.trav_cond(n),
+            Call(n) => self.trav_call(n),
+            PrfCall(n) => self.trav_prf(n),
+            Tensor(n) => self.trav_tensor(n),
+            Fold(n) => self.trav_fold(n),
+            Array(n) => self.trav_array(n),
+            Id(mut n) => {
+                self.trav_id(&mut n);
+                Expr::Id(n)
+            }
+            Const(mut n) => {
+                self.trav_const(&mut n);
+                Expr::Const(n)
+            }
         }
     }
 
-    fn visit_cond(&mut self, cond: &Cond<'ast, Self::Ast>) {
-        Self::Ast::visit_operand(self, &cond.cond);
-        self.visit_body(&cond.then_branch);
-        self.visit_body(&cond.else_branch);
+    fn trav_cond(&mut self, mut cond: Cond<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
+        Self::Ast::trav_operand(self, &mut cond.cond);
+        self.trav_body(&mut cond.then_branch);
+        self.trav_body(&mut cond.else_branch);
+        Expr::Cond(cond)
     }
 
-    fn visit_call(&mut self, call: &Call<'ast, Self::Ast>) {
-        for arg in &call.args {
-            Self::Ast::visit_operand(self, arg);
+    fn trav_call(&mut self, mut call: Call<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
+        for arg in &mut call.args {
+            Self::Ast::trav_operand(self, arg);
         }
+        Expr::Call(call)
     }
 
-    fn visit_prf_call(&mut self, prf_call: &PrfCall<'ast, Self::Ast>) {
-        for arg in prf_call.args() {
-            Self::Ast::visit_operand(self, arg);
+    fn trav_prf(&mut self, mut prf: PrfCall<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
+        for arg in prf.args_mut() {
+            Self::Ast::trav_operand(self, arg);
         }
+        Expr::PrfCall(prf)
     }
 
-    fn visit_fold(&mut self, fold: &Fold<'ast, Self::Ast>) {
-        Self::Ast::visit_operand(self, &fold.neutral);
+    fn trav_fold(&mut self, mut fold: Fold<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
+        Self::Ast::trav_operand(self, &mut fold.neutral);
 
-        match &fold.foldfun {
+        match &mut fold.foldfun {
             FoldFun::Name(_) => {}
             FoldFun::Apply { args, .. } => {
                 for arg in args {
                     if let FoldFunArg::Bound(bound) = arg {
-                        Self::Ast::visit_operand(self, bound);
+                        Self::Ast::trav_operand(self, bound);
                     }
                 }
             }
         }
 
-        self.visit_tensor(&fold.selection);
-    }
+        fold.selection = match self.trav_tensor(fold.selection) {
+            Expr::Tensor(tensor) => tensor,
+            _ => unreachable!("trav_tensor must return Tensor"),
+        };
 
-    fn visit_tensor(&mut self, tensor: &Tensor<'ast, Self::Ast>) {
-        if let Some(lb) = &tensor.lb {
-            Self::Ast::visit_operand(self, lb);
-        }
-        Self::Ast::visit_operand(self, &tensor.ub);
-        self.visit_body(&tensor.body);
-    }
-
-    fn visit_array(&mut self, array: &Array<'ast, Self::Ast>) {
-        for value in &array.elems {
-            Self::Ast::visit_operand(self, value);
-        }
-    }
-
-    // Terminals
-
-    fn visit_id(&mut self, _id: &Id<'ast, Self::Ast>) { }
-
-    fn visit_const(&mut self, _c: &Const) { }
-
-    fn visit_type(&mut self, _ty: &Type) { }
-}
-
-pub trait Rewrite<'ast> {
-    type Ast: AstConfig + 'ast;
-
-    // Declarations
-
-    fn rewrite_program(&mut self, program: &mut Program<'ast, Self::Ast>) {
-        for groups in program.overloads.values_mut() {
-            for fundefs in groups.values_mut() {
-                for fundef in fundefs {
-                    let mut fundef = fundef.borrow_mut();
-                    self.rewrite_fundef(&mut fundef);
-                }
-            }
-        }
-    }
-
-    fn rewrite_fundef(&mut self, fundef: &mut Fundef<'ast, Self::Ast>) {
-        for arg in &mut fundef.args {
-            *arg = self.rewrite_farg(arg.clone());
-        }
-
-        fundef.ret_type = self.rewrite_type(fundef.ret_type.clone());
-
-        for assign in &mut fundef.shape_prelude {
-            self.rewrite_assign(assign);
-        }
-
-        self.rewrite_body(&mut fundef.body);
-    }
-
-    fn rewrite_farg(&mut self, arg: Farg) -> Farg {
-        arg
-    }
-
-    // Statements
-
-    fn rewrite_body(&mut self, body: &mut Body<'ast, Self::Ast>);
-
-    fn rewrite_stmt(&mut self, stmt: &mut Stmt<'ast, Self::Ast>) {
-        use Stmt::*;
-        match stmt {
-            Assign(n) => self.rewrite_assign(n),
-            Printf(n) => self.rewrite_printf(n),
-        }
-    }
-
-    fn rewrite_assign(&mut self, assign: &mut Assign<'ast, Self::Ast>);
-
-    fn rewrite_printf(&mut self, printf: &mut Printf<'ast, Self::Ast>) {
-        printf.id = self.rewrite_id(printf.id.clone());
-    }
-
-    // Expressions
-
-    fn rewrite_expr(&mut self, expr: Expr<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
-        use Expr::*;
-        match expr {
-            Cond(n) => self.rewrite_cond(n),
-            Call(n) => self.rewrite_call(n),
-            PrfCall(n) => self.rewrite_prf_call(n),
-            Fold(n) => self.rewrite_fold(n),
-            Tensor(n) => self.rewrite_tensor(n),
-            Array(n) => self.rewrite_array(n),
-            // Terminals
-            Id(n) => Id(self.rewrite_id(n)),
-            Const(n) => Const(self.rewrite_const(n)),
-        }
-    }
-
-    fn rewrite_cond(&mut self, cond: Cond<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
-        Expr::Cond(cond)
-    }
-
-    fn rewrite_call(&mut self, call: Call<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
-        Expr::Call(call)
-    }
-
-    fn rewrite_prf_call(&mut self, prf_call: PrfCall<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
-        Expr::PrfCall(prf_call)
-    }
-
-    fn rewrite_fold(&mut self, fold: Fold<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
         Expr::Fold(fold)
     }
 
-    fn rewrite_tensor(&mut self, tensor: Tensor<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
-        let mut tensor = tensor;
-        self.rewrite_body(&mut tensor.body);
+    fn trav_tensor(&mut self, mut tensor: Tensor<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
+        if let Some(lb) = &mut tensor.lb {
+            Self::Ast::trav_operand(self, lb);
+        }
+        Self::Ast::trav_operand(self, &mut tensor.ub);
+        self.trav_body(&mut tensor.body);
         Expr::Tensor(tensor)
     }
 
-    fn rewrite_array(&mut self, array: Array<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
+    fn trav_array(&mut self, mut array: Array<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
+        for value in &mut array.elems {
+            Self::Ast::trav_operand(self, value);
+        }
         Expr::Array(array)
     }
 
     // Terminals
 
-    fn rewrite_id(&mut self, id: Id<'ast, Self::Ast>) -> Id<'ast, Self::Ast> {
-        id
-    }
+    fn trav_id(&mut self, _id: &mut Id<'ast, Self::Ast>) {}
 
-    fn rewrite_const(&mut self, c: Const) -> Const {
-        c
-    }
+    fn trav_const(&mut self, _c: &mut Const) {}
 
-    fn rewrite_type(&mut self, ty: Type) -> Type {
-        ty
-    }
+    fn trav_type(&mut self, _ty: &mut Type) {}
 }

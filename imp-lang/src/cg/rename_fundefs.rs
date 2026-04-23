@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::{ast::*, traverse::{Rewrite, Visit}};
+use crate::{ast::*, Traverse};
 
 /// Functions may be overloaded, e.g.
 ///
@@ -47,10 +47,8 @@ pub struct RenameFundefs {
     used_names: HashSet<String>,
 }
 
-pub fn rename_fundefs<'ast>(mut program: Program<'ast, TypedAst>) -> Program<'ast, TypedAst> {
-    let mut rf = RenameFundefs::new();
-    rf.rewrite_program(&mut program);
-    program
+pub fn rename_fundefs<'ast>(mut program: &mut Program<'ast, TypedAst>) {
+    RenameFundefs::new().trav_program(program);
 }
 
 impl RenameFundefs {
@@ -62,34 +60,16 @@ impl RenameFundefs {
     }
 }
 
-impl<'ast> Rewrite<'ast> for RenameFundefs {
+impl<'ast> Traverse<'ast> for RenameFundefs {
     type Ast = TypedAst;
 
-    fn rewrite_fundef(&mut self, fundef: &mut Fundef<'ast, Self::Ast>) {
+    fn trav_fundef(&mut self, fundef: &mut Fundef<'ast, Self::Ast>) {
         fundef.name = mangle_fundef_name(&fundef.name, &fundef.args);
 
         #[cfg(debug_assertions)]
         if !self.used_names.insert(fundef.name.clone()) {
             panic!("name collision: {}", fundef.name);
         }
-
-        self.rewrite_body(&mut fundef.body);
-    }
-
-    fn rewrite_body(&mut self, body: &mut Body<'ast, Self::Ast>) {
-        for stmt in &mut body.stmts {
-            self.rewrite_stmt(stmt);
-        }
-    }
-
-    fn rewrite_assign(&mut self, _assign: &mut Assign<'ast, Self::Ast>) {}
-
-    fn rewrite_call(&mut self, call: Call<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
-        Expr::Call(call)
-    }
-
-    fn rewrite_fold(&mut self, fold: Fold<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
-        Expr::Fold(fold)
     }
 }
 

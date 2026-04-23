@@ -1,8 +1,8 @@
-use crate::{ast::*, traverse::Visit};
+use crate::{ast::*, Traverse};
 
 pub fn emit_ffi(ast: &mut Program<'static, TypedAst>) -> String {
     let mut cg = CompileFfi::new();
-    cg.visit_program(ast);
+    cg.trav_program(ast);
     cg.finish()
 }
 
@@ -26,10 +26,10 @@ impl CompileFfi {
     }
 }
 
-impl<'ast> Visit<'ast> for CompileFfi {
+impl<'ast> Traverse<'ast> for CompileFfi {
     type Ast = TypedAst;
 
-    fn visit_program(&mut self, program: &Program<'ast, TypedAst>) {
+    fn trav_program(&mut self, program: &mut Program<'ast, TypedAst>) {
         self.push("#[allow(unused_imports)]\n");
         self.push("use imp_core::*;\n");
         self.push("\n");

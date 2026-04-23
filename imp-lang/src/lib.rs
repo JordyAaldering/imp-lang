@@ -23,57 +23,57 @@ pub fn compile(options: Options) {
         return;
     }
 
-    let ast = scp::scanparse(&src).unwrap();
+    let mut ast = scp::scanparse(&src).unwrap();
     if matches!(options.b, Some(Phase::SCP)) {
-        print!("{}", show::show(&ast));
+        print!("{}", show::show(&mut ast));
         return;
     }
 
-    let ast = tp::check_tp(ast).unwrap();
+    let mut ast = tp::check_tp(ast).unwrap();
     if matches!(options.b, Some(Phase::CTP)) {
-        print!("{}", show::show(&ast));
+        print!("{}", show::show(&mut ast));
         return;
     }
 
-    let ast = tp::analyse_tp(ast);
+    tp::analyse_tp(&mut ast);
     if matches!(options.b, Some(Phase::ATP)) {
-        print!("{}", show::show(&ast));
+        print!("{}", show::show(&mut ast));
         return;
     }
 
-    let ast = pre::flatten(ast);
+    let mut ast = pre::flatten(ast);
     if matches!(options.b, Some(Phase::FLT)) {
-        print!("{}", show::show(&ast));
+        print!("{}", show::show(&mut ast));
         return;
     }
 
-    let ast = pre::to_ssa(ast);
+    let mut ast = pre::to_ssa(ast);
     if matches!(options.b, Some(Phase::SSA)) {
-        print!("{}", show::show(&ast));
+        print!("{}", show::show(&mut ast));
         return;
     }
 
-    let ast = tc::type_infer(ast).unwrap();
+    let mut ast = tc::type_infer(ast).unwrap();
     if matches!(options.b, Some(Phase::TI)) {
-        print!("{}", show::show(&ast));
+        print!("{}", show::show(&mut ast));
         return;
     }
 
-    let ast = opt::constant_fold(ast);
+    opt::constant_fold(&mut ast);
     if matches!(options.b, Some(Phase::CF)) {
-        print!("{}", show::show(&ast));
+        print!("{}", show::show(&mut ast));
         return;
     }
 
-    let ast = opt::dead_code_removal(ast);
+    opt::dead_code_removal(&mut ast);
     if matches!(options.b, Some(Phase::DCR)) {
-        print!("{}", show::show(&ast));
+        print!("{}", show::show(&mut ast));
         return;
     }
 
-    let mut ast = cg::rename_fundefs(ast);
+    cg::rename_fundefs(&mut ast);
     if matches!(options.b, Some(Phase::RNF)) {
-        print!("{}", show::show(&ast));
+        print!("{}", show::show(&mut ast));
         return;
     }
 

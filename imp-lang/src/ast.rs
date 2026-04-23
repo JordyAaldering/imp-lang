@@ -13,8 +13,8 @@ mod cond;
 mod calltarget;
 mod call;
 mod prf;
-mod fold;
 mod tensor;
+mod fold;
 mod array;
 // Terminals
 mod id;
@@ -36,8 +36,8 @@ pub use cond::*;
 pub use calltarget::*;
 pub use call::*;
 pub use prf::*;
-pub use fold::*;
 pub use tensor::*;
+pub use fold::*;
 pub use array::*;
 // Terminals
 pub use id::*;
@@ -46,7 +46,7 @@ pub use typ::*;
 
 use std::fmt;
 
-use crate::Visit;
+use crate::Traverse;
 
 pub trait AstConfig: Clone + fmt::Debug {
     type VarType: Clone + fmt::Debug;
@@ -61,16 +61,15 @@ pub trait AstConfig: Clone + fmt::Debug {
 
     fn var_name<'ast>(link: &Self::VarLink<'ast>) -> String;
 
-    fn visit_type<'ast, V>(visitor: &mut V, ty: &Self::VarType)
-    where
-        V: Visit<'ast, Ast = Self> + ?Sized;
-
-    fn visit_operand<'ast, V>(visitor: &mut V, operand: &Self::Operand<'ast>)
-    where
-        V: Visit<'ast, Ast = Self> + ?Sized;
-
-    /// Extract the function name from a dispatch value, for display and codegen.
     fn dispatch_name<'ast>(dispatch: &Self::Dispatch<'ast>) -> String;
+
+    fn trav_type<'ast, V>(trav: &mut V, ty: &mut Self::VarType)
+    where
+        V: Traverse<'ast, Ast = Self> + ?Sized;
+
+    fn trav_operand<'ast, V>(trav: &mut V, operand: &mut Self::Operand<'ast>)
+    where
+        V: Traverse<'ast, Ast = Self> + ?Sized;
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -91,24 +90,24 @@ impl AstConfig for ParsedAst {
         link.clone()
     }
 
-    fn visit_type<'ast, V>(visitor: &mut V, ty: &Self::VarType)
+    fn dispatch_name<'ast>(dispatch: &Self::Dispatch<'ast>) -> String {
+        dispatch.clone()
+    }
+
+    fn trav_type<'ast, V>(trav: &mut V, ty: &mut Self::VarType)
     where
-        V: Visit<'ast, Ast = Self> + ?Sized
+        V: Traverse<'ast, Ast = Self> + ?Sized
     {
         if let Some(ty) = ty {
-            visitor.visit_type(ty);
+            trav.trav_type(ty);
         }
     }
 
-    fn visit_operand<'ast, V>(visitor: &mut V, operand: &Self::Operand<'ast>)
+    fn trav_operand<'ast, V>(trav: &mut V, operand: &mut Self::Operand<'ast>)
     where
-        V: Visit<'ast, Ast = Self> + ?Sized,
+        V: Traverse<'ast, Ast = Self> + ?Sized,
     {
-        visitor.visit_expr(*operand);
-    }
-
-    fn dispatch_name<'ast>(dispatch: &Self::Dispatch<'ast>) -> String {
-        dispatch.clone()
+        *operand = trav.trav_expr(*operand);
     }
 }
 
@@ -130,24 +129,24 @@ impl AstConfig for FlattenedAst {
         link.clone()
     }
 
-    fn visit_type<'ast, V>(visitor: &mut V, ty: &Self::VarType)
+    fn dispatch_name<'ast>(dispatch: &Self::Dispatch<'ast>) -> String {
+        dispatch.clone()
+    }
+
+    fn trav_type<'ast, V>(trav: &mut V, ty: &mut Self::VarType)
     where
-        V: Visit<'ast, Ast = Self> + ?Sized
+        V: Traverse<'ast, Ast = Self> + ?Sized
     {
         if let Some(ty) = ty {
-            visitor.visit_type(ty);
+            trav.trav_type(ty);
         }
     }
 
-    fn visit_operand<'ast, V>(visitor: &mut V, operand: &Self::Operand<'ast>)
+    fn trav_operand<'ast, V>(trav: &mut V, operand: &mut Self::Operand<'ast>)
     where
-        V: Visit<'ast, Ast = Self> + ?Sized,
+        V: Traverse<'ast, Ast = Self> + ?Sized,
     {
-        visitor.visit_id(operand);
-    }
-
-    fn dispatch_name<'ast>(dispatch: &Self::Dispatch<'ast>) -> String {
-        dispatch.clone()
+        trav.trav_id(operand);
     }
 }
 
@@ -169,24 +168,24 @@ impl AstConfig for UntypedAst {
         link.name.clone()
     }
 
-    fn visit_type<'ast, V>(visitor: &mut V, ty: &Self::VarType)
+    fn dispatch_name<'ast>(dispatch: &Self::Dispatch<'ast>) -> String {
+        dispatch.clone()
+    }
+
+    fn trav_type<'ast, V>(trav: &mut V, ty: &mut Self::VarType)
     where
-        V: Visit<'ast, Ast = Self> + ?Sized
+        V: Traverse<'ast, Ast = Self> + ?Sized
     {
         if let Some(ty) = ty {
-            visitor.visit_type(ty);
+            trav.trav_type(ty);
         }
     }
 
-    fn visit_operand<'ast, V>(visitor: &mut V, operand: &Self::Operand<'ast>)
+    fn trav_operand<'ast, V>(trav: &mut V, operand: &mut Self::Operand<'ast>)
     where
-        V: Visit<'ast, Ast = Self> + ?Sized,
+        V: Traverse<'ast, Ast = Self> + ?Sized,
     {
-        visitor.visit_id(operand);
-    }
-
-    fn dispatch_name<'ast>(dispatch: &Self::Dispatch<'ast>) -> String {
-        dispatch.clone()
+        trav.trav_id(operand);
     }
 }
 
@@ -208,21 +207,21 @@ impl AstConfig for TypedAst {
         link.name.clone()
     }
 
-    fn visit_type<'ast, V>(visitor: &mut V, ty: &Self::VarType)
-    where
-        V: Visit<'ast, Ast = Self> + ?Sized
-    {
-        visitor.visit_type(ty);
-    }
-
-    fn visit_operand<'ast, V>(visitor: &mut V, operand: &Self::Operand<'ast>)
-    where
-        V: Visit<'ast, Ast = Self> + ?Sized,
-    {
-        visitor.visit_id(operand);
-    }
-
     fn dispatch_name<'ast>(dispatch: &Self::Dispatch<'ast>) -> String {
         dispatch.name()
+    }
+
+    fn trav_type<'ast, V>(trav: &mut V, ty: &mut Self::VarType)
+    where
+        V: Traverse<'ast, Ast = Self> + ?Sized
+    {
+        trav.trav_type(ty);
+    }
+
+    fn trav_operand<'ast, V>(trav: &mut V, operand: &mut Self::Operand<'ast>)
+    where
+        V: Traverse<'ast, Ast = Self> + ?Sized,
+    {
+        trav.trav_id(operand);
     }
 }

@@ -1,12 +1,10 @@
 use std::collections::HashMap;
 use typed_arena::Arena;
 
-use crate::{ast::*, Rewrite};
+use crate::{ast::*, Traverse};
 
-pub fn constant_fold<'ast>(mut program: Program<'ast, TypedAst>) -> Program<'ast, TypedAst> {
-    let mut cf = ConstantFold::new();
-    cf.rewrite_program(&mut program);
-    program
+pub fn constant_fold<'ast>(program: &mut Program<'ast, TypedAst>) {
+    ConstantFold::new().trav_program(program);
 }
 
 pub struct ConstantFold {
@@ -44,23 +42,16 @@ impl ConstantFold {
     }
 }
 
-impl<'ast> Rewrite<'ast> for ConstantFold {
+impl<'ast> Traverse<'ast> for ConstantFold {
     type Ast = TypedAst;
 
-    fn rewrite_fundef(&mut self, fundef: &mut Fundef<'ast, Self::Ast>) {
+    fn trav_fundef(&mut self, fundef: &mut Fundef<'ast, Self::Ast>) {
         self.set_expr_arena(&fundef.exprs);
-        self.rewrite_body(&mut fundef.body);
+        self.trav_body(&mut fundef.body);
     }
 
-    fn rewrite_body(&mut self, body: &mut Body<'ast, Self::Ast>) {
-        for stmt in &mut body.stmts {
-            self.rewrite_stmt(stmt);
-        }
-        body.ret = self.rewrite_id(body.ret);
-    }
-
-    fn rewrite_assign(&mut self, assign: &mut Assign<'ast, Self::Ast>) {
-        let new_expr = self.rewrite_expr((*assign.expr).clone());
+    fn trav_assign(&mut self, assign: &mut Assign<'ast, Self::Ast>) {
+        let new_expr = self.trav_expr((*assign.expr).clone());
 
         match &new_expr {
             Expr::Const(Const::U32(v)) => {
@@ -73,9 +64,9 @@ impl<'ast> Rewrite<'ast> for ConstantFold {
         }
     }
 
-    fn rewrite_prf_call(&mut self, prf_call: PrfCall<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
+    fn trav_prf(&mut self, prf: PrfCall<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
         use PrfCall::*;
-        match &prf_call {
+        match &prf {
             AddSxS(l, r) => {
                 if let (Some(l), Some(r)) = (self.const_u32(l), self.const_u32(r)) {
                     return Expr::Const(Const::U32(l + r));
@@ -99,6 +90,6 @@ impl<'ast> Rewrite<'ast> for ConstantFold {
             _ => (),
         }
 
-        Expr::PrfCall(prf_call)
+        Expr::PrfCall(prf)
     }
 }

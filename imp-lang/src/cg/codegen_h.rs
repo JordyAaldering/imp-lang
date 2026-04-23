@@ -1,8 +1,8 @@
-use crate::{ast::*, Visit};
+use crate::{ast::*, Traverse};
 
 pub fn emit_h(ast: &mut Program<'static, TypedAst>) -> String {
     let mut cg = CompileH::new();
-    cg.visit_program(ast);
+    cg.trav_program(ast);
     cg.finish()
 }
 
@@ -106,24 +106,24 @@ typedef struct {
 } ImpDynF64;
 "#;
 
-impl<'ast> Visit<'ast> for CompileH {
+impl<'ast> Traverse<'ast> for CompileH {
     type Ast = TypedAst;
 
-    fn visit_program(&mut self, program: &Program<'ast, TypedAst>) {
+    fn trav_program(&mut self, program: &mut Program<'ast, TypedAst>) {
         self.output.push_str(HEADER);
 
-        for (_name, overloads) in &program.overloads {
+        for (_name, overloads) in &mut program.overloads {
             for (_sig, fundefs) in overloads {
                 for fundef in fundefs {
                     self.output.push('\n');
-                    let fundef = fundef.borrow();
-                    self.visit_fundef(&fundef);
+                    let mut fundef = fundef.borrow_mut();
+                    self.trav_fundef(&mut fundef);
                 }
             }
         }
     }
 
-    fn visit_fundef(&mut self, fundef: &Fundef<'ast, TypedAst>) {
+    fn trav_fundef(&mut self, fundef: &mut Fundef<'ast, TypedAst>) {
         let args: Vec<String> = fundef.args.iter()
             .map(|arg| format!("{} {}", dyn_ctype(&arg.ty), arg.id))
             .collect();

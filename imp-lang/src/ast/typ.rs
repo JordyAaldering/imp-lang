@@ -1,11 +1,11 @@
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum BaseType {
     Bool,
-    I32,
-    I64,
+    Usize,
     U32,
     U64,
-    Usize,
+    I32,
+    I64,
     F32,
     F64,
     /// User-defined type

@@ -1,10 +1,9 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::{ast::*, Rewrite};
+use crate::{ast::*, Traverse};
 
-pub fn analyse_tp<'ast>(mut program: Program<'ast, ParsedAst>) -> Program<'ast, ParsedAst> {
-    AnalyseTp::new().rewrite_program(&mut program);
-    program
+pub fn analyse_tp<'ast>(program: &mut Program<'ast, ParsedAst>) {
+    AnalyseTp::new().trav_program(program);
 }
 
 struct AnalyseTp {
@@ -172,39 +171,17 @@ impl<'ast> AnalyseTp {
     }
 }
 
-impl<'ast> Rewrite<'ast> for AnalyseTp {
+impl<'ast> Traverse<'ast> for AnalyseTp {
     type Ast = ParsedAst;
 
-    fn rewrite_fundef(&mut self, fundef: &mut Fundef<'ast, ParsedAst>) {
+    fn trav_fundef(&mut self, fundef: &mut Fundef<'ast, ParsedAst>) {
         self.defined.clear();
         self.symbol_terms.clear();
 
         fundef.shape_prelude.clear();
         fundef.shape_facts = ShapeFacts::default();
 
-        for arg in &mut fundef.args {
-            *arg = self.rewrite_farg(arg.clone());
-        }
-
-        fundef.ret_type = self.rewrite_type(fundef.ret_type.clone());
-
         self.analyse_arg_patterns(fundef);
         self.analyse_ret_constraints(fundef);
-    }
-
-    fn rewrite_body(&mut self, _body: &mut Body<'ast, Self::Ast>) {
-        unreachable!()
-    }
-
-    fn rewrite_assign(&mut self, _assign: &mut Assign<'ast, Self::Ast>) {
-        unreachable!()
-    }
-
-    fn rewrite_farg(&mut self, arg: Farg) -> Farg {
-        arg
-    }
-
-    fn rewrite_type(&mut self, ty: Type) -> Type {
-        ty
     }
 }
