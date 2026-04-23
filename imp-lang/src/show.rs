@@ -47,6 +47,12 @@ impl<'ast, Ast: AstConfig + 'ast> Traverse<'ast> for Show<'ast, Ast> {
         self.depth += 1;
 
         self.indent();
+        self.write("// Variable declarations\n");
+        for vardec in fundef.decs.iter_mut() {
+            self.trav_vardec(vardec);
+        }
+
+        self.indent();
         self.write("// Shape prelude:\n");
         for stmt in &mut fundef.shape_prelude {
             self.trav_assign(stmt);
@@ -61,6 +67,14 @@ impl<'ast, Ast: AstConfig + 'ast> Traverse<'ast> for Show<'ast, Ast> {
         self.write("\n");
         self.indent();
         self.write("}\n");
+    }
+
+    fn trav_vardec(&mut self, vardec: &mut VarInfo<'ast, Self::Ast>) {
+        self.indent();
+        Self::Ast::trav_type(self, &mut vardec.ty);
+        self.write(" ");
+        self.write(&vardec.name);
+        self.write(";\n");
     }
 
     fn trav_farg(&mut self, arg: &mut Farg) {
@@ -199,7 +213,19 @@ impl<'ast, Ast: AstConfig + 'ast> Traverse<'ast> for Show<'ast, Ast> {
     }
 
     fn trav_type(&mut self, ty: &mut Type) {
-        self.write_basetype(&ty.ty);
+        use BaseType::*;
+        let ty_str = match &ty.ty {
+            Bool => "bool",
+            Usize => "usize",
+            U32 => "u32",
+            U64 => "u64",
+            I32 => "i32",
+            I64 => "i64",
+            F32 => "f32",
+            F64 => "f64",
+            Udf(udf) => udf,
+        };
+        self.write(ty_str);
 
         match &ty.shape {
             TypePattern::Scalar => {}
@@ -223,23 +249,4 @@ impl<'ast, Ast: AstConfig + 'ast> Traverse<'ast> for Show<'ast, Ast> {
             }
         }
     }
-}
-
-impl<'ast, Ast: AstConfig> Show<'ast, Ast> {
-    fn write_basetype(&mut self, ty: &BaseType) {
-        use BaseType::*;
-        let ty_str = match ty {
-            Bool => "bool",
-            Usize => "usize",
-            U32 => "u32",
-            U64 => "u64",
-            I32 => "i32",
-            I64 => "i64",
-            F32 => "f32",
-            F64 => "f64",
-            Udf(udf) => udf,
-        };
-        self.write(ty_str);
-    }
-
 }
