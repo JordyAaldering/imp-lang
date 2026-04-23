@@ -1,6 +1,3 @@
-use std::{cell::RefCell, collections::HashMap};
-use typed_arena::Arena;
-
 use crate::ast::*;
 
 pub trait Visit<'ast> {
@@ -182,10 +179,7 @@ pub trait Rewrite<'ast> {
         }
     }
 
-    fn rewrite_assign(&mut self, assign: &mut Assign<'ast, Self::Ast>) {
-        let _ = assign;
-        panic!("Rewrite::rewrite_assign must be implemented by passes that rewrite assignments");
-    }
+    fn rewrite_assign(&mut self, assign: &mut Assign<'ast, Self::Ast>);
 
     fn rewrite_printf(&mut self, printf: &mut Printf<'ast, Self::Ast>) {
         printf.id = self.rewrite_id(printf.id.clone());
@@ -246,124 +240,5 @@ pub trait Rewrite<'ast> {
 
     fn rewrite_type(&mut self, ty: Type) -> Type {
         ty
-    }
-}
-
-pub trait Traverse<'ast> {
-    type InAst: AstConfig;
-
-    type OutAst: AstConfig + 'ast;
-
-    // Declarations
-
-    fn trav_program(&mut self, program: Program<'ast, Self::InAst>) -> Program<'ast, Self::OutAst> {
-        let mut overloads = HashMap::new();
-        let fundefs_arena: Arena<RefCell<Fundef<'ast, Self::OutAst>>> = Arena::new();
-
-        for (name, groups) in program.overloads {
-            let mut new_groups = HashMap::new();
-
-            for (sig, fundefs) in groups {
-                let mut new_fundefs = Vec::new();
-
-                for fundef in fundefs {
-                    let fundef = fundef.borrow();
-                    let out_fundef = self.trav_fundef(&fundef);
-                    let out_ref = fundefs_arena.alloc(RefCell::new(out_fundef));
-                    // SAFETY: fundefs_arena is moved into Program before return.
-                    let out_ref: &'ast RefCell<Fundef<'ast, Self::OutAst>> = unsafe { std::mem::transmute(out_ref) };
-                    new_fundefs.push(out_ref);
-                }
-
-                new_groups.insert(sig, new_fundefs);
-            }
-
-            overloads.insert(name, new_groups);
-        }
-
-        Program {
-            overloads,
-            fundefs: fundefs_arena,
-        }
-    }
-
-    fn trav_fundef(&mut self, fundef: &Fundef<'ast, Self::InAst>) -> Fundef<'ast, Self::OutAst>;
-
-    fn trav_fargs(&mut self, args: Vec<Farg>) -> Vec<Farg> {
-        let mut new_args = Vec::new();
-        for (idx, arg) in args.into_iter().enumerate() {
-            new_args.push(self.trav_farg(arg, idx));
-        }
-        new_args
-    }
-
-    fn trav_farg(&mut self, arg: Farg, _idx: usize) -> Farg {
-        arg
-    }
-
-    fn trav_vardec(&mut self, _decl: &'ast VarInfo<'ast, Self::InAst>) -> &'ast VarInfo<'ast, Self::OutAst> {
-        unimplemented!()
-    }
-
-    // Statements
-
-    type BodyOut = Body<'ast, Self::OutAst>;
-
-    fn trav_body(&mut self, body: Body<'ast, Self::InAst>) -> Self::BodyOut;
-
-    fn trav_stmt(&mut self, stmt: Stmt<'ast, Self::InAst>) -> Stmt<'ast, Self::OutAst> {
-        use Stmt::*;
-        match stmt {
-            Assign(n) => Assign(self.trav_assign(n)),
-            Printf(n) => Printf(self.trav_printf(n)),
-        }
-    }
-
-    fn trav_assign(&mut self, assign: Assign<'ast, Self::InAst>) -> Assign<'ast, Self::OutAst>;
-
-    fn trav_printf(&mut self, printf: Printf<'ast, Self::InAst>) -> Printf<'ast, Self::OutAst>;
-
-    // Expressions
-
-    type ExprOut = Expr<'ast, Self::OutAst>;
-
-    fn trav_expr(&mut self, expr: Expr<'ast, Self::InAst>) -> Self::ExprOut;
-
-    type CondOut = Cond<'ast, Self::OutAst>;
-
-    fn trav_cond(&mut self, cond: Cond<'ast, Self::InAst>) -> Self::CondOut;
-
-    type CallOut = Call<'ast, Self::OutAst>;
-
-    fn trav_call(&mut self, call: Call<'ast, Self::InAst>) -> Self::CallOut;
-
-    type PrfCallOut = PrfCall<'ast, Self::OutAst>;
-
-    fn trav_prf_call(&mut self, prf_call: PrfCall<'ast, Self::InAst>) -> Self::PrfCallOut;
-
-    type FoldOut = Fold<'ast, Self::OutAst>;
-
-    fn trav_fold(&mut self, fold: Fold<'ast, Self::InAst>) -> Self::FoldOut;
-
-    type TensorOut = Tensor<'ast, Self::OutAst>;
-
-    fn trav_tensor(&mut self, tensor: Tensor<'ast, Self::InAst>) -> Self::TensorOut;
-
-    type ArrayOut = Array<'ast, Self::OutAst>;
-
-    fn trav_array(&mut self, array: Array<'ast, Self::InAst>) -> Self::ArrayOut;
-
-    // Terminals
-
-    type IdOut = Id<'ast, Self::OutAst>;
-
-    fn trav_id(&mut self, _id: Id<'ast, Self::InAst>) -> Self::IdOut {
-        unimplemented!()
-    }
-
-    type ConstOut = Const;
-
-    fn trav_const(&mut self, _c: Const) -> Self::ConstOut {
-        unimplemented!()
     }
 }

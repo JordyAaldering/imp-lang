@@ -1,11 +1,38 @@
-use std::{collections::HashMap, mem};
+use std::{cell::RefCell, collections::HashMap, mem};
+
 use typed_arena::Arena;
 
-use crate::{ast::*, traverse::Traverse};
+use crate::ast::*;
 
 pub fn to_ssa<'ast>(program: Program<'ast, FlattenedAst>) -> Program<'ast, UntypedAst> {
-    ToSsa::new().trav_program(program)
-}
+        let mut overloads = HashMap::new();
+        let fundefs_arena: Arena<RefCell<Fundef<'ast, UntypedAst>>> = Arena::new();
+
+        for (name, groups) in program.overloads {
+            let mut new_groups = HashMap::new();
+
+            for (sig, fundefs) in groups {
+                let mut new_fundefs = Vec::new();
+
+                for fundef in fundefs {
+                    let fundef = fundef.borrow();
+                    let out_fundef = ToSsa::new().trav_fundef(&fundef);
+                    let out_ref = fundefs_arena.alloc(RefCell::new(out_fundef));
+                    let out_ref: &'ast RefCell<Fundef<'ast, UntypedAst>> = unsafe { std::mem::transmute(out_ref) };
+                    new_fundefs.push(out_ref);
+                }
+
+                new_groups.insert(sig, new_fundefs);
+            }
+
+            overloads.insert(name, new_groups);
+        }
+
+        Program {
+            overloads,
+            fundefs: fundefs_arena,
+        }
+    }
 
 pub struct ToSsa<'ast> {
     uid: usize,
@@ -66,12 +93,6 @@ impl<'ast> ToSsa<'ast> {
         }
         None
     }
-}
-
-impl<'ast> Traverse<'ast> for ToSsa<'ast> {
-    type InAst = FlattenedAst;
-
-    type OutAst = UntypedAst;
 
     fn trav_fundef(&mut self, fundef: &Fundef<'ast, FlattenedAst>) -> Fundef<'ast, UntypedAst> {
         // Fresh arena for this fundef's declarations
@@ -115,9 +136,11 @@ impl<'ast> Traverse<'ast> for ToSsa<'ast> {
         }
     }
 
-    fn trav_farg(&mut self, arg: Farg, idx: usize) -> Farg {
-        self.bind_env(arg.id.clone(), Id::Arg(idx));
-        arg
+    fn trav_fargs(&mut self, args: Vec<Farg>) -> Vec<Farg> {
+        for (idx, arg) in args.iter().enumerate() {
+            self.bind_env(arg.id.clone(), Id::Arg(idx));
+        }
+        args
     }
 
     fn trav_body(&mut self, body: Body<'ast, FlattenedAst>) -> Body<'ast, UntypedAst> {
@@ -137,7 +160,15 @@ impl<'ast> Traverse<'ast> for ToSsa<'ast> {
         Body { stmts, ret }
     }
 
-    fn trav_assign(&mut self, assign: Assign<'ast, Self::InAst>) -> Assign<'ast, Self::OutAst> {
+    fn trav_stmt(&mut self, stmt: Stmt<'ast, FlattenedAst>) -> Stmt<'ast, UntypedAst> {
+        use Stmt::*;
+        match stmt {
+            Assign(n) => Assign(self.trav_assign(n)),
+            Printf(n) => Printf(self.trav_printf(n)),
+        }
+    }
+
+    fn trav_assign(&mut self, assign: Assign<'ast, FlattenedAst>) -> Assign<'ast, UntypedAst> {
         let old_name = assign.lhs.name.clone();
         let new_name = self.fresh_uid();
 
@@ -149,12 +180,12 @@ impl<'ast> Traverse<'ast> for ToSsa<'ast> {
         Assign { lhs: lvis, expr }
     }
 
-    fn trav_printf(&mut self, printf: Printf<'ast, Self::InAst>) -> Printf<'ast, Self::OutAst> {
+    fn trav_printf(&mut self, printf: Printf<'ast, FlattenedAst>) -> Printf<'ast, UntypedAst> {
         let id = self.trav_id(printf.id);
         Printf { id }
     }
 
-    fn trav_expr(&mut self, expr: Expr<'ast, Self::InAst>) -> Self::ExprOut {
+    fn trav_expr(&mut self, expr: Expr<'ast, FlattenedAst>) -> Expr<'ast, UntypedAst> {
         use Expr::*;
         match expr {
             Cond(n) => Cond(self.trav_cond(n)),
@@ -168,14 +199,14 @@ impl<'ast> Traverse<'ast> for ToSsa<'ast> {
         }
     }
 
-    fn trav_cond(&mut self, cond: Cond<'ast, Self::InAst>) -> Cond<'ast, Self::OutAst> {
+    fn trav_cond(&mut self, cond: Cond<'ast, FlattenedAst>) -> Cond<'ast, UntypedAst> {
         let c = self.trav_id(cond.cond);
         let t = self.trav_body(cond.then_branch);
         let e = self.trav_body(cond.else_branch);
         Cond { cond: c, then_branch: t, else_branch: e }
     }
 
-    fn trav_call(&mut self, call: Call<'ast, Self::InAst>) -> Self::CallOut {
+    fn trav_call(&mut self, call: Call<'ast, FlattenedAst>) -> Call<'ast, UntypedAst> {
         let new_args = call.args.into_iter().map(|arg| self.trav_id(arg)).collect();
         Call {
             id: call.id,
@@ -183,7 +214,7 @@ impl<'ast> Traverse<'ast> for ToSsa<'ast> {
         }
     }
 
-    fn trav_prf_call(&mut self, prf: PrfCall<'ast, Self::InAst>) -> Self::PrfCallOut {
+    fn trav_prf_call(&mut self, prf: PrfCall<'ast, FlattenedAst>) -> PrfCall<'ast, UntypedAst> {
         use PrfCall::*;
         match prf {
             DimA(a) => {
@@ -260,7 +291,7 @@ impl<'ast> Traverse<'ast> for ToSsa<'ast> {
         }
     }
 
-    fn trav_tensor(&mut self, tensor: Tensor<'ast, Self::InAst>) -> Self::TensorOut {
+    fn trav_tensor(&mut self, tensor: Tensor<'ast, FlattenedAst>) -> Tensor<'ast, UntypedAst> {
         let lb = if let Some(lb) = tensor.lb {
             Some(self.trav_id(lb))
         } else {
@@ -280,7 +311,7 @@ impl<'ast> Traverse<'ast> for ToSsa<'ast> {
         Tensor { body, iv: iv_lvis, lb, ub }
     }
 
-    fn trav_fold(&mut self, fold: Fold<'ast, Self::InAst>) -> Self::FoldOut {
+    fn trav_fold(&mut self, fold: Fold<'ast, FlattenedAst>) -> Fold<'ast, UntypedAst> {
         let neutral = self.trav_id(fold.neutral);
 
         let foldfun = match fold.foldfun {
@@ -302,7 +333,7 @@ impl<'ast> Traverse<'ast> for ToSsa<'ast> {
         Fold { neutral, foldfun, selection }
     }
 
-    fn trav_array(&mut self, array: Array<'ast, Self::InAst>) -> Self::ArrayOut {
+    fn trav_array(&mut self, array: Array<'ast, FlattenedAst>) -> Array<'ast, UntypedAst> {
         let mut values = Vec::with_capacity(array.elems.len());
         for value in array.elems {
             values.push(self.trav_id(value));
@@ -310,7 +341,7 @@ impl<'ast> Traverse<'ast> for ToSsa<'ast> {
         Array { elems: values }
     }
 
-    fn trav_id(&mut self, id: Id<'ast, Self::InAst>) -> Id<'ast, Self::OutAst> {
+    fn trav_id(&mut self, id: Id<'ast, FlattenedAst>) -> Id<'ast, UntypedAst> {
         match id {
             Id::Arg(i) => Id::Arg(i),
             Id::Var(v) => self

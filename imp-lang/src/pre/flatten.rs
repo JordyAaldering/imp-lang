@@ -1,11 +1,38 @@
-use std::{collections::HashMap, mem};
+use std::{cell::RefCell, collections::HashMap, mem};
+
 use typed_arena::Arena;
 
-use crate::{ast::*, traverse::Traverse};
+use crate::ast::*;
 
 pub fn flatten<'ast>(program: Program<'ast, ParsedAst>) -> Program<'ast, FlattenedAst> {
-    Flatten::new().trav_program(program)
-}
+        let mut overloads = HashMap::new();
+        let fundefs_arena: Arena<RefCell<Fundef<'ast, FlattenedAst>>> = Arena::new();
+
+        for (name, groups) in program.overloads {
+            let mut new_groups = HashMap::new();
+
+            for (sig, fundefs) in groups {
+                let mut new_fundefs = Vec::new();
+
+                for fundef in fundefs {
+                    let fundef = fundef.borrow();
+                    let out_fundef = Flatten::new().trav_fundef(&fundef);
+                    let out_ref = fundefs_arena.alloc(RefCell::new(out_fundef));
+                    let out_ref: &'ast RefCell<Fundef<'ast, FlattenedAst>> = unsafe { std::mem::transmute(out_ref) };
+                    new_fundefs.push(out_ref);
+                }
+
+                new_groups.insert(sig, new_fundefs);
+            }
+
+            overloads.insert(name, new_groups);
+        }
+
+        Program {
+            overloads,
+            fundefs: fundefs_arena,
+        }
+    }
 
 struct Flatten<'ast> {
     uid: usize,
@@ -73,14 +100,8 @@ impl<'ast> Flatten<'ast> {
         self.bind_env(name, id.clone());
         id
     }
-}
 
-impl<'ast> Traverse<'ast> for Flatten<'ast> {
-    type InAst = ParsedAst;
-
-    type OutAst = FlattenedAst;
-
-    fn trav_fundef(&mut self, fundef: &Fundef<'ast, Self::InAst>) -> Fundef<'ast, Self::OutAst> {
+    fn trav_fundef(&mut self, fundef: &Fundef<'ast, ParsedAst>) -> Fundef<'ast, FlattenedAst> {
         self.decs_arena = Arena::new();
         self.expr_arena = Arena::new();
 
@@ -122,7 +143,7 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
         }
     }
 
-    fn trav_assign(&mut self, assign: Assign<'ast, Self::InAst>) -> Assign<'ast, Self::OutAst> {
+    fn trav_assign(&mut self, assign: Assign<'ast, ParsedAst>) -> Assign<'ast, FlattenedAst> {
         let rhs = self.trav_expr((*assign.expr).clone());
         let lhs_name = assign.lhs.name.clone();
         let lhs_lvis = self.alloc_lvis(lhs_name.clone(), assign.lhs.ty.clone());
@@ -133,12 +154,12 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
         Assign { lhs: lhs_lvis, expr: rhs_expr }
     }
 
-    fn trav_printf(&mut self, printf: Printf<'ast, Self::InAst>) -> Printf<'ast, Self::OutAst> {
+    fn trav_printf(&mut self, printf: Printf<'ast, ParsedAst>) -> Printf<'ast, FlattenedAst> {
         let id = self.trav_id(printf.id);
         Printf { id }
     }
 
-    fn trav_body(&mut self, body: Body<'ast, Self::InAst>) -> Body<'ast, Self::OutAst> {
+    fn trav_body(&mut self, body: Body<'ast, ParsedAst>) -> Body<'ast, FlattenedAst> {
         let old_assigns = mem::take(&mut self.new_assigns);
 
         let mut stmts = Vec::new();
@@ -156,9 +177,15 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
         Body { stmts, ret }
     }
 
-    type ExprOut = Id<'ast, Self::OutAst>;
+    fn trav_stmt(&mut self, stmt: Stmt<'ast, ParsedAst>) -> Stmt<'ast, FlattenedAst> {
+        use Stmt::*;
+        match stmt {
+            Assign(n) => Assign(self.trav_assign(n)),
+            Printf(n) => Printf(self.trav_printf(n)),
+        }
+    }
 
-    fn trav_expr(&mut self, expr: Expr<'ast, Self::InAst>) -> Self::ExprOut {
+    fn trav_expr(&mut self, expr: Expr<'ast, ParsedAst>) -> Id<'ast, FlattenedAst> {
         use Expr::*;
         let expr = match expr {
             Id(n) => {
@@ -175,14 +202,14 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
         self.emit_expr(expr)
     }
 
-    fn trav_cond(&mut self, cond: Cond<'ast, Self::InAst>) -> Self::CondOut {
+    fn trav_cond(&mut self, cond: Cond<'ast, ParsedAst>) -> Cond<'ast, FlattenedAst> {
         let c = self.trav_expr(cond.cond.clone());
         let t = self.trav_body(cond.then_branch);
         let e = self.trav_body(cond.else_branch);
         Cond { cond: c, then_branch: t, else_branch: e }
     }
 
-    fn trav_call(&mut self, call: Call<'ast, Self::InAst>) -> Self::CallOut {
+    fn trav_call(&mut self, call: Call<'ast, ParsedAst>) -> Call<'ast, FlattenedAst> {
         let mut args = Vec::with_capacity(call.args.len());
         for arg in call.args {
             args.push(self.trav_expr(arg.clone()));
@@ -191,7 +218,7 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
         Call { id: call.id, args }
     }
 
-    fn trav_prf_call(&mut self, prf: PrfCall<'ast, Self::InAst>) -> Self::PrfCallOut {
+    fn trav_prf_call(&mut self, prf: PrfCall<'ast, ParsedAst>) -> PrfCall<'ast, FlattenedAst> {
         use PrfCall::*;
         match prf {
             ShapeA(a) => {
@@ -268,7 +295,7 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
         }
     }
 
-    fn trav_tensor(&mut self, tensor: Tensor<'ast, Self::InAst>) -> Self::TensorOut {
+    fn trav_tensor(&mut self, tensor: Tensor<'ast, ParsedAst>) -> Tensor<'ast, FlattenedAst> {
         let lb = if let Some(lb) = tensor.lb {
             Some(self.trav_expr(lb.clone()))
         } else {
@@ -289,7 +316,7 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
         Tensor { body, iv, lb, ub }
     }
 
-    fn trav_fold(&mut self, fold: Fold<'ast, Self::InAst>) -> Self::FoldOut {
+    fn trav_fold(&mut self, fold: Fold<'ast, ParsedAst>) -> Fold<'ast, FlattenedAst> {
         let neutral = self.trav_expr((*fold.neutral).clone());
 
         let foldfun = match fold.foldfun {
@@ -313,7 +340,7 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
         Fold { neutral, foldfun, selection }
     }
 
-    fn trav_array(&mut self, array: Array<'ast, Self::InAst>) -> Self::ArrayOut {
+    fn trav_array(&mut self, array: Array<'ast, ParsedAst>) -> Array<'ast, FlattenedAst> {
         let mut values = Vec::with_capacity(array.elems.len());
         for value in array.elems {
             values.push(self.trav_expr(value.clone()));
@@ -321,7 +348,7 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
         Array { elems: values }
     }
 
-    fn trav_id(&mut self, id: Id<'ast, Self::InAst>) -> Self::IdOut {
+    fn trav_id(&mut self, id: Id<'ast, ParsedAst>) -> Id<'ast, FlattenedAst> {
         match id {
             Id::Arg(i) => Id::Arg(i),
             Id::Var(name) => self.lookup_env(&name).unwrap_or(Id::Var(name)),

@@ -1,7 +1,7 @@
 use std::{cell::RefCell, collections::HashMap, mem};
 use typed_arena::Arena;
 
-use crate::{ast::*, traverse::Traverse};
+use crate::ast::*;
 
 pub fn type_infer<'ast>(program: Program<'ast, UntypedAst>) -> Result<Program<'ast, TypedAst>, InferenceError> {
     validate_overload_families(&program.overloads)?;
@@ -459,16 +459,10 @@ impl<'ast> TypeInfer<'ast> {
 
         (best_matches[0], needs_runtime_dispatch)
     }
-}
-
-impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
-    type InAst = UntypedAst;
-
-    type OutAst = TypedAst;
 
     // Declarations
 
-    fn trav_fundef(&mut self, fundef: &Fundef<'ast, Self::InAst>) -> Fundef<'ast, Self::OutAst> {
+    fn trav_fundef(&mut self, fundef: &Fundef<'ast, UntypedAst>) -> Fundef<'ast, TypedAst> {
         self.args = fundef.args.clone();
 
         self.idmap.clear();
@@ -499,7 +493,7 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
 
     // Statements
 
-    fn trav_assign(&mut self, assign: Assign<'ast, Self::InAst>) -> Assign<'ast, Self::OutAst> {
+    fn trav_assign(&mut self, assign: Assign<'ast, UntypedAst>) -> Assign<'ast, TypedAst> {
         let (new_expr, new_ty) = self.trav_expr((*assign.expr).clone());
         let expr_ref = self.alloc_expr(new_expr);
         let new_lvis = self.alloc_lvis(assign.lhs.name.clone(), new_ty, Some(expr_ref));
@@ -507,14 +501,12 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
         Assign { lhs: new_lvis, expr: expr_ref }
     }
 
-    fn trav_printf(&mut self, printf: Printf<'ast, Self::InAst>) -> Printf<'ast, Self::OutAst> {
+    fn trav_printf(&mut self, printf: Printf<'ast, UntypedAst>) -> Printf<'ast, TypedAst> {
         let (id, _) = self.trav_id(printf.id);
         Printf { id }
     }
 
-    type BodyOut = (Body<'ast, Self::OutAst>, Type);
-
-    fn trav_body(&mut self, body: Body<'ast, Self::InAst>) -> Self::BodyOut {
+    fn trav_body(&mut self, body: Body<'ast, UntypedAst>) -> (Body<'ast, TypedAst>, Type) {
         let mut stmts = Vec::new();
         for stmt in body.stmts {
             stmts.push(self.trav_stmt(stmt));
@@ -524,11 +516,17 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
         (Body { stmts, ret }, ret_ty)
     }
 
+    fn trav_stmt(&mut self, stmt: Stmt<'ast, UntypedAst>) -> Stmt<'ast, TypedAst> {
+        use Stmt::*;
+        match stmt {
+            Assign(n) => Assign(self.trav_assign(n)),
+            Printf(n) => Printf(self.trav_printf(n)),
+        }
+    }
+
     // Expressions
 
-    type ExprOut = (Expr<'ast, Self::OutAst>, Type);
-
-    fn trav_expr(&mut self, expr: Expr<'ast, Self::InAst>) -> Self::ExprOut {
+    fn trav_expr(&mut self, expr: Expr<'ast, UntypedAst>) -> (Expr<'ast, TypedAst>, Type) {
         use Expr::*;
         match expr {
             Cond(n) => {
@@ -566,9 +564,7 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
         }
     }
 
-    type CondOut = (Cond<'ast, Self::OutAst>, Type);
-
-    fn trav_cond(&mut self, cond: Cond<'ast, Self::InAst>) -> Self::CondOut {
+    fn trav_cond(&mut self, cond: Cond<'ast, UntypedAst>) -> (Cond<'ast, TypedAst>, Type) {
         let (cond_id, cond_ty) = self.trav_id(cond.cond);
         self.expect_bool_scalar_prf_arg("cond", 0, &cond_ty);
 
@@ -587,9 +583,7 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
         (Cond { cond: cond_id, then_branch: then_id, else_branch: else_id }, then_ty)
     }
 
-    type CallOut = (Call<'ast, Self::OutAst>, Type);
-
-    fn trav_call(&mut self, call: Call<'ast, Self::InAst>) -> Self::CallOut {
+    fn trav_call(&mut self, call: Call<'ast, UntypedAst>) -> (Call<'ast, TypedAst>, Type) {
         let func_name = &call.id;
 
         let mut typed_args = Vec::with_capacity(call.args.len());
@@ -617,9 +611,7 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
         (typed_call, call_ty)
     }
 
-    type FoldOut = (Fold<'ast, Self::OutAst>, Type);
-
-    fn trav_fold(&mut self, fold: Fold<'ast, Self::InAst>) -> Self::FoldOut {
+    fn trav_fold(&mut self, fold: Fold<'ast, UntypedAst>) -> (Fold<'ast, TypedAst>, Type) {
         let (neutral, neutral_ty) = self.trav_id(fold.neutral);
         let (selection, selection_ty) = self.trav_fold_selection(fold.selection);
 
@@ -657,11 +649,7 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
         (Fold { neutral, foldfun, selection }, neutral_ty)
     }
 
-    type TensorOut = (Tensor<'ast, Self::OutAst>, Type);
-
-    type PrfCallOut = (PrfCall<'ast, Self::OutAst>, Type);
-
-    fn trav_prf_call(&mut self, prf: PrfCall<'ast, Self::InAst>) -> Self::PrfCallOut {
+    fn trav_prf_call(&mut self, prf: PrfCall<'ast, UntypedAst>) -> (PrfCall<'ast, TypedAst>, Type) {
         let prf_name = prf.nameof();
 
         use PrfCall::*;
@@ -866,7 +854,7 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
         }
     }
 
-    fn trav_tensor(&mut self, tensor: Tensor<'ast, Self::InAst>) -> Self::TensorOut {
+    fn trav_tensor(&mut self, tensor: Tensor<'ast, UntypedAst>) -> (Tensor<'ast, TypedAst>, Type) {
         // Inspect ub's SSA expression *before* traversal so we can extract named extents.
         let ub_named_axes = self.extract_ub_axes(&tensor.ub);
 
@@ -904,9 +892,7 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
         (tensor, result_ty)
     }
 
-    type ArrayOut = (Array<'ast, Self::OutAst>, Type);
-
-    fn trav_array(&mut self, array: Array<'ast, Self::InAst>) -> Self::ArrayOut {
+    fn trav_array(&mut self, array: Array<'ast, UntypedAst>) -> (Array<'ast, TypedAst>, Type) {
         let mut values = Vec::with_capacity(array.elems.len());
         let mut elem_types = Vec::with_capacity(array.elems.len());
 
@@ -921,9 +907,8 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
     }
 
     // Terminals
-    type IdOut = (Id<'ast, Self::OutAst>, Type);
 
-    fn trav_id(&mut self, id: Id<'ast, Self::InAst>) -> Self::IdOut {
+    fn trav_id(&mut self, id: Id<'ast, UntypedAst>) -> (Id<'ast, TypedAst>, Type) {
         match id {
             Id::Arg(i) => {
                 let ty = self.args[i].ty.clone();
@@ -938,9 +923,7 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
         }
     }
 
-    type ConstOut = (Const, Type);
-
-    fn trav_const(&mut self, c: Const) -> Self::ConstOut {
+    fn trav_const(&mut self, c: Const) -> (Const, Type) {
         use Const::*;
         match c {
             Bool(v) => (Bool(v), Type::scalar(BaseType::Bool)),
@@ -1084,7 +1067,6 @@ fn shape_more_or_equal(a: &TypePattern, b: &TypePattern) -> bool {
             a_axes.iter().any(|axis| matches!(axis, AxisPattern::Rank(_)))
         }
         (TypePattern::Axes(a_axes), TypePattern::Axes(b_axes)) => axes_more_or_equal(a_axes, b_axes),
-
         _ => false,
     }
 }
@@ -1142,4 +1124,3 @@ fn axis_requires_runtime_dispatch(axis: &AxisPattern) -> bool {
         AxisPattern::Dim(dim) => matches!(dim, DimPattern::Any | DimPattern::Var(_)),
     }
 }
-

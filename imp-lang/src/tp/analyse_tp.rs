@@ -2,8 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::{ast::*, Rewrite};
 
-/// Does not yet do anything.
-pub fn analyse_tp(mut program: Program<'static, ParsedAst>) -> Program<'static, ParsedAst> {
+pub fn analyse_tp<'ast>(mut program: Program<'ast, ParsedAst>) -> Program<'ast, ParsedAst> {
     AnalyseTp::new().rewrite_program(&mut program);
     program
 }
@@ -15,7 +14,7 @@ struct AnalyseTp {
     symbol_terms: HashMap<String, ShapeTerm>,
 }
 
-impl AnalyseTp {
+impl<'ast> AnalyseTp {
     fn new() -> Self {
         Self {
             defined: HashSet::new(),
@@ -23,29 +22,29 @@ impl AnalyseTp {
         }
     }
 
-    fn alloc_lvis(&self, fundef: &Fundef<'static, ParsedAst>, name: String, ty: Option<Type>) -> &'static VarInfo<'static, ParsedAst> {
+    fn alloc_lvis(&self, fundef: &Fundef<'ast, ParsedAst>, name: String, ty: Option<Type>) -> &'ast VarInfo<'ast, ParsedAst> {
         // SAFETY: allocation arena is stored in the owning Fundef.
         unsafe { std::mem::transmute(fundef.decs.alloc(VarInfo { name, ty, ssa: () })) }
     }
 
-    fn alloc_expr(&self, fundef: &Fundef<'static, ParsedAst>, expr: Expr<'static, ParsedAst>) -> &'static Expr<'static, ParsedAst> {
+    fn alloc_expr(&self, fundef: &Fundef<'ast, ParsedAst>, expr: Expr<'ast, ParsedAst>) -> &'ast Expr<'ast, ParsedAst> {
         // SAFETY: allocation arena is stored in the owning Fundef.
         unsafe { std::mem::transmute(fundef.exprs.alloc(expr)) }
     }
 
-    fn arg_expr(&self, fundef: &Fundef<'static, ParsedAst>, arg_index: usize) -> &'static Expr<'static, ParsedAst> {
+    fn arg_expr(&self, fundef: &Fundef<'ast, ParsedAst>, arg_index: usize) -> &'ast Expr<'ast, ParsedAst> {
         self.alloc_expr(fundef, Expr::Id(Id::Arg(arg_index)))
     }
 
-    fn shape_of_arg_expr(&self, fundef: &Fundef<'static, ParsedAst>, arg_index: usize) -> Expr<'static, ParsedAst> {
+    fn shape_of_arg_expr(&self, fundef: &Fundef<'ast, ParsedAst>, arg_index: usize) -> Expr<'ast, ParsedAst> {
         Expr::PrfCall(PrfCall::ShapeA(self.arg_expr(fundef, arg_index)))
     }
 
-    fn dim_of_arg_expr(&self, fundef: &Fundef<'static, ParsedAst>, arg_index: usize) -> Expr<'static, ParsedAst> {
+    fn dim_of_arg_expr(&self, fundef: &Fundef<'ast, ParsedAst>, arg_index: usize) -> Expr<'ast, ParsedAst> {
         Expr::PrfCall(PrfCall::DimA(self.arg_expr(fundef, arg_index)))
     }
 
-    fn dim_at_expr(&self, fundef: &Fundef<'static, ParsedAst>, arg_index: usize, axis_index: usize) -> Expr<'static, ParsedAst> {
+    fn dim_at_expr(&self, fundef: &Fundef<'ast, ParsedAst>, arg_index: usize, axis_index: usize) -> Expr<'ast, ParsedAst> {
         let idx = self.alloc_expr(fundef, Expr::Const(Const::Usize(axis_index)));
         let idx_vec = self.alloc_expr(fundef, Expr::Array(Array { elems: vec![idx] }));
         let shp = self.alloc_expr(fundef, self.shape_of_arg_expr(fundef, arg_index));
@@ -54,10 +53,10 @@ impl AnalyseTp {
 
     fn bind_symbol(
         &mut self,
-        fundef: &mut Fundef<'static, ParsedAst>,
+        fundef: &mut Fundef<'ast, ParsedAst>,
         symbol: &str,
         term: ShapeTerm,
-        expr: Expr<'static, ParsedAst>,
+        expr: Expr<'ast, ParsedAst>,
         ty: Type,
     ) {
         if self.defined.insert(symbol.to_owned()) {
@@ -78,8 +77,8 @@ impl AnalyseTp {
         }
     }
 
-    fn analyse_arg_patterns(&mut self, fundef: &mut Fundef<'static, ParsedAst>) {
-        let mut pending: Vec<(String, ShapeTerm, Expr<'static, ParsedAst>, Type)> = Vec::new();
+    fn analyse_arg_patterns(&mut self, fundef: &mut Fundef<'ast, ParsedAst>) {
+        let mut pending: Vec<(String, ShapeTerm, Expr<'ast, ParsedAst>, Type)> = Vec::new();
 
         for (arg_index, arg) in fundef.args.iter().enumerate() {
             let TypePattern::Axes(axes) = &arg.ty.shape else {
@@ -131,7 +130,7 @@ impl AnalyseTp {
         }
     }
 
-    fn analyse_ret_constraints(&mut self, fundef: &mut Fundef<'static, ParsedAst>) {
+    fn analyse_ret_constraints(&mut self, fundef: &mut Fundef<'ast, ParsedAst>) {
         let TypePattern::Axes(axes) = &fundef.ret_type.shape else {
             return;
         };
@@ -173,10 +172,10 @@ impl AnalyseTp {
     }
 }
 
-impl Rewrite<'static> for AnalyseTp {
+impl<'ast> Rewrite<'ast> for AnalyseTp {
     type Ast = ParsedAst;
 
-    fn rewrite_fundef(&mut self, fundef: &mut Fundef<'static, ParsedAst>) {
+    fn rewrite_fundef(&mut self, fundef: &mut Fundef<'ast, ParsedAst>) {
         self.defined.clear();
         self.symbol_terms.clear();
 
@@ -193,7 +192,11 @@ impl Rewrite<'static> for AnalyseTp {
         self.analyse_ret_constraints(fundef);
     }
 
-    fn rewrite_body(&mut self, _body: &mut Body<'static, Self::Ast>) {
+    fn rewrite_body(&mut self, _body: &mut Body<'ast, Self::Ast>) {
+        unreachable!()
+    }
+
+    fn rewrite_assign(&mut self, _assign: &mut Assign<'ast, Self::Ast>) {
         unreachable!()
     }
 

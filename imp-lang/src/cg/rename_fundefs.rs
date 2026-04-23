@@ -82,6 +82,8 @@ impl<'ast> Rewrite<'ast> for RenameFundefs {
         }
     }
 
+    fn rewrite_assign(&mut self, _assign: &mut Assign<'ast, Self::Ast>) {}
+
     fn rewrite_call(&mut self, call: Call<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
         Expr::Call(call)
     }
