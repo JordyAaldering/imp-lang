@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::{ast::*, Traverse};
+use crate::ast::*;
 
 pub fn rename_fundefs<'ast>(program: &mut Program<'ast, TypedAst>) {
     RenameFundefs::new().trav_program(program);

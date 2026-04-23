@@ -1,6 +1,6 @@
 use std::{collections::HashSet, mem};
 
-use crate::{ast::*, Traverse};
+use crate::ast::*;
 
 pub fn dead_code_removal<'ast>(program: &mut Program<'ast, TypedAst>) {
     DeadCodeRemoval::new().trav_program(program);

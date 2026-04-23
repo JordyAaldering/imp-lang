@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::{ast::*, Traverse};
+use crate::ast::*;
 
 pub fn analyse_tp<'ast>(program: &mut Program<'ast, ParsedAst>) {
     AnalyseTp::new().trav_program(program);

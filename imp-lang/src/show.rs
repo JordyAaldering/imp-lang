@@ -1,4 +1,4 @@
-use crate::{ast::*, Traverse};
+use crate::ast::*;
 
 pub fn show<'ast, Ast: AstConfig + 'ast>(program: &mut Program<'ast, Ast>) -> String {
     let mut show: Show<'ast, Ast> = Show::new();

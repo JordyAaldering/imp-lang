@@ -1,4 +1,4 @@
-use crate::{ast::*, Traverse};
+use crate::ast::*;
 
 pub fn emit_h(ast: &mut Program<'static, TypedAst>) -> String {
     let mut cg = CompileH::new();

@@ -1,4 +1,4 @@
-use crate::{ast::*, cg::rename_fundefs, Traverse};
+use crate::{ast::*, cg::rename_fundefs};
 
 pub fn emit_c(ast: &mut Program<'static, TypedAst>, module_name: String) -> String {
     let mut cg = CompileC::new(module_name);

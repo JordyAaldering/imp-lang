@@ -1,5 +1,6 @@
 use std::collections::HashMap;
-use crate::{ast::*, Traverse};
+
+use crate::ast::*;
 
 pub fn constant_fold<'ast>(program: &mut Program<'ast, TypedAst>) {
     ConstantFold::new().trav_program(program);

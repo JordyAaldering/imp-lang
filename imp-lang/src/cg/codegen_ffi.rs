@@ -1,4 +1,4 @@
-use crate::{ast::*, Traverse};
+use crate::ast::*;
 
 pub fn emit_ffi(ast: &mut Program<'static, TypedAst>) -> String {
     let mut cg = CompileFfi::new();
