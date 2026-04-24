@@ -49,7 +49,7 @@ pub fn compile(options: Options) {
         return;
     }
 
-    let ast = tc::type_infer(ast).unwrap();
+    tc::type_infer(&mut ast).unwrap();
     if matches!(options.b, Some(Phase::TI)) {
         let mut ast = ast;
         print!("{}", show::show(&mut ast));

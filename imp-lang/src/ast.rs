@@ -67,7 +67,7 @@ pub trait AstConfig: Clone + fmt::Debug {
     where
         V: Traverse<'ast, Ast = Self> + ?Sized;
 
-    fn trav_operand<'ast, V>(trav: &mut V, operand: &mut Self::Operand<'ast>)
+    fn trav_operand<'ast, V>(trav: &mut V, operand: &mut Self::Operand<'ast>) -> V::ExprOut
     where
         V: Traverse<'ast, Ast = Self> + ?Sized;
 }
@@ -103,11 +103,11 @@ impl AstConfig for ParsedAst {
         }
     }
 
-    fn trav_operand<'ast, V>(trav: &mut V, operand: &mut Self::Operand<'ast>)
+    fn trav_operand<'ast, V>(trav: &mut V, operand: &mut Self::Operand<'ast>) -> V::ExprOut
     where
         V: Traverse<'ast, Ast = Self> + ?Sized,
     {
-        trav.trav_expr(operand);
+        trav.trav_expr(operand)
     }
 }
 
@@ -142,11 +142,11 @@ impl AstConfig for UntypedAst {
         }
     }
 
-    fn trav_operand<'ast, V>(trav: &mut V, operand: &mut Self::Operand<'ast>)
+    fn trav_operand<'ast, V>(trav: &mut V, operand: &mut Self::Operand<'ast>) -> V::ExprOut
     where
         V: Traverse<'ast, Ast = Self> + ?Sized,
     {
-        trav.trav_id(operand);
+        trav.trav_id(operand)
     }
 }
 
@@ -179,10 +179,10 @@ impl AstConfig for TypedAst {
         trav.trav_type(ty);
     }
 
-    fn trav_operand<'ast, V>(trav: &mut V, operand: &mut Self::Operand<'ast>)
+    fn trav_operand<'ast, V>(trav: &mut V, operand: &mut Self::Operand<'ast>) -> V::ExprOut
     where
         V: Traverse<'ast, Ast = Self> + ?Sized,
     {
-        trav.trav_id(operand);
+        trav.trav_id(operand)
     }
 }

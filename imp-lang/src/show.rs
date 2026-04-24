@@ -35,6 +35,10 @@ impl<'ast, Ast: AstConfig> Show<'ast, Ast> {
 impl<'ast, Ast: AstConfig + 'ast> Traverse<'ast> for Show<'ast, Ast> {
     type Ast = Ast;
 
+    type ExprOut = ();
+
+    const EXPR_DEFAULT: Self::ExprOut = ();
+
     fn trav_fundef(&mut self, fundef: &mut Fundef<'ast, Self::Ast>) {
         self.args = fundef.args.clone();
 

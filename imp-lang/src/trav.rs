@@ -3,6 +3,10 @@ use crate::ast::*;
 pub trait Traverse<'ast> {
     type Ast: AstConfig + 'ast;
 
+    type ExprOut;
+
+    const EXPR_DEFAULT: Self::ExprOut;
+
     // Declarations
 
     fn trav_program(&mut self, program: &mut Program<'ast, Self::Ast>) {
@@ -37,12 +41,12 @@ pub trait Traverse<'ast> {
 
     // Statements
 
-    fn trav_body(&mut self, body: &mut Body<'ast, Self::Ast>) {
+    fn trav_body(&mut self, body: &mut Body<'ast, Self::Ast>) -> Self::ExprOut {
         for stmt in &mut body.stmts {
             self.trav_stmt(stmt);
         }
 
-        Self::Ast::trav_operand(self, &mut body.ret);
+        Self::Ast::trav_operand(self, &mut body.ret)
     }
 
     fn trav_stmt(&mut self, stmt: &mut Stmt<'ast, Self::Ast>) {
@@ -63,17 +67,18 @@ pub trait Traverse<'ast> {
 
     // Expressions
 
-    fn trav_expr(&mut self, expr: &'ast Expr<'ast, Self::Ast>) {
-        self.trav_expr_ptr(expr as *const Expr<'ast, Self::Ast> as *mut Expr<'ast, Self::Ast>);
+    fn trav_expr(&mut self, expr: &'ast Expr<'ast, Self::Ast>) -> Self::ExprOut {
+        self.trav_expr_ptr(expr as *const Expr<'ast, Self::Ast> as *mut Expr<'ast, Self::Ast>)
     }
 
-    fn trav_expr_ptr(&mut self, expr: *mut Expr<'ast, Self::Ast>) {
+    fn trav_expr_ptr(&mut self, expr: *mut Expr<'ast, Self::Ast>) -> Self::ExprOut {
         let current = unsafe { std::ptr::read(expr) };
-        let rewritten = self.trav_expr_value(current);
+        let (rewritten, out) = self.trav_expr_value(current);
         unsafe { std::ptr::write(expr, rewritten); }
+        out
     }
 
-    fn trav_expr_value(&mut self, expr: Expr<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
+    fn trav_expr_value(&mut self, expr: Expr<'ast, Self::Ast>) -> (Expr<'ast, Self::Ast>, Self::ExprOut) {
         use Expr::*;
         match expr {
             Cond(n) => self.trav_cond_expr(n),
@@ -87,58 +92,62 @@ pub trait Traverse<'ast> {
         }
     }
 
-    fn trav_cond_expr(&mut self, mut cond: Cond<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
-        self.trav_cond(&mut cond);
-        Expr::Cond(cond)
+    fn trav_cond_expr(&mut self, mut cond: Cond<'ast, Self::Ast>) -> (Expr<'ast, Self::Ast>, Self::ExprOut) {
+        let out = self.trav_cond(&mut cond);
+        (Expr::Cond(cond), out)
     }
 
-    fn trav_cond(&mut self, cond: &mut Cond<'ast, Self::Ast>) {
+    fn trav_cond(&mut self, cond: &mut Cond<'ast, Self::Ast>) -> Self::ExprOut {
         Self::Ast::trav_operand(self, &mut cond.cond);
         self.trav_body(&mut cond.then_branch);
         self.trav_body(&mut cond.else_branch);
+        Self::EXPR_DEFAULT
     }
 
-    fn trav_call_expr(&mut self, mut call: Call<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
-        self.trav_call(&mut call);
-        Expr::Call(call)
+    fn trav_call_expr(&mut self, mut call: Call<'ast, Self::Ast>) -> (Expr<'ast, Self::Ast>, Self::ExprOut) {
+        let out = self.trav_call(&mut call);
+        (Expr::Call(call), out)
     }
 
-    fn trav_call(&mut self, call: &mut Call<'ast, Self::Ast>) {
+    fn trav_call(&mut self, call: &mut Call<'ast, Self::Ast>) -> Self::ExprOut {
         for arg in &mut call.args {
             Self::Ast::trav_operand(self, arg);
         }
+        Self::EXPR_DEFAULT
     }
 
-    fn trav_prf_expr(&mut self, mut prf: Prf<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
-        self.trav_prf(&mut prf);
-        Expr::Prf(prf)
+    fn trav_prf_expr(&mut self, mut prf: Prf<'ast, Self::Ast>) -> (Expr<'ast, Self::Ast>, Self::ExprOut) {
+        let out = self.trav_prf(&mut prf);
+        (Expr::Prf(prf), out)
     }
 
-    fn trav_prf(&mut self, prf: &mut Prf<'ast, Self::Ast>) {
+    fn trav_prf(&mut self, prf: &mut Prf<'ast, Self::Ast>) -> Self::ExprOut {
         for arg in prf.args_mut() {
             Self::Ast::trav_operand(self, arg);
         }
+        Self::EXPR_DEFAULT
     }
 
-    fn trav_tensor_expr(&mut self, mut tensor: Tensor<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
-        self.trav_tensor(&mut tensor);
-        Expr::Tensor(tensor)
+    fn trav_tensor_expr(&mut self, mut tensor: Tensor<'ast, Self::Ast>) -> (Expr<'ast, Self::Ast>, Self::ExprOut) {
+        let out = self.trav_tensor(&mut tensor);
+        (Expr::Tensor(tensor), out)
     }
 
-    fn trav_tensor(&mut self, tensor: &mut Tensor<'ast, Self::Ast>) {
+    fn trav_tensor(&mut self, tensor: &mut Tensor<'ast, Self::Ast>) -> Self::ExprOut {
         if let Some(lb) = &mut tensor.lb {
             Self::Ast::trav_operand(self, lb);
         }
         Self::Ast::trav_operand(self, &mut tensor.ub);
         self.trav_body(&mut tensor.body);
+        Self::EXPR_DEFAULT
     }
 
-    fn trav_fold_expr(&mut self, mut fold: Fold<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
-        self.trav_fold(&mut fold);
-        Expr::Fold(fold)
+    fn trav_fold_expr(&mut self, mut fold: Fold<'ast, Self::Ast>) -> (Expr<'ast, Self::Ast>, Self::ExprOut) {
+        let out = self.trav_fold(&mut fold);
+        (Expr::Fold(fold), out)
     }
 
-    fn trav_fold(&mut self, fold: &mut Fold<'ast, Self::Ast>) {
+    fn trav_fold(&mut self, fold: &mut Fold<'ast, Self::Ast>) -> Self::ExprOut {
         Self::Ast::trav_operand(self, &mut fold.neutral);
 
         match &mut fold.foldfun {
@@ -153,32 +162,40 @@ pub trait Traverse<'ast> {
         }
 
         self.trav_tensor(&mut fold.selection);
+        Self::EXPR_DEFAULT
     }
 
-    fn trav_array_expr(&mut self, mut array: Array<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
-        self.trav_array(&mut array);
-        Expr::Array(array)
+    fn trav_array_expr(&mut self, mut array: Array<'ast, Self::Ast>) -> (Expr<'ast, Self::Ast>, Self::ExprOut) {
+        let out = self.trav_array(&mut array);
+        (Expr::Array(array), out)
     }
 
-    fn trav_array(&mut self, array: &mut Array<'ast, Self::Ast>) {
+    fn trav_array(&mut self, array: &mut Array<'ast, Self::Ast>) -> Self::ExprOut {
         for value in &mut array.elems {
             Self::Ast::trav_operand(self, value);
         }
+        Self::EXPR_DEFAULT
     }
 
-    fn trav_id_expr(&mut self, mut id: Id<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
-        self.trav_id(&mut id);
-        Expr::Id(id)
+    fn trav_id_expr(&mut self, mut id: Id<'ast, Self::Ast>) -> (Expr<'ast, Self::Ast>, Self::ExprOut) {
+        let out = self.trav_id(&mut id);
+        (Expr::Id(id), out)
     }
 
-    fn trav_id(&mut self, _id: &mut Id<'ast, Self::Ast>) {}
-
-    fn trav_const_expr(&mut self, mut c: Const) -> Expr<'ast, Self::Ast> {
-        self.trav_const(&mut c);
-        Expr::Const(c)
+    fn trav_id(&mut self, _id: &mut Id<'ast, Self::Ast>) -> Self::ExprOut {
+        Self::EXPR_DEFAULT
     }
 
-    fn trav_const(&mut self, _c: &mut Const) {}
+    fn trav_const_expr(&mut self, mut c: Const) -> (Expr<'ast, Self::Ast>, Self::ExprOut) {
+        let out = self.trav_const(&mut c);
+        (Expr::Const(c), out)
+    }
 
-    fn trav_type(&mut self, _ty: &mut Type) {}
+    fn trav_const(&mut self, _c: &mut Const) -> Self::ExprOut {
+        Self::EXPR_DEFAULT
+    }
+
+    fn trav_type(&mut self, _ty: &mut Type) -> Self::ExprOut {
+        Self::EXPR_DEFAULT
+    }
 }

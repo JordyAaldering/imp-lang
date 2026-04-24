@@ -73,7 +73,7 @@ pub struct RankCapture {
 }
 
 impl Type {
-    pub fn scalar(ty: BaseType) -> Self {
+    pub const fn scalar(ty: BaseType) -> Self {
         Self { ty, shape: TypePattern::Scalar }
     }
 

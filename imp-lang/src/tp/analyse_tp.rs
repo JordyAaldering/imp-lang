@@ -174,6 +174,10 @@ impl<'ast> AnalyseTp {
 impl<'ast> Traverse<'ast> for AnalyseTp {
     type Ast = ParsedAst;
 
+    type ExprOut = ();
+
+    const EXPR_DEFAULT: Self::ExprOut = ();
+
     fn trav_fundef(&mut self, fundef: &mut Fundef<'ast, ParsedAst>) {
         self.defined.clear();
         self.symbol_terms.clear();

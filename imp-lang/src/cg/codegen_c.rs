@@ -227,6 +227,10 @@ static ImpArrayRaw imp_clone_array_raw(ImpArrayRaw src, size_t elem_size) {
 impl<'ast> Traverse<'ast> for CompileC {
     type Ast = TypedAst;
 
+    type ExprOut = ();
+
+    const EXPR_DEFAULT: Self::ExprOut = ();
+
     fn trav_program(&mut self, program: &mut Program<'ast, TypedAst>) {
         self.output.push_str(&format!("#include \"{}.h\"\n", self.module_name));
         self.output.push_str(HEADER);

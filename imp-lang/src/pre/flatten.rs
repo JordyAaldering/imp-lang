@@ -50,6 +50,10 @@ impl<'ast> Flatten<'ast> {
 impl<'ast> Traverse<'ast> for Flatten<'ast> {
     type Ast = ParsedAst;
 
+    type ExprOut = ();
+
+    const EXPR_DEFAULT: Self::ExprOut = ();
+
     fn trav_fundef(&mut self, fundef: &mut Fundef<'ast, ParsedAst>) {
         debug_assert!(self.decs.len() == 0);
         debug_assert!(self.exprs.len() == 0);
@@ -91,11 +95,11 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
         self.new_assigns = old_assigns;
     }
 
-    fn trav_expr_value(&mut self, expr: Expr<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
+    fn trav_expr_value(&mut self, expr: Expr<'ast, Self::Ast>) -> (Expr<'ast, Self::Ast>, Self::ExprOut) {
         use Expr::*;
-        let expr = match expr {
+        let (expr, _) = match expr {
             Id(n) => {
-                return Id(n);
+                return (Id(n), Self::EXPR_DEFAULT);
             }
             Cond(n) => self.trav_cond_expr(n),
             Call(n) => self.trav_call_expr(n),
@@ -105,6 +109,8 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
             Array(n) => self.trav_array_expr(n),
             Const(n) => self.trav_const_expr(n),
         };
-        self.emit_expr(expr)
+
+        let id = self.emit_expr(expr);
+        (id, Self::EXPR_DEFAULT)
     }
 }

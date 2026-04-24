@@ -29,6 +29,10 @@ impl CompileFfi {
 impl<'ast> Traverse<'ast> for CompileFfi {
     type Ast = TypedAst;
 
+    type ExprOut = ();
+
+    const EXPR_DEFAULT: Self::ExprOut = ();
+
     fn trav_program(&mut self, program: &mut Program<'ast, TypedAst>) {
         self.push("#[allow(unused_imports)]\n");
         self.push("use imp_core::*;\n");

@@ -63,6 +63,10 @@ impl RenameFundefs {
 impl<'ast> Traverse<'ast> for RenameFundefs {
     type Ast = TypedAst;
 
+    type ExprOut = ();
+
+    const EXPR_DEFAULT: Self::ExprOut = ();
+
     fn trav_fundef(&mut self, fundef: &mut Fundef<'ast, Self::Ast>) {
         fundef.name = mangle_fundef_name(&fundef.name, &fundef.args);
 

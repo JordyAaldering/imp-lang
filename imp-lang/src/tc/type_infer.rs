@@ -3,14 +3,8 @@ use typed_arena::Arena;
 
 use crate::ast::*;
 
-/// TODO: convert into &mut Program, and implement Traversal for TypeInfer
-pub fn type_infer<'ast>(program: Program<'ast, UntypedAst>) -> Result<Program<'ast, UntypedAst>, InferenceError> {
+pub fn type_infer<'ast>(program: &mut Program<'ast, UntypedAst>) -> Result<(), InferenceError> {
     validate_overload_families(&program.overloads)?;
-
-    let mut out_program = Program {
-        overloads: HashMap::new(),
-        fundefs: Arena::new(),
-    };
 
     let mut stubs: HashMap<String, HashMap<BaseSignature, Vec<DispatchStub>>> = HashMap::new();
 
@@ -20,8 +14,8 @@ pub fn type_infer<'ast>(program: Program<'ast, UntypedAst>) -> Result<Program<'a
             let mut stub_fundefs = Vec::new();
             for fundef in fundefs {
                 stub_fundefs.push(DispatchStub {
-                    ret_type: fundef.ret_type.clone(),
                     args: fundef.args.clone(),
+                    ret_type: fundef.ret_type.clone(),
                 });
             }
             stub_groups.insert(sig.clone(), stub_fundefs);
@@ -29,37 +23,22 @@ pub fn type_infer<'ast>(program: Program<'ast, UntypedAst>) -> Result<Program<'a
         stubs.insert(name.clone(), stub_groups);
     }
 
-    let mut overloads = HashMap::new();
+    for fundef in program.fundefs.iter_mut() {
+        let mut tc = TypeInfer::new(stubs.clone());
+        tc.trav_fundef(fundef);
 
-    for (name, groups) in program.overloads {
-        let mut new_groups = HashMap::new();
-        for (sig, fundefs) in groups {
-            let mut new_fundefs = Vec::new();
-            for fundef in fundefs {
-                let mut infer = TypeInfer::new(stubs.clone());
-                let inferred = infer.trav_fundef(fundef);
-
-                if let Some(err) = infer.errors.into_iter().next() {
-                    return Err(err);
-                }
-
-                let out_ref = out_program.fundefs.alloc(inferred);
-                let out_ref: &'ast Fundef<'ast, UntypedAst> = unsafe { std::mem::transmute(out_ref) };
-                new_fundefs.push(out_ref);
-            }
-            new_groups.insert(sig, new_fundefs);
+        if let Some(err) = tc.errors.into_iter().next() {
+            return Err(err);
         }
-        overloads.insert(name, new_groups);
     }
 
-    out_program.overloads = overloads;
-    Ok(out_program)
+    Ok(())
 }
 
 #[derive(Clone, Debug)]
 struct DispatchStub {
-    ret_type: Type,
     args: Vec<Farg>,
+    ret_type: Type,
 }
 
 fn validate_overload_families(overloads: &HashMap<String, HashMap<BaseSignature, Vec<&Fundef<'_, UntypedAst>>>>) -> Result<(), InferenceError> {
@@ -84,9 +63,9 @@ fn validate_overload_families(overloads: &HashMap<String, HashMap<BaseSignature,
 
 pub struct TypeInfer<'ast> {
     args: Vec<Farg>,
-    idmap: HashMap<*const VarInfo<'ast, UntypedAst>, &'ast VarInfo<'ast, UntypedAst>>,
-    decs_arena: Arena<VarInfo<'ast, UntypedAst>>,
-    expr_arena: Arena<Expr<'ast, UntypedAst>>,
+    idmap: HashMap<*const VarInfo<'ast, UntypedAst>, Type>,
+    decs: Arena<VarInfo<'ast, UntypedAst>>,
+    exprs: Arena<Expr<'ast, UntypedAst>>,
     errors: Vec<InferenceError>,
     stubs: HashMap<String, HashMap<BaseSignature, Vec<DispatchStub>>>,
 }
@@ -115,19 +94,19 @@ impl<'ast> TypeInfer<'ast> {
         Self {
             args: Vec::new(),
             idmap: HashMap::new(),
-            decs_arena: Arena::new(),
-            expr_arena: Arena::new(),
+            decs: Arena::new(),
+            exprs: Arena::new(),
             errors: Vec::new(),
             stubs: overloads,
         }
     }
 
     fn alloc_lvis(&self, name: String, ty: Type, ssa: Option<&'ast Expr<'ast, UntypedAst>>) -> &'ast VarInfo<'ast, UntypedAst> {
-        unsafe { std::mem::transmute(self.decs_arena.alloc(VarInfo { name, ty: Some(ty), ssa })) }
+        unsafe { std::mem::transmute(self.decs.alloc(VarInfo { name, ty: Some(ty), ssa })) }
     }
 
     fn alloc_expr(&self, expr: Expr<'ast, UntypedAst>) -> &'ast Expr<'ast, UntypedAst> {
-        unsafe { std::mem::transmute(self.expr_arena.alloc(expr)) }
+        unsafe { std::mem::transmute(self.exprs.alloc(expr)) }
     }
 
     fn array_literal_type(&mut self, elem_types: Vec<Type>) -> Type {
@@ -276,104 +255,47 @@ impl<'ast> TypeInfer<'ast> {
 
         (best_matches[0], needs_runtime_dispatch)
     }
+}
 
-    fn trav_fundef(&mut self, fundef: &Fundef<'ast, UntypedAst>) -> Fundef<'ast, UntypedAst> {
+impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
+    type Ast = UntypedAst;
+
+    type ExprOut = Type;
+
+    const EXPR_DEFAULT: Self::ExprOut = Type::scalar(BaseType::Bool);
+
+    fn trav_fundef(&mut self, fundef: &mut Fundef<'ast, UntypedAst>) {
+        debug_assert!(self.args.is_empty());
+        debug_assert!(self.idmap.is_empty());
+        debug_assert!(self.decs.len() == 0);
+        debug_assert!(self.exprs.len() == 0);
+
         self.args = fundef.args.clone();
+        self.decs = mem::take(&mut fundef.decs);
+        self.exprs = mem::take(&mut fundef.exprs);
+
+        for assign in &mut fundef.shape_prelude {
+            self.trav_assign(assign);
+        }
+
+        let _ret_ty = self.trav_body(&mut fundef.body);
+
+        fundef.decs = mem::take(&mut self.decs);
+        fundef.exprs = mem::take(&mut self.exprs);
         self.idmap.clear();
-        self.decs_arena = Arena::new();
-        self.expr_arena = Arena::new();
-
-        let mut shape_prelude = Vec::new();
-        for assign in &fundef.shape_prelude {
-            shape_prelude.push(self.trav_assign(*assign));
-        }
-
-        let (body, _ret_ty) = self.trav_body(fundef.body.clone());
-
-        let decs = mem::take(&mut self.decs_arena);
-        let exprs = mem::take(&mut self.expr_arena);
-
-        Fundef {
-            name: fundef.name.clone(),
-            ret_type: fundef.ret_type.clone(),
-            args: fundef.args.clone(),
-            shape_prelude,
-            shape_facts: fundef.shape_facts.clone(),
-            decs,
-            exprs,
-            body,
-        }
+        self.args.clear();
     }
 
-    fn trav_assign(&mut self, assign: Assign<'ast, UntypedAst>) -> Assign<'ast, UntypedAst> {
-        let (new_expr, new_ty) = self.trav_expr((*assign.expr).clone());
-        let expr_ref = self.alloc_expr(new_expr);
-        let new_lvis = self.alloc_lvis(assign.lhs.name.clone(), new_ty, Some(expr_ref));
-        self.idmap.insert(assign.lhs as *const _, new_lvis);
-        Assign { lhs: new_lvis, expr: expr_ref }
+    fn trav_assign(&mut self, assign: &mut Assign<'ast, UntypedAst>) {
+        let new_ty = self.trav_expr(&mut assign.expr);
+        self.idmap.insert(assign.lhs as *const _, new_ty.clone());
+        assign.lhs.ty = Some(new_ty);
+
     }
 
-    fn trav_printf(&mut self, printf: Printf<'ast, UntypedAst>) -> Printf<'ast, UntypedAst> {
-        let (id, _) = self.trav_id(printf.id);
-        Printf { id }
-    }
+    fn trav_cond(&mut self, cond: &mut Cond<'ast, UntypedAst>) -> Self::ExprOut {
+        let cond_ty = self.trav_id(&mut cond.cond);
 
-    fn trav_body(&mut self, body: Body<'ast, UntypedAst>) -> (Body<'ast, UntypedAst>, Type) {
-        let mut stmts = Vec::new();
-        for stmt in body.stmts {
-            stmts.push(self.trav_stmt(stmt));
-        }
-
-        let (ret, ret_ty) = self.trav_id(body.ret);
-        (Body { stmts, ret }, ret_ty)
-    }
-
-    fn trav_stmt(&mut self, stmt: Stmt<'ast, UntypedAst>) -> Stmt<'ast, UntypedAst> {
-        match stmt {
-            Stmt::Assign(n) => Stmt::Assign(self.trav_assign(n)),
-            Stmt::Printf(n) => Stmt::Printf(self.trav_printf(n)),
-        }
-    }
-
-    fn trav_expr(&mut self, expr: Expr<'ast, UntypedAst>) -> (Expr<'ast, UntypedAst>, Type) {
-        match expr {
-            Expr::Cond(n) => {
-                let (cond, ty) = self.trav_cond(n);
-                (Expr::Cond(cond), ty)
-            }
-            Expr::Call(n) => {
-                let (call, ty) = self.trav_call(n);
-                (Expr::Call(call), ty)
-            }
-            Expr::Prf(n) => {
-                let (prf_call, ty) = self.trav_prf_call(n);
-                (Expr::Prf(prf_call), ty)
-            }
-            Expr::Fold(n) => {
-                let (fold, ty) = self.trav_fold(n);
-                (Expr::Fold(fold), ty)
-            }
-            Expr::Tensor(n) => {
-                let (tensor, ty) = self.trav_tensor(n);
-                (Expr::Tensor(tensor), ty)
-            }
-            Expr::Array(n) => {
-                let (array, ty) = self.trav_array(n);
-                (Expr::Array(array), ty)
-            }
-            Expr::Id(n) => {
-                let (id, ty) = self.trav_id(n);
-                (Expr::Id(id), ty)
-            }
-            Expr::Const(n) => {
-                let (c, ty) = self.trav_const(n);
-                (Expr::Const(c), ty)
-            }
-        }
-    }
-
-    fn trav_cond(&mut self, cond: Cond<'ast, UntypedAst>) -> (Cond<'ast, UntypedAst>, Type) {
-        let (cond_id, cond_ty) = self.trav_id(cond.cond);
         if !(cond_ty.is_scalar() && cond_ty.ty == BaseType::Bool) {
             self.errors.push(InferenceError::PrimitiveArgumentKindMismatch {
                 primitive: "cond".to_owned(),
@@ -383,8 +305,8 @@ impl<'ast> TypeInfer<'ast> {
             });
         }
 
-        let (then_body, then_ty) = self.trav_body(cond.then_branch);
-        let (else_body, else_ty) = self.trav_body(cond.else_branch);
+        let then_ty = self.trav_body(&mut cond.then_branch);
+        let else_ty = self.trav_body(&mut cond.else_branch);
 
         if !types_compatible(&then_ty, &else_ty) || !types_compatible(&else_ty, &then_ty) {
             self.errors.push(InferenceError::PrimitiveArgumentKindMismatch {
@@ -395,22 +317,13 @@ impl<'ast> TypeInfer<'ast> {
             });
         }
 
-        (
-            Cond {
-                cond: cond_id,
-                then_branch: then_body,
-                else_branch: else_body,
-            },
-            then_ty,
-        )
+        then_ty
     }
 
-    fn trav_call(&mut self, call: Call<'ast, UntypedAst>) -> (Call<'ast, UntypedAst>, Type) {
-        let mut args = Vec::with_capacity(call.args.len());
+    fn trav_call(&mut self, call: &mut Call<'ast, UntypedAst>) -> Self::ExprOut {
         let mut arg_types = Vec::with_capacity(call.args.len());
-        for arg in call.args {
-            let (id, ty) = self.trav_id(arg);
-            args.push(id);
+        for arg in &mut call.args {
+            let ty = self.trav_id(arg);
             arg_types.push(ty);
         }
 
@@ -421,12 +334,111 @@ impl<'ast> TypeInfer<'ast> {
             target.ret_type.clone()
         };
 
-        (Call { id: call.id, args }, out_ty)
+        out_ty
     }
 
-    fn trav_fold(&mut self, fold: Fold<'ast, UntypedAst>) -> (Fold<'ast, UntypedAst>, Type) {
-        let (neutral, neutral_ty) = self.trav_id(fold.neutral);
-        let (selection, selection_ty) = self.trav_fold_selection(fold.selection);
+    fn trav_prf(&mut self, prf: &mut Prf<'ast, UntypedAst>) -> Self::ExprOut {
+        use Prf::*;
+        match prf {
+            ShapeA(arr) => {
+                let arr_ty = self.trav_id(arr);
+                if !arr_ty.is_array() {
+                    self.errors.push(InferenceError::PrimitiveArgumentKindMismatch {
+                        primitive: "shape".to_owned(),
+                        arg_index: 0,
+                        expected: "array",
+                        provided: arr_ty,
+                    });
+                }
+                Type::vector_dim(BaseType::Usize, DimPattern::Any)
+            }
+            DimA(arr) => {
+                let arr_ty = self.trav_id(arr);
+                if !arr_ty.is_array() {
+                    self.errors.push(InferenceError::PrimitiveArgumentKindMismatch {
+                        primitive: "dim".to_owned(),
+                        arg_index: 0,
+                        expected: "array",
+                        provided: arr_ty,
+                    });
+                }
+                Type::scalar(BaseType::Usize)
+            }
+            SelVxA(idx, arr) => {
+                let _idx_ty = self.trav_id(idx);
+                let arr_ty = self.trav_id(arr);
+                Type::scalar(arr_ty.ty)
+            }
+            AddSxS(l, r) => {
+                let l_ty = self.trav_id(l);
+                let _r_ty = self.trav_id(r);
+                Type::scalar(l_ty.ty)
+            }
+            SubSxS(l, r) => {
+                let l_ty = self.trav_id(l);
+                let _r_ty = self.trav_id(r);
+                Type::scalar(l_ty.ty)
+            }
+            MulSxS(l, r) => {
+                let l_ty = self.trav_id(l);
+                let _r_ty = self.trav_id(r);
+                Type::scalar(l_ty.ty)
+            }
+            DivSxS(l, r) => {
+                let l_ty = self.trav_id(l);
+                let _r_ty = self.trav_id(r);
+                Type::scalar(l_ty.ty)
+            }
+            LtSxS(l, r) | LeSxS(l, r) | GtSxS(l, r) | GeSxS(l, r) | EqSxS(l, r) | NeSxS(l, r) => {
+                let _l_ty = self.trav_id(l);
+                let _r_ty = self.trav_id(r);
+                Type::scalar(BaseType::Bool)
+            }
+            NegS(r) => {
+                let r_ty = self.trav_id(r);
+                Type::scalar(r_ty.ty)
+            }
+            NotS(r) => {
+                let _r_ty = self.trav_id(r);
+                Type::scalar(BaseType::Bool)
+            }
+        }
+    }
+
+    fn trav_tensor(&mut self, tensor: &mut Tensor<'ast, UntypedAst>) -> Self::ExprOut {
+        let ub_named_axes = self.extract_ub_axes(&tensor.ub);
+
+        if let Some(lb) = &mut tensor.lb {
+            self.trav_id(lb);
+        }
+
+        let ub_ty = self.trav_id(&mut tensor.ub);
+
+        let (iv_ty, leading_k) = Self::tensor_iv_and_dims(&ub_ty);
+
+        let leading_axes: Option<Vec<AxisPattern>> = ub_named_axes.or_else(|| {
+            leading_k.map(|k| (0..k).map(|_| AxisPattern::Dim(DimPattern::Any)).collect())
+        });
+
+        self.idmap.insert(tensor.iv as *const _, iv_ty);
+
+        let ret_ty = self.trav_body(&mut tensor.body);
+
+        let result_ty = match leading_axes {
+            Some(axes) => Self::tensor_result_type(ret_ty, axes),
+            None => Type {
+                ty: ret_ty.ty,
+                shape: TypePattern::Any,
+            },
+        };
+
+        result_ty
+    }
+
+    fn trav_fold(&mut self, fold: &mut Fold<'ast, UntypedAst>) -> Self::ExprOut {
+        let neutral_ty = self.trav_id(&mut fold.neutral);
+
+        let selection_ty = self.trav_tensor(&mut fold.selection);
 
         if !types_compatible(&neutral_ty, &selection_ty) || !types_compatible(&selection_ty, &neutral_ty) {
             self.errors.push(InferenceError::FoldSelectionTypeMismatch {
@@ -435,7 +447,7 @@ impl<'ast> TypeInfer<'ast> {
             });
         }
 
-        let (foldfun, ret_ty) = match fold.foldfun {
+        let ret_ty = match &mut fold.foldfun {
             FoldFun::Name(id) => {
                 let arg_types = vec![neutral_ty.clone(), selection_ty.clone()];
                 let (target, runtime_dispatch) = self.resolve_overload(&id, &arg_types);
@@ -444,7 +456,7 @@ impl<'ast> TypeInfer<'ast> {
                 } else {
                     target.ret_type.clone()
                 };
-                (FoldFun::Name(id), out_ty)
+                out_ty
             }
             FoldFun::Apply { .. } => {
                 unimplemented!("'partial application' fold not yet supported")
@@ -458,166 +470,41 @@ impl<'ast> TypeInfer<'ast> {
             });
         }
 
-        (Fold { neutral, foldfun, selection }, neutral_ty)
+        neutral_ty
     }
 
-    fn trav_prf_call(&mut self, prf: Prf<'ast, UntypedAst>) -> (Prf<'ast, UntypedAst>, Type) {
-        use Prf::*;
-        match prf {
-            ShapeA(arr) => {
-                let (arr, arr_ty) = self.trav_id(arr);
-                if !arr_ty.is_array() {
-                    self.errors.push(InferenceError::PrimitiveArgumentKindMismatch {
-                        primitive: "shape".to_owned(),
-                        arg_index: 0,
-                        expected: "array",
-                        provided: arr_ty,
-                    });
-                }
-                (ShapeA(arr), Type::vector_dim(BaseType::Usize, DimPattern::Any))
-            }
-            DimA(arr) => {
-                let (arr, arr_ty) = self.trav_id(arr);
-                if !arr_ty.is_array() {
-                    self.errors.push(InferenceError::PrimitiveArgumentKindMismatch {
-                        primitive: "dim".to_owned(),
-                        arg_index: 0,
-                        expected: "array",
-                        provided: arr_ty,
-                    });
-                }
-                (DimA(arr), Type::scalar(BaseType::Usize))
-            }
-            SelVxA(idx, arr) => {
-                let (idx, _idx_ty) = self.trav_id(idx);
-                let (arr, arr_ty) = self.trav_id(arr);
-                (SelVxA(idx, arr), Type::scalar(arr_ty.ty))
-            }
-            AddSxS(l, r) => {
-                let (l, l_ty) = self.trav_id(l);
-                let (r, _r_ty) = self.trav_id(r);
-                (AddSxS(l, r), Type::scalar(l_ty.ty))
-            }
-            SubSxS(l, r) => {
-                let (l, l_ty) = self.trav_id(l);
-                let (r, _r_ty) = self.trav_id(r);
-                (SubSxS(l, r), Type::scalar(l_ty.ty))
-            }
-            MulSxS(l, r) => {
-                let (l, l_ty) = self.trav_id(l);
-                let (r, _r_ty) = self.trav_id(r);
-                (MulSxS(l, r), Type::scalar(l_ty.ty))
-            }
-            DivSxS(l, r) => {
-                let (l, l_ty) = self.trav_id(l);
-                let (r, _r_ty) = self.trav_id(r);
-                (DivSxS(l, r), Type::scalar(l_ty.ty))
-            }
-            LtSxS(l, r) | LeSxS(l, r) | GtSxS(l, r) | GeSxS(l, r) | EqSxS(l, r) | NeSxS(l, r) => {
-                let (l, _l_ty) = self.trav_id(l);
-                let (r, _r_ty) = self.trav_id(r);
-                (LtSxS(l, r), Type::scalar(BaseType::Bool))
-            }
-            NegS(r) => {
-                let (r, r_ty) = self.trav_id(r);
-                (NegS(r), r_ty)
-            }
-            NotS(r) => {
-                let (r, _r_ty) = self.trav_id(r);
-                (NotS(r), Type::scalar(BaseType::Bool))
-            }
-        }
-    }
-
-    fn trav_fold_selection(&mut self, tensor: Tensor<'ast, UntypedAst>) -> (Tensor<'ast, UntypedAst>, Type) {
-        let lb = if let Some(lb) = tensor.lb {
-            let (lb, _lb_ty) = self.trav_id(lb);
-            Some(lb)
-        } else {
-            None
-        };
-
-        let (ub, ub_ty) = self.trav_id(tensor.ub);
-        let (iv_ty, _leading_k) = Self::tensor_iv_and_dims(&ub_ty);
-        let iv = self.alloc_lvis(tensor.iv.name.clone(), iv_ty, None);
-        self.idmap.insert(tensor.iv as *const _, iv);
-
-        let (body, ret_ty) = self.trav_body(tensor.body);
-        (Tensor { body, iv, lb, ub }, ret_ty)
-    }
-
-    fn trav_tensor(&mut self, tensor: Tensor<'ast, UntypedAst>) -> (Tensor<'ast, UntypedAst>, Type) {
-        let ub_named_axes = self.extract_ub_axes(&tensor.ub);
-
-        let lb = if let Some(lb) = tensor.lb {
-            let (lb, _lb_ty) = self.trav_id(lb);
-            Some(lb)
-        } else {
-            None
-        };
-
-        let (ub, ub_ty) = self.trav_id(tensor.ub);
-        let (iv_ty, leading_k) = Self::tensor_iv_and_dims(&ub_ty);
-
-        let leading_axes: Option<Vec<AxisPattern>> = ub_named_axes.or_else(|| {
-            leading_k.map(|k| (0..k).map(|_| AxisPattern::Dim(DimPattern::Any)).collect())
-        });
-
-        let iv_new = self.alloc_lvis(tensor.iv.name.clone(), iv_ty, None);
-        self.idmap.insert(tensor.iv as *const _, iv_new);
-
-        let (body, ret_ty) = self.trav_body(tensor.body);
-
-        let result_ty = match leading_axes {
-            Some(axes) => Self::tensor_result_type(ret_ty, axes),
-            None => Type {
-                ty: ret_ty.ty,
-                shape: TypePattern::Any,
-            },
-        };
-
-        let tensor = Tensor { iv: iv_new, lb, ub, body };
-        (tensor, result_ty)
-    }
-
-    fn trav_array(&mut self, array: Array<'ast, UntypedAst>) -> (Array<'ast, UntypedAst>, Type) {
-        let mut values = Vec::with_capacity(array.elems.len());
+    fn trav_array(&mut self, array: &mut Array<'ast, UntypedAst>) -> Self::ExprOut {
         let mut elem_types = Vec::with_capacity(array.elems.len());
-
-        for value in array.elems {
-            let (value, ty) = self.trav_id(value);
+        for value in &mut array.elems {
+            let ty = self.trav_id(value);
             elem_types.push(ty);
-            values.push(value);
         }
-
-        let ty = self.array_literal_type(elem_types);
-        (Array { elems: values }, ty)
+        self.array_literal_type(elem_types)
     }
 
-    fn trav_id(&mut self, id: Id<'ast, UntypedAst>) -> (Id<'ast, UntypedAst>, Type) {
-        match id {
-            Id::Arg(i) => (Id::Arg(i), self.args[i].ty.clone()),
+    fn trav_id(&mut self, id: &mut Id<'ast, UntypedAst>) -> Self::ExprOut {
+        match *id {
+            Id::Arg(i) => self.args[i].ty.clone(),
             Id::Var(old) => {
-                let new_id = self
-                    .idmap
+                self.idmap
                     .get(&(old as *const _))
-                    .expect("Id::Var referenced before its assignment was processed");
-                let ty = new_id.ty.clone().unwrap_or_else(|| Type::scalar(BaseType::I32));
-                (Id::Var(*new_id), ty)
+                    .expect("Id::Var referenced before its assignment was processed")
+                    .clone()
             }
         }
     }
 
-    fn trav_const(&mut self, c: Const) -> (Const, Type) {
+    fn trav_const(&mut self, c: &mut Const) -> Self::ExprOut {
+        use Const::*;
         match c {
-            Const::Bool(v) => (Const::Bool(v), Type::scalar(BaseType::Bool)),
-            Const::I32(v) => (Const::I32(v), Type::scalar(BaseType::I32)),
-            Const::I64(v) => (Const::I64(v), Type::scalar(BaseType::I64)),
-            Const::U32(v) => (Const::U32(v), Type::scalar(BaseType::U32)),
-            Const::U64(v) => (Const::U64(v), Type::scalar(BaseType::U64)),
-            Const::Usize(v) => (Const::Usize(v), Type::scalar(BaseType::Usize)),
-            Const::F32(v) => (Const::F32(v), Type::scalar(BaseType::F32)),
-            Const::F64(v) => (Const::F64(v), Type::scalar(BaseType::F64)),
+            Bool(_) => Type::scalar(BaseType::Bool),
+            Usize(_) => Type::scalar(BaseType::Usize),
+            U32(_) => Type::scalar(BaseType::U32),
+            U64(_) => Type::scalar(BaseType::U64),
+            I32(_) => Type::scalar(BaseType::I32),
+            I64(_) => Type::scalar(BaseType::I64),
+            F32(_) => Type::scalar(BaseType::F32),
+            F64(_) => Type::scalar(BaseType::F64),
         }
     }
 }

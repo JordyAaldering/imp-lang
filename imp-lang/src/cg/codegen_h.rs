@@ -109,6 +109,10 @@ typedef struct {
 impl<'ast> Traverse<'ast> for CompileH {
     type Ast = TypedAst;
 
+    type ExprOut = ();
+
+    const EXPR_DEFAULT: Self::ExprOut = ();
+
     fn trav_program(&mut self, program: &mut Program<'ast, TypedAst>) {
         self.output.push_str(HEADER);
 

@@ -25,6 +25,10 @@ impl DeadCodeRemoval {
 impl<'ast> Traverse<'ast> for DeadCodeRemoval {
     type Ast = TypedAst;
 
+    type ExprOut = ();
+
+    const EXPR_DEFAULT: Self::ExprOut = ();
+
     fn trav_fundef(&mut self, fundef: &mut Fundef<'ast, Self::Ast>) {
         self.used.clear();
         self.trav_body(&mut fundef.body);
@@ -68,7 +72,7 @@ impl<'ast> Traverse<'ast> for DeadCodeRemoval {
         body.stmts = kept_rev;
     }
 
-    fn trav_tensor_expr(&mut self, mut tensor: Tensor<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
+    fn trav_tensor(&mut self, tensor: &mut Tensor<'ast, Self::Ast>) {
         let outer_used = mem::take(&mut self.used);
 
         if let Some(lb) = &mut tensor.lb {
@@ -84,28 +88,20 @@ impl<'ast> Traverse<'ast> for DeadCodeRemoval {
             self.trav_id(lb);
         }
         self.trav_id(&mut tensor.ub);
-
-        Expr::Tensor(tensor)
     }
 
-    fn trav_fold_expr(&mut self, mut fold: Fold<'ast, Self::Ast>) -> Expr<'ast, Self::Ast> {
+    fn trav_fold(&mut self, fold: &mut Fold<'ast, Self::Ast>) {
         self.trav_id(&mut fold.neutral);
 
-        fold.foldfun = match fold.foldfun {
-            FoldFun::Name(id) => FoldFun::Name(id),
-            FoldFun::Apply { id, mut args } => {
-                for arg in &mut args {
-                    if let FoldFunArg::Bound(bound) = arg {
-                        self.trav_id(bound);
-                    }
+        if let FoldFun::Apply { args, .. } = &mut fold.foldfun {
+            for arg in args {
+                if let FoldFunArg::Bound(bound) = arg {
+                    self.trav_id(bound);
                 }
-                FoldFun::Apply { id, args }
             }
-        };
+        }
 
         self.trav_tensor(&mut fold.selection);
-
-        Expr::Fold(fold)
     }
 
     fn trav_array(&mut self, array: &mut Array<'ast, Self::Ast>) {
