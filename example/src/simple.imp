@@ -39,7 +39,7 @@ fn @mul(usize a, usize b) -> usize {
     @mulSxS(a, b)
 }
 
-fn @add(i32[d>0:shp] a, i32[d>0:shp] b) -> i32[d>0:shp] {
+fn @add(i32[d:shp] a, i32[d:shp] b) -> i32[d:shp] {
     { @selVxA(iv, a) + @selVxA(iv, b) | iv < shp }
 }
 
@@ -47,19 +47,18 @@ fn @add(usize a, usize b) -> usize {
     @addSxS(a, b)
 }
 
-fn @add(usize a, usize[d>0:shp] b) -> usize[d>0:shp] {
+fn @add(usize a, usize[d:shp] b) -> usize[d:shp] {
     lb = zeros(d);
     { a + b[iv] | iv < shp }
 }
 
-fn @add(usize[d>0:shp] a, usize b) -> usize[d>0:shp] {
+fn @add(usize[d:shp] a, usize b) -> usize[d:shp] {
     lb = zeros(d);
     { a[iv] + b | lb <= iv < shp }
 }
 
-fn @add(usize[d>0:shp] a, usize[d>0:shp] b) -> usize[d>0:shp] {
-    lb = zeros(d);
-    { a[iv] + b[iv] | lb <= iv < shp }
+fn @add(usize[d:shp] a, usize[d:shp] b) -> usize[d:shp] {
+    { a[iv] + b[iv] | iv < shp }
 }
 
 fn sum(i32[d:shp] arr) -> i32 {

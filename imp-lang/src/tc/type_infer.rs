@@ -23,6 +23,8 @@ pub fn type_infer<'ast>(program: &mut Program<'ast, UntypedAst>) -> Result<(), I
         stubs.insert(name.clone(), stub_groups);
     }
 
+    eprintln!("Dispatch stubs: {:#?}", stubs);
+
     for fundef in program.fundefs.iter_mut() {
         let mut tc = TypeInfer::new(stubs.clone());
         tc.trav_fundef(fundef);
@@ -99,14 +101,6 @@ impl<'ast> TypeInfer<'ast> {
             errors: Vec::new(),
             stubs: overloads,
         }
-    }
-
-    fn alloc_lvis(&self, name: String, ty: Type, ssa: Option<&'ast Expr<'ast, UntypedAst>>) -> &'ast VarInfo<'ast, UntypedAst> {
-        unsafe { std::mem::transmute(self.decs.alloc(VarInfo { name, ty: Some(ty), ssa })) }
-    }
-
-    fn alloc_expr(&self, expr: Expr<'ast, UntypedAst>) -> &'ast Expr<'ast, UntypedAst> {
-        unsafe { std::mem::transmute(self.exprs.alloc(expr)) }
     }
 
     fn array_literal_type(&mut self, elem_types: Vec<Type>) -> Type {
@@ -287,10 +281,13 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
     }
 
     fn trav_assign(&mut self, assign: &mut Assign<'ast, UntypedAst>) {
-        let new_ty = self.trav_expr(&mut assign.expr);
-        self.idmap.insert(assign.lhs as *const _, new_ty.clone());
-        assign.lhs.ty = Some(new_ty);
+        let ty = self.trav_expr(&mut assign.expr);
+        self.idmap.insert(assign.lhs as *const _, ty.clone());
 
+        unsafe {
+            let ptr = assign.lhs as *const VarInfo<'ast, UntypedAst> as *mut VarInfo<'ast, UntypedAst>;
+            (*ptr).ty = Some(ty);
+        }
     }
 
     fn trav_cond(&mut self, cond: &mut Cond<'ast, UntypedAst>) -> Self::ExprOut {
@@ -420,7 +417,12 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
             leading_k.map(|k| (0..k).map(|_| AxisPattern::Dim(DimPattern::Any)).collect())
         });
 
-        self.idmap.insert(tensor.iv as *const _, iv_ty);
+        self.idmap.insert(tensor.iv as *const _, iv_ty.clone());
+
+        unsafe {
+            let ptr = tensor.iv as *const VarInfo<'ast, UntypedAst> as *mut VarInfo<'ast, UntypedAst>;
+            (*ptr).ty = Some(iv_ty);
+        }
 
         let ret_ty = self.trav_body(&mut tensor.body);
 
