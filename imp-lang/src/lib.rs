@@ -1,4 +1,5 @@
 mod ast;
+mod trav;
 mod show;
 mod scp;
 mod tp;
@@ -36,7 +37,7 @@ pub fn compile(options: Options) {
         return;
     }
 
-    let mut ast = pre::flatten(ast);
+    pre::flatten(&mut ast);
     if matches!(options.b, Some(Phase::FLT)) {
         print!("{}", show::show(&mut ast));
         return;
