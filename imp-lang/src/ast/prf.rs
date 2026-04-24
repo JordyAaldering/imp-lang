@@ -95,26 +95,26 @@ impl<'ast, Ast: AstConfig> Prf<'ast, Ast> {
         }
     }
 
-    pub fn args(&self) -> Vec<&Ast::Operand<'ast>> {
-        use Prf::*;
-        match self {
-            DimA(a) => vec![a],
-            ShapeA(a) => vec![a],
-            SelVxA(a, b) => vec![a, b],
-            AddSxS(a, b) => vec![a, b],
-            SubSxS(a, b) => vec![a, b],
-            MulSxS(a, b) => vec![a, b],
-            DivSxS(a, b) => vec![a, b],
-            LtSxS(a, b) => vec![a, b],
-            LeSxS(a, b) => vec![a, b],
-            GtSxS(a, b) => vec![a, b],
-            GeSxS(a, b) => vec![a, b],
-            EqSxS(a, b) => vec![a, b],
-            NeSxS(a, b) => vec![a, b],
-            NegS(a) => vec![a],
-            NotS(a) => vec![a],
-        }
-    }
+    // pub fn args(&self) -> Vec<&Ast::Operand<'ast>> {
+    //     use Prf::*;
+    //     match self {
+    //         DimA(a) => vec![a],
+    //         ShapeA(a) => vec![a],
+    //         SelVxA(a, b) => vec![a, b],
+    //         AddSxS(a, b) => vec![a, b],
+    //         SubSxS(a, b) => vec![a, b],
+    //         MulSxS(a, b) => vec![a, b],
+    //         DivSxS(a, b) => vec![a, b],
+    //         LtSxS(a, b) => vec![a, b],
+    //         LeSxS(a, b) => vec![a, b],
+    //         GtSxS(a, b) => vec![a, b],
+    //         GeSxS(a, b) => vec![a, b],
+    //         EqSxS(a, b) => vec![a, b],
+    //         NeSxS(a, b) => vec![a, b],
+    //         NegS(a) => vec![a],
+    //         NotS(a) => vec![a],
+    //     }
+    // }
 
     pub fn args_mut(&mut self) -> Vec<&mut Ast::Operand<'ast>> {
         use Prf::*;

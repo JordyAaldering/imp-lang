@@ -23,8 +23,6 @@ pub fn type_infer<'ast>(program: &mut Program<'ast, UntypedAst>) -> Result<(), I
         stubs.insert(name.clone(), stub_groups);
     }
 
-    eprintln!("Dispatch stubs: {:#?}", stubs);
-
     for fundef in program.fundefs.iter_mut() {
         let mut tc = TypeInfer::new(stubs.clone());
         tc.trav_fundef(fundef);
@@ -65,11 +63,11 @@ fn validate_overload_families(overloads: &HashMap<String, HashMap<BaseSignature,
 
 pub struct TypeInfer<'ast> {
     args: Vec<Farg>,
-    idmap: HashMap<*const VarInfo<'ast, UntypedAst>, Type>,
     decs: Arena<VarInfo<'ast, UntypedAst>>,
     exprs: Arena<Expr<'ast, UntypedAst>>,
-    errors: Vec<InferenceError>,
+    typed: HashMap<*const VarInfo<'ast, UntypedAst>, Type>,
     stubs: HashMap<String, HashMap<BaseSignature, Vec<DispatchStub>>>,
+    errors: Vec<InferenceError>,
 }
 
 #[allow(unused)]
@@ -95,11 +93,11 @@ impl<'ast> TypeInfer<'ast> {
     fn new(overloads: HashMap<String, HashMap<BaseSignature, Vec<DispatchStub>>>) -> Self {
         Self {
             args: Vec::new(),
-            idmap: HashMap::new(),
             decs: Arena::new(),
             exprs: Arena::new(),
-            errors: Vec::new(),
+            typed: HashMap::new(),
             stubs: overloads,
+            errors: Vec::new(),
         }
     }
 
@@ -256,11 +254,11 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
 
     type ExprOut = Type;
 
-    const EXPR_DEFAULT: Self::ExprOut = Type::scalar(BaseType::Bool);
+    const EXPR_DEFAULT: Self::ExprOut = unreachable!();
 
     fn trav_fundef(&mut self, fundef: &mut Fundef<'ast, UntypedAst>) {
         debug_assert!(self.args.is_empty());
-        debug_assert!(self.idmap.is_empty());
+        debug_assert!(self.typed.is_empty());
         debug_assert!(self.decs.len() == 0);
         debug_assert!(self.exprs.len() == 0);
 
@@ -276,13 +274,13 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
 
         fundef.decs = mem::take(&mut self.decs);
         fundef.exprs = mem::take(&mut self.exprs);
-        self.idmap.clear();
+        self.typed.clear();
         self.args.clear();
     }
 
     fn trav_assign(&mut self, assign: &mut Assign<'ast, UntypedAst>) {
         let ty = self.trav_expr(&mut assign.expr);
-        self.idmap.insert(assign.lhs as *const _, ty.clone());
+        self.typed.insert(assign.lhs as *const _, ty.clone());
 
         unsafe {
             let ptr = assign.lhs as *const VarInfo<'ast, UntypedAst> as *mut VarInfo<'ast, UntypedAst>;
@@ -417,7 +415,7 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
             leading_k.map(|k| (0..k).map(|_| AxisPattern::Dim(DimPattern::Any)).collect())
         });
 
-        self.idmap.insert(tensor.iv as *const _, iv_ty.clone());
+        self.typed.insert(tensor.iv as *const _, iv_ty.clone());
 
         unsafe {
             let ptr = tensor.iv as *const VarInfo<'ast, UntypedAst> as *mut VarInfo<'ast, UntypedAst>;
@@ -487,9 +485,9 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
     fn trav_id(&mut self, id: &mut Id<'ast, UntypedAst>) -> Self::ExprOut {
         match *id {
             Id::Arg(i) => self.args[i].ty.clone(),
-            Id::Var(old) => {
-                self.idmap
-                    .get(&(old as *const _))
+            Id::Var(id) => {
+                self.typed
+                    .get(&(id as *const _))
                     .expect("Id::Var referenced before its assignment was processed")
                     .clone()
             }

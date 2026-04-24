@@ -6,24 +6,28 @@ pub struct ShapeFacts {
     pub unconstrained_rank_captures: usize,
 }
 
+#[allow(unused)]
 #[derive(Clone, Debug)]
 pub struct ShapeBinding {
     pub symbol: String,
     pub term: ShapeTerm,
 }
 
+#[allow(unused)]
 #[derive(Clone, Debug)]
 pub struct ShapeEquality {
     pub left: ShapeTerm,
     pub right: ShapeTerm,
 }
 
+#[allow(unused)]
 #[derive(Clone, Debug)]
 pub struct OutputShapeConstraint {
     pub output: ShapeTerm,
     pub constrained_by: Vec<ShapeTerm>,
 }
 
+#[allow(unused)]
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ShapeTerm {
     Known(usize),
