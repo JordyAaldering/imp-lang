@@ -245,7 +245,6 @@ impl<'ast> Traverse<'ast> for CompileC {
         }
 
         for (name, overloads) in &program.overloads {
-            let name = name.strip_prefix('@').unwrap_or(name).to_owned();
             for (sig, fundefs) in overloads {
                 if overloads.len() > 1 || fundefs.len() > 1 {
                     self.output.push('\n');
@@ -260,7 +259,6 @@ impl<'ast> Traverse<'ast> for CompileC {
         }
 
         for (name, overloads) in &program.overloads {
-            let name = name.strip_prefix('@').unwrap_or(name).to_owned();
             for (sig, fundefs) in overloads {
                 if overloads.len() > 1 || fundefs.len() > 1 {
                     self.output.push('\n');

@@ -51,7 +51,6 @@ impl<'ast> Traverse<'ast> for CompileFfi {
         self.push("}\n");
 
         for (name, overloads) in &program.overloads {
-            let name = name.strip_prefix('@').unwrap_or(name).to_owned();
             for (sig, fundefs) in overloads {
                 self.push("\n");
                 if overloads.len() > 1 || fundefs.len() > 1 {
@@ -67,7 +66,7 @@ impl<'ast> Traverse<'ast> for CompileFfi {
 
 impl CompileFfi {
     fn emit_direct_wrapper(&mut self, base_name: &str, fundef: &Fundef<'_, TypedAst>) {
-        self.push(&format!("fn {}(", rust_wrapper_name(base_name)));
+        self.push(&format!("fn {}(", base_name));
         self.push(&join_args(&fundef.args, rust_api_arg_type));
         self.push(&format!(") -> {} {{\n", rust_api_ret_type(&fundef.ret_type)));
 
@@ -94,7 +93,7 @@ impl CompileFfi {
             .collect::<Vec<_>>()
             .join(", ");
 
-        self.push(&format!("fn {}_{}(", rust_wrapper_name(base_name), sig_str.join("_")));
+        self.push(&format!("fn {}_{}(", base_name, sig_str.join("_")));
         self.push(&fargs);
         let first = fundefs[0];
         self.push(&format!(") -> {} {{\n", rust_api_ret_type(&first.ret_type)));
@@ -361,8 +360,4 @@ fn generate_shape_checks(args: &[Farg]) -> String {
     }
 
     out
-}
-
-fn rust_wrapper_name(name: &str) -> String {
-    name.strip_prefix('@').unwrap_or(name).to_owned()
 }

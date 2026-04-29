@@ -104,7 +104,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         self.expr_arena = Arena::new();
 
         let _ = self.expect(Token::Fn)?;
-        let name = self.parse_callable_name()?;
+        let (name, _) = self.parse_id()?;
 
         let mut args = Vec::new();
 
@@ -281,14 +281,14 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                     self.alloc_expr(Expr::Id(Id::Var(id)))
                 }
             }
+            Token::RealValue(v) => self.alloc_expr(Expr::Const(Const::F32(v))),
+            Token::NatValue(v) => self.alloc_expr(Expr::Const(Const::Usize(v))),
             Token::BoolValue(v) => self.alloc_expr(Expr::Const(Const::Bool(v))),
+            Token::UsizeValue(v) => self.alloc_expr(Expr::Const(Const::Usize(v))),
             Token::U32Value(v) => self.alloc_expr(Expr::Const(Const::U32(v))),
             Token::U64Value(v) => self.alloc_expr(Expr::Const(Const::U64(v))),
-            Token::NatValue(v) => self.alloc_expr(Expr::Const(Const::Usize(v))),
-            Token::UsizeValue(v) => self.alloc_expr(Expr::Const(Const::Usize(v))),
             Token::I32Value(v) => self.alloc_expr(Expr::Const(Const::I32(v))),
             Token::I64Value(v) => self.alloc_expr(Expr::Const(Const::I64(v))),
-            Token::RealValue(v) => self.alloc_expr(Expr::Const(Const::F32(v))),
             Token::F32Value(v) => self.alloc_expr(Expr::Const(Const::F32(v))),
             Token::F64Value(v) => self.alloc_expr(Expr::Const(Const::F64(v))),
             Token::LParen => {
@@ -369,15 +369,6 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         Ok(self.alloc_expr(Expr::Call(Call { id, args })))
     }
 
-    fn parse_callable_name(&mut self) -> ParseResult<String> {
-        let (token, span) = self.next()?;
-        match token {
-            Token::Identifier(name) => Ok(name),
-            Token::Prf(name) => Ok(format!("@{name}")),
-            _ => Err(ParseError::UnexpectedToken("function name".to_owned(), token, span)),
-        }
-    }
-
     fn parse_prf_call(&mut self, id: String, span: Span) -> ParseResult<&'ast Expr<'ast, ParsedAst>> {
         let mut args = Vec::new();
 
@@ -420,7 +411,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
     fn fold_dispatch_from_token(&self, token: Token, span: Span) -> ParseResult<String> {
         let id = match token {
             Token::Identifier(name) => name,
-            Token::Prf(name) => format!("@{name}"),
+            Token::Prf(_) => panic!("folding with primitive functions not yet supported"),
             token => {
                 let op: Bop = (&token).try_into().map_err(|_| {
                     ParseError::UnexpectedToken(
@@ -512,7 +503,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         self.expect(Token::RSquare)?;
 
         Ok(self.alloc_expr(Expr::Call(Call {
-            id: "@sel".to_owned(),
+            id: "sel".to_owned(),
             args: vec![idx, arr],
         })))
     }

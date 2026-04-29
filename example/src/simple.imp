@@ -19,45 +19,45 @@ fn zeros_i32(usize n) -> i32[n] {
     { 0i32 | iv < [n] }
 }
 
-fn @add(i32 a, i32 b) -> i32 {
+fn add(i32 a, i32 b) -> i32 {
     @addSxS(a, b)
 }
 
-fn @sub(i32 a, i32 b) -> i32 {
+fn sub(i32 a, i32 b) -> i32 {
     @subSxS(a, b)
 }
 
-fn @sub(usize a, usize b) -> usize {
+fn sub(usize a, usize b) -> usize {
     @subSxS(a, b)
 }
 
-fn @mul(i32 a, i32 b) -> i32 {
+fn mul(i32 a, i32 b) -> i32 {
     @mulSxS(a, b)
 }
 
-fn @mul(usize a, usize b) -> usize {
+fn mul(usize a, usize b) -> usize {
     @mulSxS(a, b)
 }
 
-fn @add(i32[d:shp] a, i32[d:shp] b) -> i32[d:shp] {
+fn add(i32[d:shp] a, i32[d:shp] b) -> i32[d:shp] {
     { @selVxA(iv, a) + @selVxA(iv, b) | iv < shp }
 }
 
-fn @add(usize a, usize b) -> usize {
+fn add(usize a, usize b) -> usize {
     @addSxS(a, b)
 }
 
-fn @add(usize a, usize[d:shp] b) -> usize[d:shp] {
+fn add(usize a, usize[d:shp] b) -> usize[d:shp] {
     lb = zeros(d);
     { a + b[iv] | iv < shp }
 }
 
-fn @add(usize[d:shp] a, usize b) -> usize[d:shp] {
+fn add(usize[d:shp] a, usize b) -> usize[d:shp] {
     lb = zeros(d);
     { a[iv] + b | lb <= iv < shp }
 }
 
-fn @add(usize[d:shp] a, usize[d:shp] b) -> usize[d:shp] {
+fn add(usize[d:shp] a, usize[d:shp] b) -> usize[d:shp] {
     { a[iv] + b[iv] | iv < shp }
 }
 
@@ -79,7 +79,7 @@ fn cat(usize[n] a, usize[m] b) -> usize[nm] {
 }
 
 // Planar selection (i.e., non-scalar result)
-fn @sel(usize[o] idx, i32[o:oshp,i:ishp] arr) -> i32[i:ishp] {
+fn sel(usize[o] idx, i32[o:oshp,i:ishp] arr) -> i32[i:ishp] {
     { @selVxA(cat(idx, iv), arr) | iv < ishp }
 }
 
@@ -114,11 +114,11 @@ fn we_could_statically_figure_this_error_out() -> usize[5] {
     four + five
 }
 
-fn @sel(usize[n] idx, usize[n:shp] arr) -> usize {
+fn sel(usize[n] idx, usize[n:shp] arr) -> usize {
     @selVxA(idx, arr)
 }
 
-fn @sel(usize[n] idx, u32[n>0:shp] arr) -> u32 {
+fn sel(usize[n] idx, u32[n>0:shp] arr) -> u32 {
     @selVxA(idx, arr)
 }
 

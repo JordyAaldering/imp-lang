@@ -1,4 +1,5 @@
 use std::{collections::HashMap, mem};
+
 use typed_arena::Arena;
 
 use crate::ast::*;
@@ -440,16 +441,16 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
 
         let selection_ty = self.trav_tensor(&mut fold.selection);
 
-        if !types_compatible(&neutral_ty, &selection_ty) || !types_compatible(&selection_ty, &neutral_ty) {
-            self.errors.push(InferenceError::FoldSelectionTypeMismatch {
-                expected: neutral_ty.clone(),
-                found: selection_ty.clone(),
-            });
-        }
+        //if !types_compatible(&neutral_ty, &selection_ty) {
+        //    self.errors.push(InferenceError::FoldSelectionTypeMismatch {
+        //        expected: neutral_ty.clone(),
+        //        found: selection_ty.clone(),
+        //    });
+        //}
 
         let ret_ty = match &mut fold.foldfun {
             FoldFun::Name(id) => {
-                let arg_types = vec![neutral_ty.clone(), selection_ty.clone()];
+                let arg_types = vec![neutral_ty.clone(), neutral_ty.clone()];
                 let (target, runtime_dispatch) = self.resolve_overload(&id, &arg_types);
                 let out_ty = if runtime_dispatch {
                     Type { ty: target.ret_type.ty.clone(), shape: TypePattern::Any }
@@ -463,14 +464,14 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
             }
         };
 
-        if !types_compatible(&neutral_ty, &ret_ty) || !types_compatible(&ret_ty, &neutral_ty) {
-            self.errors.push(InferenceError::FoldFunctionTypeMismatch {
-                expected: neutral_ty.clone(),
-                found: ret_ty,
-            });
-        }
+        //if !types_compatible(&neutral_ty, &ret_ty) {
+        //    self.errors.push(InferenceError::FoldFunctionTypeMismatch {
+        //        expected: neutral_ty.clone(),
+        //        found: ret_ty,
+        //    });
+        //}
 
-        neutral_ty
+        ret_ty
     }
 
     fn trav_array(&mut self, array: &mut Array<'ast, UntypedAst>) -> Self::ExprOut {

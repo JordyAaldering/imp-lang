@@ -28,16 +28,16 @@ impl Operator for PrecedenceFloor {
 impl Bop {
     pub(super) fn symbol(self) -> &'static str {
         match self {
-            Bop::Add => "@add",
-            Bop::Sub => "@sub",
-            Bop::Mul => "@mul",
-            Bop::Div => "@div",
-            Bop::Lt => "@lt",
-            Bop::Le => "@le",
-            Bop::Gt => "@gt",
-            Bop::Ge => "@ge",
-            Bop::Eq => "@eq",
-            Bop::Ne => "@ne",
+            Bop::Add => "add",
+            Bop::Sub => "sub",
+            Bop::Mul => "mul",
+            Bop::Div => "div",
+            Bop::Lt => "lt",
+            Bop::Le => "le",
+            Bop::Gt => "gt",
+            Bop::Ge => "ge",
+            Bop::Eq => "eq",
+            Bop::Ne => "ne",
         }
     }
 }
@@ -71,8 +71,8 @@ pub(super) enum Uop {
 impl Uop {
     pub(super) fn symbol(self) -> &'static str {
         match self {
-            Uop::Neg => "@neg",
-            Uop::Not => "@not",
+            Uop::Neg => "neg",
+            Uop::Not => "not",
         }
     }
 }
