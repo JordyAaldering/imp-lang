@@ -1,4 +1,5 @@
-use std::{collections::HashMap, iter::Peekable};
+use std::{collections::HashMap, iter::Peekable, mem};
+
 use typed_arena::Arena;
 
 use super::{lexer::*, operator::*, span::*};
@@ -35,13 +36,11 @@ impl<'src, 'ast> Parser<'src, 'ast> {
     }
 
     fn alloc_lvis(&self, name: String, ty: Option<Type>) -> &'ast VarInfo<'ast, ParsedAst> {
-        // SAFETY: arenas are owned by Parser and moved into each Fundef after parsing.
-        unsafe { std::mem::transmute(self.decs_arena.alloc(VarInfo { name, ty, ssa: () })) }
+        unsafe { mem::transmute(self.decs_arena.alloc(VarInfo { name, ty, ssa: () })) }
     }
 
     fn alloc_expr(&self, expr: Expr<'ast, ParsedAst>) -> &'ast Expr<'ast, ParsedAst> {
-        // SAFETY: arenas are owned by Parser and moved into each Fundef after parsing.
-        unsafe { std::mem::transmute(self.expr_arena.alloc(expr)) }
+        unsafe { mem::transmute(self.expr_arena.alloc(expr)) }
     }
 
     fn matches(&mut self, expected: Token) -> Option<(Token, Span)> {
@@ -69,6 +68,9 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         self.lexer.next().ok_or(ParseError::UnexpectedEof)
     }
 
+    /// ```bfn
+    /// <program> = <fundef>*
+    /// ```
     pub fn parse_program(&mut self) -> ParseResult<Program<'ast, ParsedAst>> {
         let mut overloads = HashMap::new();
         let fundefs_arena: Arena<Fundef<'ast, ParsedAst>> = Arena::new();
@@ -76,12 +78,12 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         while let Some((token, _)) = self.lexer.peek() {
             match token {
                 Token::Fn => {
-                    let fundef = self.parse_fundef()?;
+                    let (fundef, _) = self.parse_fundef()?;
                     let name = fundef.name.clone();
                     let sig = fundef.signature();
                     let fundef_ref = fundefs_arena.alloc(fundef);
                     // SAFETY: fundefs_arena is moved into Program before return.
-                    let fundef_ref: &'ast Fundef<'ast, ParsedAst> = unsafe { std::mem::transmute(fundef_ref) };
+                    let fundef_ref: &'ast Fundef<'ast, ParsedAst> = unsafe { mem::transmute(fundef_ref) };
                     let group = overloads.entry(name).or_insert(HashMap::new());
                     let fundefs = group.entry(sig).or_insert(Vec::new());
                     fundefs.push(fundef_ref);
@@ -99,38 +101,30 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         })
     }
 
-    fn parse_fundef(&mut self) -> ParseResult<Fundef<'ast, ParsedAst>> {
+    /// ```bnf
+    /// <fundef> = "fn" <id> "(" <fargs>? ")" "->" <type> "{" <body> "}"
+    /// ```
+    fn parse_fundef(&mut self) -> ParseResult<(Fundef<'ast, ParsedAst>, Span)> {
         self.decs_arena = Arena::new();
         self.expr_arena = Arena::new();
 
-        let _ = self.expect(Token::Fn)?;
+        let (_, span_from) = self.expect(Token::Fn)?;
         let (name, _) = self.parse_id()?;
 
-        let mut args = Vec::new();
-
         self.expect(Token::LParen)?;
-        if self.matches(Token::RParen).is_none() {
-            args.push(self.parse_farg()?);
-
-            while self.matches(Token::Comma).is_some() {
-                args.push(self.parse_farg()?);
-            }
-
-            self.expect(Token::RParen)?;
-        }
-
+        let (args, _) = self.parse_fargs()?;
         self.expect(Token::Arrow)?;
 
         let (ret_type, _) = self.parse_type()?;
 
         self.expect(Token::LBrace)?;
         let body = self.parse_body()?;
-        self.expect(Token::RBrace)?;
+        let (_, span_to) = self.expect(Token::RBrace)?;
 
-        let decs = std::mem::take(&mut self.decs_arena);
-        let exprs = std::mem::take(&mut self.expr_arena);
+        let decs = mem::take(&mut self.decs_arena);
+        let exprs = mem::take(&mut self.expr_arena);
 
-        Ok(Fundef {
+        Ok((Fundef {
             name,
             args,
             shape_prelude: Vec::new(),
@@ -139,13 +133,31 @@ impl<'src, 'ast> Parser<'src, 'ast> {
             exprs,
             body,
             ret_type,
-        })
+        }, span_from.to(&span_to)))
     }
 
-    fn parse_farg(&mut self) -> ParseResult<Farg> {
-        let (ty, _) = self.parse_type()?;
-        let (id, _) = self.parse_id()?;
-        Ok(Farg { id, ty })
+    /// ```bnf
+    /// <fargs> = <farg> ("," <farg>)*
+    /// ```
+    fn parse_fargs(&mut self) -> ParseResult<(Vec<Farg>, Span)> {
+        let mut args = Vec::new();
+        let (arg0, mut span) = self.parse_farg()?;
+        args.push(arg0);
+        while self.matches(Token::Comma).is_some() {
+            let (arg, s) = self.parse_farg()?;
+            span.extend(&s);
+            args.push(arg);
+        }
+        Ok((args, span))
+    }
+
+    /// ```bnf
+    /// <farg> = <type> <id>
+    /// ```
+    fn parse_farg(&mut self) -> ParseResult<(Farg, Span)> {
+        let (ty, ty_span) = self.parse_type()?;
+        let (id, id_span) = self.parse_id()?;
+        Ok((Farg { id, ty }, ty_span.to(&id_span)))
     }
 
     /// ```bnf
