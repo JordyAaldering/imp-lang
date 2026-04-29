@@ -439,7 +439,7 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
     fn trav_fold(&mut self, fold: &mut Fold<'ast, UntypedAst>) -> Self::ExprOut {
         let neutral_ty = self.trav_id(&mut fold.neutral);
 
-        let selection_ty = self.trav_tensor(&mut fold.selection);
+        let _selection_ty = self.trav_tensor(&mut fold.selection);
 
         //if !types_compatible(&neutral_ty, &selection_ty) {
         //    self.errors.push(InferenceError::FoldSelectionTypeMismatch {
