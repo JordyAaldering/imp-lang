@@ -2,14 +2,14 @@ use std::mem;
 
 use typed_arena::Arena;
 
-use crate::ast::*;
+use crate::{ast::*, trav_name::TravName};
 
 pub fn flatten<'ast>(program: &mut Program<'ast, ParsedAst>) {
     Flatten::new().trav_program(program);
 }
 
 struct Flatten<'ast> {
-    uid: usize,
+    trav_name: TravName,
     decs: Arena<VarInfo<'ast, ParsedAst>>,
     exprs: Arena<Expr<'ast, ParsedAst>>,
     new_assigns: Vec<Assign<'ast, ParsedAst>>,
@@ -18,16 +18,11 @@ struct Flatten<'ast> {
 impl<'ast> Flatten<'ast> {
     fn new() -> Self {
         Self {
-            uid: 0,
+            trav_name: TravName::new(crate::Phase::FLT),
             decs: Arena::new(),
             exprs: Arena::new(),
             new_assigns: Vec::new(),
         }
-    }
-
-    fn fresh_uid(&mut self) -> String {
-        self.uid += 1;
-        format!("_flt_{}", self.uid)
     }
 
     fn alloc_lvis(&self, name: String, ty: Option<Type>) -> &'ast VarInfo<'ast, ParsedAst> {
@@ -39,7 +34,7 @@ impl<'ast> Flatten<'ast> {
     }
 
     fn emit_expr(&mut self, expr: Expr<'ast, ParsedAst>) -> Expr<'ast, ParsedAst> {
-        let name = self.fresh_uid();
+        let name = self.trav_name.next();
         let lvis = self.alloc_lvis(name.clone(), None);
         let rhs = self.alloc_expr(expr);
         self.new_assigns.push(Assign { lhs: lvis, expr: rhs });
@@ -59,7 +54,6 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
         debug_assert!(self.exprs.len() == 0);
         debug_assert!(self.new_assigns.is_empty());
 
-        self.uid = 0;
         self.decs = mem::take(&mut fundef.decs);
         self.exprs = mem::take(&mut fundef.exprs);
 

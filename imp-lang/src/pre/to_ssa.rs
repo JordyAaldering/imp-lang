@@ -2,7 +2,7 @@ use std::{collections::HashMap, mem};
 
 use typed_arena::Arena;
 
-use crate::ast::*;
+use crate::{ast::*, trav_name::TravName};
 
 pub fn to_ssa<'ast>(program: Program<'ast, ParsedAst>) -> Program<'ast, UntypedAst> {
     let mut overloads = HashMap::new();
@@ -34,7 +34,7 @@ pub fn to_ssa<'ast>(program: Program<'ast, ParsedAst>) -> Program<'ast, UntypedA
 }
 
 pub struct ToSsa<'ast> {
-    uid: usize,
+    trav_name: TravName,
     decs_arena: Arena<VarInfo<'ast, UntypedAst>>,
     expr_arena: Arena<Expr<'ast, UntypedAst>>,
     new_assigns: Vec<Stmt<'ast, UntypedAst>>,
@@ -44,17 +44,12 @@ pub struct ToSsa<'ast> {
 impl<'ast> ToSsa<'ast> {
     fn new() -> Self {
         Self {
-            uid: 0,
+            trav_name: TravName::new(crate::Phase::SSA),
             decs_arena: Arena::new(),
             expr_arena: Arena::new(),
             new_assigns: Vec::new(),
             env_stack: Vec::new(),
         }
-    }
-
-    fn fresh_uid(&mut self) -> String {
-        self.uid += 1;
-        format!("_ssa_{}", self.uid)
     }
 
     fn alloc_lvis(&self, name: String, ssa: Option<&'ast Expr<'ast, UntypedAst>>) -> &'ast VarInfo<'ast, UntypedAst> {
@@ -167,7 +162,7 @@ impl<'ast> ToSsa<'ast> {
 
     fn trav_assign(&mut self, assign: Assign<'ast, ParsedAst>) -> Assign<'ast, UntypedAst> {
         let old_name = assign.lhs.name.clone();
-        let new_name = self.fresh_uid();
+        let new_name = self.trav_name.next();
 
         let expr = self.trav_expr((*assign.expr).clone());
         let expr = self.alloc_expr(expr);

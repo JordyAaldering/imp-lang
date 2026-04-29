@@ -1,3 +1,4 @@
+mod trav_name;
 mod ast;
 mod trav;
 mod show;
@@ -8,7 +9,7 @@ mod tc;
 mod opt;
 mod cg;
 
-use std::{fs, path::PathBuf};
+use std::{fmt, fs, path::PathBuf};
 
 use clap::{Parser, ValueEnum};
 
