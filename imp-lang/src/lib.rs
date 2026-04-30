@@ -9,7 +9,7 @@ mod tc;
 mod opt;
 mod cg;
 
-use std::{fmt, fs, path::PathBuf};
+use std::{fs, path::PathBuf};
 
 use clap::{Parser, ValueEnum};
 
