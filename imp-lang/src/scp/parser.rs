@@ -523,23 +523,19 @@ impl<'src, 'ast> Parser<'src, 'ast> {
     }
 
     fn parse_type(&mut self) -> ParseResult<(Type, Span)> {
-        let (base, span) = self.parse_basetype()?;
+        let (base, span_from) = self.parse_basetype()?;
 
-        let ty = if self.matches(&Token::LSquare).is_some() {
-            let shape = if self.matches(&Token::Mul).is_some() {
-                TypePattern::Any
-            } else {
-                let axes = self.parse_axes()?;
-                TypePattern::Axes(axes)
-            };
+        if self.matches(&Token::LSquare).is_none() {
+            let ty = Type::scalar(base);
+            return Ok((ty, span_from));
+        }
 
-            self.expect(Token::RSquare)?;
-            Type { ty: base, shape }
-        } else {
-            Type::scalar(base)
-        };
+        let (axes, _) = self.parse_items(Token::Comma, |p| p.parse_axis())?;
+        let span_to = self.expect(Token::RSquare)?;
 
-        Ok((ty, span))
+        let shape = TypePattern::Axes(axes);
+        let ty = Type { ty: base, shape };
+        Ok((ty, span_from.to(&span_to)))
     }
 
     fn parse_basetype(&mut self) -> ParseResult<(BaseType, Span)> {
@@ -560,22 +556,15 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         Ok((base, span))
     }
 
-    fn parse_axes(&mut self) -> ParseResult<Vec<AxisPattern>> {
-        let mut axes = Vec::new();
-        axes.push(self.parse_axis()?);
-        while self.matches(&Token::Comma).is_some() {
-            axes.push(self.parse_axis()?);
-        }
-        Ok(axes)
-    }
-
-    fn parse_axis(&mut self) -> ParseResult<AxisPattern> {
+    fn parse_axis(&mut self) -> ParseResult<(AxisPattern, Span)> {
         let (token, span) = self.next()?;
-        match token {
-            Token::NatValue(n) => Ok(AxisPattern::Dim(DimPattern::Known(n as usize))),
+        let pattern = match token {
+            Token::NatValue(n) => {
+                AxisPattern::Dim(DimPattern::Known(n as usize))
+            }
             Token::Identifier(name) => {
                 if name == "_" {
-                    Ok(AxisPattern::Dim(DimPattern::Any))
+                    AxisPattern::Dim(DimPattern::Any)
                 } else if self.matches(&Token::Gt).is_some() || self.matches(&Token::Ge).is_some() {
                     match self.next()? {
                         (Token::NatValue(_), _) => {}
@@ -589,23 +578,28 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                     }
                     self.expect(Token::Colon)?;
                     let (shp_name, _) = self.parse_id()?;
-                    Ok(AxisPattern::Rank(RankCapture {
+                    AxisPattern::Rank(RankCapture {
                         dim_name: name,
                         shp_name,
-                    }))
+                    })
                 } else if self.matches(&Token::Colon).is_some() {
                     let (shp_name, _) = self.parse_id()?;
-                    Ok(AxisPattern::Rank(RankCapture {
+                    AxisPattern::Rank(RankCapture {
                         dim_name: name,
                         shp_name,
-                    }))
+                    })
                 } else {
-                    Ok(AxisPattern::Dim(DimPattern::Var(name)))
+                    AxisPattern::Dim(DimPattern::Var(name))
                 }
             }
-            Token::Dot => Ok(AxisPattern::Dim(DimPattern::Any)),
-            _ => Err(ParseError::UnexpectedToken("axis pattern".to_owned(), token, span)),
-        }
+            Token::Dot => {
+                AxisPattern::Dim(DimPattern::Any)
+            }
+            _ => {
+                return Err(ParseError::UnexpectedToken("axis pattern".to_owned(), token, span));
+            }
+        };
+        Ok((pattern, span))
     }
 
     fn parse_id(&mut self) -> ParseResult<(String, Span)> {

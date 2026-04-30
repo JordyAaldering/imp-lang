@@ -115,7 +115,7 @@ impl<'ast> AnalyseTp {
                             shp_expr,
                             Type {
                                 ty: BaseType::Usize,
-                                shape: TypePattern::Any,
+                                shape: TypePattern::any(),
                             },
                         ));
                     }

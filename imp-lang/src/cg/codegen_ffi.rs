@@ -141,7 +141,7 @@ impl CompileFfi {
 }
 
 fn is_static_array(ty: &Type) -> bool {
-    ty.is_array() && !matches!(ty.shape, TypePattern::Any)
+    ty.is_array()
 }
 
 fn join_args(args: &[Farg], map_ty: fn(&Type) -> String) -> String {
@@ -152,7 +152,7 @@ fn join_args(args: &[Farg], map_ty: fn(&Type) -> String) -> String {
 }
 
 fn rust_api_type(ty: &Type) -> String {
-    if matches!(ty.shape, TypePattern::Any) {
+    if ty.is_array_or_scalar() {
         format!("ImpDyn<{}>", rust_base_type(&ty.ty))
     } else if ty.is_array() {
         format!("ImpArray<{}>", rust_base_type(&ty.ty))
@@ -162,7 +162,7 @@ fn rust_api_type(ty: &Type) -> String {
 }
 
 fn rust_api_arg_type(ty: &Type) -> String {
-    if matches!(ty.shape, TypePattern::Any) {
+    if ty.is_array_or_scalar() {
         format!("ImpArrayOrScalar<{}>", rust_base_type(&ty.ty))
     } else {
         rust_api_type(ty)
@@ -174,7 +174,7 @@ fn rust_api_ret_type(ty: &Type) -> String {
 }
 
 fn rust_ffi_type(ty: &Type) -> String {
-    if matches!(ty.shape, TypePattern::Any) {
+    if ty.is_array_or_scalar() {
         format!("ImpDyn<{}>", rust_base_type(&ty.ty))
     } else if ty.is_array() {
         "ImpArrayRaw".to_owned()
@@ -204,7 +204,7 @@ fn emit_marshaled_call_args(out: &mut String, args: &[Farg]) -> Vec<String> {
         if is_static_array(&arg.ty) {
             out.push_str(&format!("    let {}_raw = {}.into_raw();\n", arg.id, arg.id));
             call_args.push(format!("{}_raw", arg.id));
-        } else if matches!(arg.ty.shape, TypePattern::Any) {
+        } else if arg.ty.is_array_or_scalar() {
             out.push_str(&format!("    let mut {}_dyn = {};\n", arg.id, arg.id));
             out.push_str(&format!("    let {}_ffi = match &mut {}_dyn {{\n", arg.id, arg.id));
             out.push_str("        ImpArrayOrScalar::Scalar(v) => ImpDyn::from_scalar(*v),\n");
@@ -225,7 +225,7 @@ fn emit_marshaled_branch_args(out: &mut String, args: &[Farg], branch_names: &[S
         if is_static_array(&arg.ty) {
             out.push_str(&format!("{pad}let {}_raw = {}.into_raw();\n", branch_name, branch_name));
             call_args.push(format!("{}_raw", branch_name));
-        } else if matches!(arg.ty.shape, TypePattern::Any) {
+        } else if arg.ty.is_array_or_scalar() {
             out.push_str(&format!("{pad}let mut {}_dyn = {};\n", branch_name, branch_name));
             out.push_str(&format!("{pad}let {}_ffi = match &mut {}_dyn {{\n", branch_name, branch_name));
             out.push_str(&format!("{pad}    ImpArrayOrScalar::Scalar(v) => ImpDyn::from_scalar(*v),\n"));
@@ -240,7 +240,7 @@ fn emit_marshaled_branch_args(out: &mut String, args: &[Farg], branch_names: &[S
 }
 
 fn emit_return_conversion(symbol_name: &str, ret_type: &Type, call_args: &[String]) -> String {
-    if matches!(ret_type.shape, TypePattern::Any) {
+    if ret_type.is_array_or_scalar() {
         format!("let res0_dyn = unsafe {{ IMP_{}({}) }};\nunsafe {{ res0_dyn.into_array_or_scalar() }}",
             symbol_name, call_args.join(", ") )
     } else if is_static_array(ret_type) {

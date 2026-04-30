@@ -147,7 +147,7 @@ fn base_ctype(ty: &Type) -> String {
 }
 
 fn dyn_ctype(ty: &Type) -> String {
-    if matches!(ty.shape, TypePattern::Any) {
+    if ty.is_array_or_scalar() {
         use BaseType::*;
         match &ty.ty {
             Bool => "ImpDynBool".to_owned(),

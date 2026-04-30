@@ -30,10 +30,6 @@ pub enum TypePattern {
     ///
     /// Example: `u32[42]`, `u32[n]`, `u32[m,d:shp,n]`
     Axes(Vec<AxisPattern>),
-    /// Shape fully unconstrained.
-    ///
-    /// Example: `u32[*]`
-    Any,
 }
 
 /// One entry in an `Axes` shape pattern
@@ -81,12 +77,19 @@ impl Type {
         Self { ty, shape: TypePattern::Axes(vec![AxisPattern::Dim(dim)]) }
     }
 
+    /// TODO: we might not be sure whether this is a scalar (i32[d:shp] can be both)
     pub fn is_scalar(&self) -> bool {
         matches!(self.shape, TypePattern::Scalar)
     }
 
+    /// TODO: we might not be sure whether this is an array (i32[d:shp] can be both)
     pub fn is_array(&self) -> bool {
         !self.is_scalar()
+    }
+
+    /// TODO: merge this function and the ones above it into an enum result
+    pub fn is_array_or_scalar(&self) -> bool {
+        false
     }
 
     pub fn rank(&self) -> Option<u8> {
@@ -99,7 +102,14 @@ impl Type {
                     Some(axes.len() as u8)
                 }
             }
-            TypePattern::Any => None,
         }
+    }
+}
+
+impl TypePattern {
+    /// TODO: this is not yet correct, currently it defines any one-dimensional array
+    /// But first, lets make the rust type checker happy
+    pub fn any() -> Self {
+        TypePattern::Axes(vec![AxisPattern::Dim(DimPattern::Any)])
     }
 }

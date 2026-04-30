@@ -123,7 +123,7 @@ impl CompileC {
                 .collect();
             let call_expr = format!("IMP_{}({})", fundef.name, call_args.join(", "));
 
-            if matches!(fundef.ret_type.shape, TypePattern::Any) {
+            if fundef.ret_type.is_array_or_scalar() {
                 self.push_line(&format!("return {call_expr};"));
             } else if fundef.ret_type.is_array() {
                 let dyn_ty = dyn_ctype(&fundef.ret_type.ty);
@@ -155,7 +155,7 @@ impl CompileC {
         let declared_ty = self.ret_type.clone().unwrap_or_else(|| self.id_type(&ret));
         let value_ty = self.id_type(&ret);
 
-        if matches!(declared_ty.shape, TypePattern::Any) {
+        if declared_ty.is_array_or_scalar() {
             let dyn_ty = dyn_ctype(&declared_ty.ty);
             self.push_line(&format!("if ({name}.is_array) {{"));
             self.indent += 1;
@@ -169,7 +169,7 @@ impl CompileC {
             self.push_line("}");
             self.push_line(&format!("return {};", name));
         } else if declared_ty.is_array() {
-            if matches!(value_ty.shape, TypePattern::Any) {
+            if value_ty.is_array_or_scalar() {
                 self.push_line(&format!("if (!{name}.is_array) {{"));
                 self.indent += 1;
                 self.push_line("fprintf(stderr, \"return type mismatch: expected array\\n\");");
@@ -188,7 +188,7 @@ impl CompileC {
                 ));
             }
         } else {
-            if matches!(value_ty.shape, TypePattern::Any) {
+            if value_ty.is_array_or_scalar() {
                 self.push_line(&format!("if ({name}.is_array) {{"));
                 self.indent += 1;
                 self.push_line("fprintf(stderr, \"return type mismatch: expected scalar\\n\");");
@@ -585,12 +585,12 @@ impl<'ast> Traverse<'ast> for CompileC {
             Id::Var(v) => v.ty.clone(),
         }).collect();
 
-        let needs_runtime_wrapper = arg_types.iter().any(|t| matches!(t.shape, TypePattern::Any));
+        let needs_runtime_wrapper = arg_types.iter().any(|t| t.is_array_or_scalar());
         let name = if needs_runtime_wrapper {
             let root = target_base_name.split("__").next().unwrap_or(&target_base_name);
             let any_types: Vec<Type> = arg_types
                 .iter()
-                .map(|t| Type { ty: t.ty.clone(), shape: TypePattern::Any })
+                .map(|t| Type { ty: t.ty.clone(), shape: TypePattern::any() })
                 .collect();
             rename_fundefs::mangle_call_name(root, &any_types)
         } else {
@@ -726,7 +726,7 @@ fn base_ctype(ty: &Type) -> String {
 }
 
 fn full_ctype(ty: &Type) -> String {
-    if matches!(ty.shape, TypePattern::Any) {
+    if ty.is_array_or_scalar() {
         use BaseType::*;
         return match &ty.ty {
             Bool => "ImpDynBool".to_owned(),
@@ -749,14 +749,15 @@ fn full_ctype(ty: &Type) -> String {
 fn dyn_ctype(base: &BaseType) -> String {
     full_ctype(&Type {
         ty: base.clone(),
-        shape: TypePattern::Any,
+        shape: TypePattern::any(),
     })
 }
 
 fn shape_match_condition(shape: &TypePattern, arg: &str) -> String {
     match shape {
-        TypePattern::Scalar => format!("!{arg}.is_array"),
-        TypePattern::Any => "1".to_owned(),
+        TypePattern::Scalar => {
+            format!("!{arg}.is_array")
+        }
         TypePattern::Axes(axes) => {
             if axes.iter().any(|ax| matches!(ax, AxisPattern::Rank(_))) {
                 return format!("{arg}.is_array");
@@ -779,7 +780,6 @@ fn shape_match_condition(shape: &TypePattern, arg: &str) -> String {
 fn wrapper_call_arg(shape: &TypePattern, arg: &str) -> String {
     match shape {
         TypePattern::Scalar => format!("{arg}.data.scalar"),
-        TypePattern::Any => arg.to_owned(),
         TypePattern::Axes(_) => format!("{arg}.data.array"),
     }
 }

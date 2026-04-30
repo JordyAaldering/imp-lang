@@ -233,7 +233,6 @@ impl<'ast, Ast: AstConfig + 'ast> Traverse<'ast> for Show<'ast, Ast> {
 
         match &ty.shape {
             TypePattern::Scalar => {}
-            TypePattern::Any => self.write("[*]"),
             TypePattern::Axes(axes) => {
                 self.write("[");
                 for axis in axes {
