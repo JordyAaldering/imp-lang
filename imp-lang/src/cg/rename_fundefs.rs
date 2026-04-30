@@ -132,7 +132,6 @@ fn mangle_shape(shape: &TypePattern) -> String {
 fn mangle_axis(axis: &AxisPattern) -> String {
     match axis {
         AxisPattern::Dim(dim) => match dim {
-            DimPattern::Any => "any".to_owned(),
             DimPattern::Known(v) => v.to_string(),
             DimPattern::Var(ext) => ext.clone(),
         },

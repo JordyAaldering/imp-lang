@@ -237,7 +237,6 @@ impl<'ast, Ast: AstConfig + 'ast> Traverse<'ast> for Show<'ast, Ast> {
                 self.write("[");
                 for axis in axes {
                     match axis {
-                        AxisPattern::Dim(DimPattern::Any) => self.write("_"),
                         AxisPattern::Dim(DimPattern::Known(n)) => self.write(&n.to_string()),
                         AxisPattern::Dim(DimPattern::Var(var)) => self.write(&var),
                         AxisPattern::Rank(capture) => {

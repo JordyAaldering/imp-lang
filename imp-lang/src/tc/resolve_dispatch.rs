@@ -431,12 +431,9 @@ fn axis_more_or_equal(a: &AxisPattern, b: &AxisPattern) -> bool {
 
 fn dim_more_or_equal(a: &DimPattern, b: &DimPattern) -> bool {
     match (a, b) {
-        (DimPattern::Known(x), DimPattern::Known(y)) => x == y,
         (DimPattern::Known(_), DimPattern::Var(_)) => true,
-        (DimPattern::Known(_), DimPattern::Any) => true,
+        (DimPattern::Known(x), DimPattern::Known(y)) => x == y,
         (DimPattern::Var(x), DimPattern::Var(y)) => x == y,
-        (DimPattern::Var(_), DimPattern::Any) => true,
-        (DimPattern::Any, DimPattern::Any) => true,
         _ => false,
     }
 }
@@ -472,7 +469,6 @@ fn axes_compatible(expected: &AxisPattern, provided: &AxisPattern) -> bool {
 
 fn dims_compatible(expected: &DimPattern, provided: &DimPattern) -> bool {
     match (expected, provided) {
-        (DimPattern::Any, _) | (_, DimPattern::Any) => true,
         (DimPattern::Known(e), DimPattern::Known(p)) => e == p,
         (DimPattern::Var(_), DimPattern::Known(_)) => true,
         (DimPattern::Known(_), DimPattern::Var(_)) => true,
@@ -490,6 +486,6 @@ fn type_requires_runtime_dispatch(ty: &Type) -> bool {
 fn axis_requires_runtime_dispatch(axis: &AxisPattern) -> bool {
     match axis {
         AxisPattern::Rank(_) => true,
-        AxisPattern::Dim(dim) => matches!(dim, DimPattern::Any | DimPattern::Var(_)),
+        AxisPattern::Dim(dim) => matches!(dim, DimPattern::Var(_)),
     }
 }

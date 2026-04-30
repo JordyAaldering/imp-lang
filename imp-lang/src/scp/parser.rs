@@ -563,9 +563,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                 AxisPattern::Dim(DimPattern::Known(n as usize))
             }
             Token::Identifier(name) => {
-                if name == "_" {
-                    AxisPattern::Dim(DimPattern::Any)
-                } else if self.matches(&Token::Gt).is_some() || self.matches(&Token::Ge).is_some() {
+                if self.matches(&Token::Gt).is_some() || self.matches(&Token::Ge).is_some() {
                     match self.next()? {
                         (Token::NatValue(_), _) => {}
                         (token, span) => {
@@ -591,9 +589,6 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                 } else {
                     AxisPattern::Dim(DimPattern::Var(name))
                 }
-            }
-            Token::Dot => {
-                AxisPattern::Dim(DimPattern::Any)
             }
             _ => {
                 return Err(ParseError::UnexpectedToken("axis pattern".to_owned(), token, span));

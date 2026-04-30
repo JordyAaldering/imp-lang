@@ -80,10 +80,9 @@ impl CheckTypePatterns {
 					defined_symbols.insert(capture.dim_name.clone());
 					defined_symbols.insert(capture.shp_name.clone());
 				}
-				AxisPattern::Dim(DimPattern::Any) | AxisPattern::Dim(DimPattern::Known(_)) => {}
+				AxisPattern::Dim(DimPattern::Known(_)) => {}
 			}
 		}
-
 	}
 
 	fn check_return_pattern(&mut self, fundef_name: &str, ret_shape: &TypePattern, defined_symbols: &HashSet<String>) {

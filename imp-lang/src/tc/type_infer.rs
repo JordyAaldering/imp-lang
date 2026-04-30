@@ -144,10 +144,6 @@ impl<'ast> TypeInfer<'ast> {
             TypePattern::Axes(axes) if axes.len() == 1 && matches!(axes[0], AxisPattern::Dim(_)) => {
                 match &axes[0] {
                     AxisPattern::Dim(DimPattern::Known(k)) => (Type::vector_dim(ub_ty.ty.clone(), DimPattern::Known(*k)), Some(*k)),
-                    AxisPattern::Dim(DimPattern::Any) | AxisPattern::Dim(DimPattern::Var(_)) => (
-                        Type { ty: ub_ty.ty.clone(), shape: TypePattern::Axes(vec![AxisPattern::Dim(DimPattern::Any)]) },
-                        Some(1),
-                    ),
                     _ => unreachable!(),
                 }
             }
@@ -348,7 +344,7 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
                         provided: arr_ty,
                     });
                 }
-                Type::vector_dim(BaseType::Usize, DimPattern::Any)
+                Type::vector_dim(BaseType::Usize, DimPattern::any())
             }
             DimA(arr) => {
                 let arr_ty = self.trav_id(arr);
@@ -415,7 +411,7 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
         let (iv_ty, leading_k) = Self::tensor_iv_and_dims(&ub_ty);
 
         let leading_axes: Option<Vec<AxisPattern>> = ub_named_axes.or_else(|| {
-            leading_k.map(|k| (0..k).map(|_| AxisPattern::Dim(DimPattern::Any)).collect())
+            leading_k.map(|k| (0..k).map(|_| AxisPattern::Dim(DimPattern::any())).collect())
         });
 
         self.typed.insert(tensor.iv as *const _, iv_ty.clone());
@@ -543,7 +539,6 @@ fn axes_compatible(expected: &AxisPattern, provided: &AxisPattern) -> bool {
 
 fn dims_compatible(expected: &DimPattern, provided: &DimPattern) -> bool {
     match (expected, provided) {
-        (DimPattern::Any, _) | (_, DimPattern::Any) => true,
         (DimPattern::Known(e), DimPattern::Known(p)) => e == p,
         (DimPattern::Var(_), DimPattern::Known(_)) => true,
         (DimPattern::Known(_), DimPattern::Var(_)) => true,
@@ -647,12 +642,9 @@ fn axis_more_or_equal(a: &AxisPattern, b: &AxisPattern) -> bool {
 
 fn dim_more_or_equal(a: &DimPattern, b: &DimPattern) -> bool {
     match (a, b) {
-        (DimPattern::Known(x), DimPattern::Known(y)) => x == y,
         (DimPattern::Known(_), DimPattern::Var(_)) => true,
-        (DimPattern::Known(_), DimPattern::Any) => true,
+        (DimPattern::Known(x), DimPattern::Known(y)) => x == y,
         (DimPattern::Var(x), DimPattern::Var(y)) => x == y,
-        (DimPattern::Var(_), DimPattern::Any) => true,
-        (DimPattern::Any, DimPattern::Any) => true,
         _ => false,
     }
 }
@@ -667,6 +659,6 @@ fn type_requires_runtime_dispatch(ty: &Type) -> bool {
 fn axis_requires_runtime_dispatch(axis: &AxisPattern) -> bool {
     match axis {
         AxisPattern::Rank(_) => true,
-        AxisPattern::Dim(dim) => matches!(dim, DimPattern::Any | DimPattern::Var(_)),
+        AxisPattern::Dim(dim) => matches!(dim, DimPattern::Var(_)),
     }
 }

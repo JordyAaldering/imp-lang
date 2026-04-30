@@ -119,7 +119,7 @@ impl<'ast> AnalyseTp {
                             },
                         ));
                     }
-                    AxisPattern::Dim(DimPattern::Any) | AxisPattern::Dim(DimPattern::Known(_)) => {}
+                    AxisPattern::Dim(DimPattern::Known(_)) => {}
                 }
             }
         }
@@ -163,7 +163,7 @@ impl<'ast> AnalyseTp {
                         constrained_by,
                     });
                 }
-                AxisPattern::Dim(DimPattern::Any) | AxisPattern::Dim(DimPattern::Known(_)) => {}
+                AxisPattern::Dim(DimPattern::Known(_)) => {}
             }
         }
 

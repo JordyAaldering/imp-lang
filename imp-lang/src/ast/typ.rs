@@ -44,10 +44,6 @@ pub enum AxisPattern {
 /// A single dimension pattern entry
 #[derive(Clone, Debug)]
 pub enum DimPattern {
-    /// Size unknown
-    ///
-    /// Example: `u32[_]`
-    Any,
     /// Compile-time constant.
     ///
     /// Example: `u32[42]`
@@ -110,6 +106,15 @@ impl TypePattern {
     /// TODO: this is not yet correct, currently it defines any one-dimensional array
     /// But first, lets make the rust type checker happy
     pub fn any() -> Self {
-        TypePattern::Axes(vec![AxisPattern::Dim(DimPattern::Any)])
+        TypePattern::Axes(vec![AxisPattern::Rank(RankCapture {
+            dim_name: String::new(),
+            shp_name: String::new(),
+        })])
+    }
+}
+
+impl DimPattern {
+    pub fn any() -> Self {
+        DimPattern::Var(String::new())
     }
 }

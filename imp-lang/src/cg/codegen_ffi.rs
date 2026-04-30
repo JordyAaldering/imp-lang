@@ -287,7 +287,6 @@ fn family_match_guard(args: &[Farg]) -> String {
                         bound_dims.push((extent.clone(), expr));
                     }
                 }
-                AxisPattern::Dim(DimPattern::Any) => {}
                 AxisPattern::Rank(capture) => {
                     let expr = format!("arg{arg_index}.shp.len()");
                     if let Some((_, bound_expr)) = bound_ranks.iter().find(|(name, _)| name == &capture.dim_name) {
@@ -344,7 +343,6 @@ fn generate_shape_checks(args: &[Farg]) -> String {
                         bound_dims.push(binding);
                     }
                 }
-                AxisPattern::Dim(DimPattern::Any) => {}
                 AxisPattern::Rank(capture) => {
                     let binding = format!("_imp_rank_{}", capture.dim_name);
                     if bound_ranks.iter().any(|existing| existing == &binding) {
