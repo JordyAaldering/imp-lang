@@ -43,14 +43,15 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         unsafe { mem::transmute(self.expr_arena.alloc(expr)) }
     }
 
-    fn matches(&mut self, expected: &Token) -> Option<(Token, Span)> {
+    fn matches(&mut self, expected: &Token) -> Option<Span> {
         self.lexer.next_if(|(token, _)| token == expected)
+            .map(|(_, span)| span)
     }
 
-    fn expect(&mut self, expected: Token) -> ParseResult<(Token, Span)> {
+    fn expect(&mut self, expected: Token) -> ParseResult<Span> {
         let (token, span) = self.next()?;
         if token == expected {
-            Ok((token, span))
+            Ok(span)
         } else {
             Err(ParseError::UnexpectedToken(
                 format!("{:?}", expected),
@@ -71,14 +72,14 @@ impl<'src, 'ast> Parser<'src, 'ast> {
     /// ```bnf
     /// <items> = <item> ("sep" <item>)*
     /// ```
-    fn parse_items<T, F>(&mut self, sep: &Token, parse_item: F) -> ParseResult<(Vec<T>, Span)>
+    fn parse_items<T, F>(&mut self, sep: Token, parse_item: F) -> ParseResult<(Vec<T>, Span)>
     where
         F: Fn(&mut Self) -> ParseResult<(T, Span)>,
     {
         let mut items = Vec::new();
         let (arg0, mut span) = parse_item(self)?;
         items.push(arg0);
-        while self.matches(sep).is_some() {
+        while self.matches(&sep).is_some() {
             let (arg, s) = parse_item(self)?;
             span.extend(&s);
             items.push(arg);
@@ -86,17 +87,17 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         Ok((items, span))
     }
 
-    fn parse_items_enclosed<T, F >(&mut self, open: Token, close: Token, sep: &Token, parse_item: F) -> ParseResult<(Vec<T>, Span)>
+    fn parse_items_enclosed<T, F >(&mut self, open: Token, close: Token, sep: Token, parse_item: F) -> ParseResult<(Vec<T>, Span)>
     where
         F: Fn(&mut Self) -> ParseResult<(T, Span)>,
     {
-        let (_, span_from) = self.expect(open)?;
+        let span_from = self.expect(open)?;
 
-        if let Some((_, span_to)) = self.matches(&close) {
+        if let Some(span_to) = self.matches(&close) {
             Ok((Vec::new(), span_from.to(&span_to)))
         } else {
             let (items, _) = self.parse_items(sep, parse_item)?;
-            let (_, span_to) = self.expect(close)?;
+            let span_to = self.expect(close)?;
             Ok((items, span_from.to(&span_to)))
         }
     }
@@ -141,11 +142,11 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         self.decs_arena = Arena::new();
         self.expr_arena = Arena::new();
 
-        let (_, span_from) = self.expect(Token::Fn)?;
+        let span_from = self.expect(Token::Fn)?;
         let (name, _) = self.parse_id()?;
 
         let (args, _) = self.parse_items_enclosed(
-            Token::LParen, Token::RParen, &Token::Comma,
+            Token::LParen, Token::RParen, Token::Comma,
             |p| p.parse_farg())?;
 
         self.expect(Token::Arrow)?;
@@ -154,7 +155,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
 
         self.expect(Token::LBrace)?;
         let body = self.parse_body()?;
-        let (_, span_to) = self.expect(Token::RBrace)?;
+        let span_to = self.expect(Token::RBrace)?;
 
         let decs = mem::take(&mut self.decs_arena);
         let exprs = mem::take(&mut self.expr_arena);
@@ -243,7 +244,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
     }
 
     fn parse_cond(&mut self) -> ParseResult<(&'ast Expr<'ast, ParsedAst>, Span)> {
-        let (_, span_from) = self.expect(Token::If)?;
+        let span_from = self.expect(Token::If)?;
 
         let (cond, _) = self.parse_expr(None::<Bop>)?;
 
@@ -255,14 +256,14 @@ impl<'src, 'ast> Parser<'src, 'ast> {
 
         self.expect(Token::LBrace)?;
         let else_branch = self.parse_body()?;
-        let (_, span_to) = self.expect(Token::RBrace)?;
+        let span_to = self.expect(Token::RBrace)?;
 
         let expr = self.alloc_expr(Expr::Cond(Cond { cond, then_branch, else_branch }));
         Ok((expr, span_from.to(&span_to)))
     }
 
     fn parse_tensor(&mut self) -> ParseResult<(&'ast Expr<'ast, ParsedAst>, Span)> {
-        let (_, span_from) = self.expect(Token::LBrace)?;
+        let span_from = self.expect(Token::LBrace)?;
 
         let body = self.parse_body()?;
 
@@ -290,7 +291,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
             }
         };
 
-        let (_, span_to) = self.expect(Token::RBrace)?;
+        let span_to = self.expect(Token::RBrace)?;
 
         let iv = self.alloc_lvis(iv, None);
         let tensor = self.alloc_expr(Expr::Tensor(Tensor {
@@ -388,14 +389,14 @@ impl<'src, 'ast> Parser<'src, 'ast> {
 
     fn parse_call(&mut self, id: String) -> ParseResult<&'ast Expr<'ast, ParsedAst>> {
         let (args, _) = self.parse_items_enclosed(
-            Token::LParen, Token::RParen, &Token::Comma,
+            Token::LParen, Token::RParen, Token::Comma,
             |p| p.parse_expr(None::<Bop>))?;
         Ok(self.alloc_expr(Expr::Call(Call { id, args })))
     }
 
     fn parse_prf_call(&mut self, id: String, span: Span) -> ParseResult<&'ast Expr<'ast, ParsedAst>> {
         let (args, _) = self.parse_items_enclosed(
-            Token::LParen, Token::RParen, &Token::Comma,
+            Token::LParen, Token::RParen, Token::Comma,
             |p| p.parse_expr(None::<Bop>))?;
 
         use Prf::*;
@@ -459,7 +460,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         }
 
         let (args, _) = self.parse_items_enclosed(
-            Token::LParen, Token::RParen, &Token::Comma,
+            Token::LParen, Token::RParen, Token::Comma,
             |p| p.parse_fold_fun_arg())?;
 
         Ok(FoldFun::Apply { id, args })
@@ -491,7 +492,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
 
     fn parse_array(&mut self) -> ParseResult<(&'ast Expr<'ast, ParsedAst>, Span)> {
         let (elems, span) = self.parse_items_enclosed(
-            Token::LSquare, Token::RSquare, &Token::Comma,
+            Token::LSquare, Token::RSquare, Token::Comma,
             |p| p.parse_expr(None::<Bop>))?;
 
         let expr = self.alloc_expr(Expr::Array(Array { elems }));
