@@ -83,11 +83,6 @@ impl Type {
         !self.is_scalar()
     }
 
-    /// TODO: merge this function and the ones above it into an enum result
-    pub fn is_array_or_scalar(&self) -> bool {
-        false
-    }
-
     pub fn rank(&self) -> Option<u8> {
         match &self.shape {
             TypePattern::Scalar => Some(0),

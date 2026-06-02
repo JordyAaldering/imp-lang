@@ -78,15 +78,15 @@ impl CompileC {
         ));
     }
 
-    fn emit_wrapper_prototype(&mut self, base_name: &str, sig: &BaseSignature, ret_ty: &BaseType) {
+    fn emit_wrapper_prototype(&mut self, base_name: &str, sig: &BaseSignature, _ret_ty: &BaseType) {
         let sig_str = sig.base_types.iter().map(base_rstype).collect::<Vec<_>>();
         let fargs: Vec<String> = sig.base_types
             .iter()
             .enumerate()
-            .map(|(i, base)| format!("{} arg{i}", dyn_ctype(base)))
+            .map(|(i, _base)| format!("ImpArrayRaw arg{i}"))
             .collect();
-        self.push_line(&format!("{} IMP_{}_{}({});",
-            dyn_ctype(ret_ty), base_name, sig_str.join("_"), fargs.join(", ")));
+        self.push_line(&format!("ImpArrayRaw IMP_{}_{}({});",
+            base_name, sig_str.join("_"), fargs.join(", ")));
     }
 
     fn emit_wrapper_function(&mut self, base_name: &str, sig: &BaseSignature, family: &Vec<&Fundef<'_, TypedAst>>) {
@@ -94,12 +94,12 @@ impl CompileC {
         let fargs: Vec<String> = sig.base_types
             .iter()
             .enumerate()
-            .map(|(i, base)| format!("{} arg{i}", dyn_ctype(base)))
+            .map(|(i, _base)| format!("ImpArrayRaw arg{i}"))
             .collect();
 
         let first = family[0];
-        self.push_line(&format!("{} IMP_{}_{}({}) {{",
-            dyn_ctype(&first.ret_type.ty), base_name, sig_str.join("_"), fargs.join(", ")));
+        self.push_line(&format!("ImpArrayRaw IMP_{}_{}({}) {{",
+            base_name, sig_str.join("_"), fargs.join(", ")));
 
         self.indent += 1;
         for (idx, fundef) in family.iter().enumerate() {
@@ -119,30 +119,27 @@ impl CompileC {
             let call_args: Vec<String> = fundef.args
                 .iter()
                 .enumerate()
-                .map(|(i, arg)| wrapper_call_arg(&arg.ty.shape, &format!("arg{i}")))
+                .map(|(i, arg)| wrapper_call_arg(&arg.ty.shape, &format!("arg{i}"), &arg.ty.ty))
                 .collect();
             let call_expr = format!("IMP_{}({})", fundef.name, call_args.join(", "));
 
-            if fundef.ret_type.is_array_or_scalar() {
+            if fundef.ret_type.is_array() {
                 self.push_line(&format!("return {call_expr};"));
-            } else if fundef.ret_type.is_array() {
-                let dyn_ty = dyn_ctype(&fundef.ret_type.ty);
-                self.push_line(&format!("ImpArrayRaw __ret = {call_expr};"));
-                self.push_line(&format!(
-                    "return ({dyn_ty}) {{ .is_array = true, .data.array = __ret }};"
-                ));
             } else {
-                let dyn_ty = dyn_ctype(&fundef.ret_type.ty);
-                self.push_line(&format!("{} __ret = {call_expr};", base_ctype(&fundef.ret_type)));
-                self.push_line(&format!(
-                    "return ({dyn_ty}) {{ .is_array = false, .data.scalar = __ret }};"
-                ));
+                // Scalar return: wrap in a 0-d ImpArrayRaw (dim=0, len=1, shp=NULL)
+                let base = base_ctype(&fundef.ret_type);
+                self.push_line(&format!("{base} __ret_val = {call_expr};"));
+                self.push_line(&format!("{base} *__ret_data = ({base} *)malloc(sizeof({base}));"));
+                self.push_line("*__ret_data = __ret_val;");
+                self.push_line("return (ImpArrayRaw) { .len = 1, .dim = 0, .shp = NULL, .data = (void *)__ret_data };");
             }
 
             self.indent -= 1;
             self.push_line("}");
         }
 
+        // suppress unused-variable warning for the last fundef we borrowed
+        let _ = first;
         self.push_line(&format!("fprintf(stderr, \"runtime overload dispatch failed: {}\\n\");", base_name));
         self.push_line("abort();");
 
@@ -153,52 +150,15 @@ impl CompileC {
     fn emit_return(&mut self, ret: Id<'_, TypedAst>) {
         let name = self.render_id(ret);
         let declared_ty = self.ret_type.clone().unwrap_or_else(|| self.id_type(&ret));
-        let value_ty = self.id_type(&ret);
 
-        if declared_ty.is_array_or_scalar() {
-            let dyn_ty = dyn_ctype(&declared_ty.ty);
-            self.push_line(&format!("if ({name}.is_array) {{"));
-            self.indent += 1;
-            self.push_line(&format!("{dyn_ty} out = {name};"));
+        if declared_ty.is_array() {
             self.push_line(&format!(
-                "out.data.array = imp_clone_array_raw({name}.data.array, sizeof({}));",
+                "return imp_clone_array_raw({}, sizeof({}));",
+                name,
                 base_ctype(&declared_ty)
             ));
-            self.push_line("return out;");
-            self.indent -= 1;
-            self.push_line("}");
-            self.push_line(&format!("return {};", name));
-        } else if declared_ty.is_array() {
-            if value_ty.is_array_or_scalar() {
-                self.push_line(&format!("if (!{name}.is_array) {{"));
-                self.indent += 1;
-                self.push_line("fprintf(stderr, \"return type mismatch: expected array\\n\");");
-                self.push_line("abort();");
-                self.indent -= 1;
-                self.push_line("}");
-                self.push_line(&format!(
-                    "return imp_clone_array_raw({name}.data.array, sizeof({}));",
-                    base_ctype(&declared_ty)
-                ));
-            } else {
-                self.push_line(&format!(
-                    "return imp_clone_array_raw({}, sizeof({}));",
-                    name,
-                    base_ctype(&declared_ty)
-                ));
-            }
         } else {
-            if value_ty.is_array_or_scalar() {
-                self.push_line(&format!("if ({name}.is_array) {{"));
-                self.indent += 1;
-                self.push_line("fprintf(stderr, \"return type mismatch: expected scalar\\n\");");
-                self.push_line("abort();");
-                self.indent -= 1;
-                self.push_line("}");
-                self.push_line(&format!("return {name}.data.scalar;"));
-            } else {
-                self.push_line(&format!("return {};", name));
-            }
+            self.push_line(&format!("return {};", name));
         }
     }
 }
@@ -574,27 +534,8 @@ impl<'ast> Traverse<'ast> for CompileC {
     }
 
     fn trav_call(&mut self, call: &mut Call<'ast, TypedAst>) {
-        let (target_base_name, target_symbol) = match &call.id {
-            CallTarget::Function(f) => (
-                f.name.clone(),
-                rename_fundefs::mangle_fundef_name(&f.name, &f.args),
-            ),
-        };
-        let arg_types: Vec<Type> = call.args.iter().map(|id| match id {
-            Id::Arg(i) => self.arg_types[*i].clone(),
-            Id::Var(v) => v.ty.clone(),
-        }).collect();
-
-        let needs_runtime_wrapper = arg_types.iter().any(|t| t.is_array_or_scalar());
-        let name = if needs_runtime_wrapper {
-            let root = target_base_name.split("__").next().unwrap_or(&target_base_name);
-            let any_types: Vec<Type> = arg_types
-                .iter()
-                .map(|t| Type { ty: t.ty.clone(), shape: TypePattern::any() })
-                .collect();
-            rename_fundefs::mangle_call_name(root, &any_types)
-        } else {
-            target_symbol
+        let name = match &call.id {
+            CallTarget::Function(f) => rename_fundefs::mangle_fundef_name(&f.name, &f.args),
         };
 
         let args: Vec<String> = call.args.iter()
@@ -726,50 +667,30 @@ fn base_ctype(ty: &Type) -> String {
 }
 
 fn full_ctype(ty: &Type) -> String {
-    if ty.is_array_or_scalar() {
-        use BaseType::*;
-        return match &ty.ty {
-            Bool => "ImpDynBool".to_owned(),
-            Usize => "ImpDynUsize".to_owned(),
-            U32 => "ImpDynU32".to_owned(),
-            U64 => "ImpDynU64".to_owned(),
-            I32 => "ImpDynI32".to_owned(),
-            I64 => "ImpDynI64".to_owned(),
-            F32 => "ImpDynF32".to_owned(),
-            F64 => "ImpDynF64".to_owned(),
-            Udf(udf) => format!("ImpDyn{}", udf),
-        }
-    } else if ty.is_array() {
+    if ty.is_array() {
         "ImpArrayRaw".to_owned()
     } else {
         base_ctype(ty).to_owned()
     }
 }
 
-fn dyn_ctype(base: &BaseType) -> String {
-    full_ctype(&Type {
-        ty: base.clone(),
-        shape: TypePattern::any(),
-    })
-}
-
 fn shape_match_condition(shape: &TypePattern, arg: &str) -> String {
     match shape {
         TypePattern::Scalar => {
-            format!("!{arg}.is_array")
+            format!("{arg}.dim == 0")
         }
         TypePattern::Axes(axes) => {
             if axes.iter().any(|ax| matches!(ax, AxisPattern::Rank(_))) {
-                return format!("{arg}.is_array");
+                // rank-polymorphic array: any non-zero dim
+                return format!("{arg}.dim > 0");
             }
 
             let mut checks = vec![
-                format!("{arg}.is_array"),
-                format!("{arg}.data.array.dim == {}", axes.len()),
+                format!("{arg}.dim == {}", axes.len()),
             ];
             for (i, axis) in axes.iter().enumerate() {
                 if let AxisPattern::Dim(DimPattern::Known(v)) = axis {
-                    checks.push(format!("{arg}.data.array.shp[{i}] == {v}"));
+                    checks.push(format!("{arg}.shp[{i}] == {v}"));
                 }
             }
             checks.join(" && ")
@@ -777,10 +698,28 @@ fn shape_match_condition(shape: &TypePattern, arg: &str) -> String {
     }
 }
 
-fn wrapper_call_arg(shape: &TypePattern, arg: &str) -> String {
+fn wrapper_call_arg(shape: &TypePattern, arg: &str, base: &BaseType) -> String {
     match shape {
-        TypePattern::Scalar => format!("{arg}.data.scalar"),
-        TypePattern::Axes(_) => format!("{arg}.data.array"),
+        TypePattern::Scalar => {
+            let ctype = base_ctype_str(base);
+            format!("(*({ctype}*){arg}.data)")
+        }
+        TypePattern::Axes(_) => arg.to_owned(),
+    }
+}
+
+fn base_ctype_str(ty: &BaseType) -> &'static str {
+    use BaseType::*;
+    match ty {
+        Bool => "bool",
+        Usize => "size_t",
+        U32 => "uint32_t",
+        U64 => "uint64_t",
+        I32 => "int32_t",
+        I64 => "int64_t",
+        F32 => "float",
+        F64 => "double",
+        Udf(_) => "void",
     }
 }
 

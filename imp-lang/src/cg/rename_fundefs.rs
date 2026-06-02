@@ -85,10 +85,6 @@ pub fn mangle_fundef_name(base_name: &str, args: &[Farg]) -> String {
     format!("{}__{}", base_name, arg_suffix)
 }
 
-pub fn mangle_call_name(base_name: &str, arg_types: &[Type]) -> String {
-    format!("{}__{}", base_name, mangle_arg_types(arg_types.iter()))
-}
-
 fn mangle_arg_types<'a, I>(arg_types: I) -> String
 where
     I: Iterator<Item = &'a Type>,

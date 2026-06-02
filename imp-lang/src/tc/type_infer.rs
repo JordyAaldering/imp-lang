@@ -144,7 +144,8 @@ impl<'ast> TypeInfer<'ast> {
             TypePattern::Axes(axes) if axes.len() == 1 && matches!(axes[0], AxisPattern::Dim(_)) => {
                 match &axes[0] {
                     AxisPattern::Dim(DimPattern::Known(k)) => (Type::vector_dim(ub_ty.ty.clone(), DimPattern::Known(*k)), Some(*k)),
-                    _ => unreachable!(),
+                    AxisPattern::Dim(DimPattern::Var(name)) => (Type::vector_dim(ub_ty.ty.clone(), DimPattern::Var(name.clone())), None),
+                    _ => unreachable!("unexpected axis pattern inside Dim guard"),
                 }
             }
             _ => (Type { ty: ub_ty.ty.clone(), shape: TypePattern::any() }, None),

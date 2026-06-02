@@ -32,78 +32,6 @@ typedef struct {
     size_t *shp;
     void *data;
 } ImpArrayRaw;
-
-typedef union {
-    bool scalar;
-    ImpArrayRaw array;
-} ImpDynDataBool;
-typedef struct {
-    bool is_array;
-    ImpDynDataBool data;
-} ImpDynBool;
-
-typedef union {
-    int32_t scalar;
-    ImpArrayRaw array;
-} ImpDynDataI32;
-typedef struct {
-    bool is_array;
-    ImpDynDataI32 data;
-} ImpDynI32;
-
-typedef union {
-    int64_t scalar;
-    ImpArrayRaw array;
-} ImpDynDataI64;
-typedef struct {
-    bool is_array;
-    ImpDynDataI64 data;
-} ImpDynI64;
-
-typedef union {
-    uint32_t scalar;
-    ImpArrayRaw array;
-} ImpDynDataU32;
-typedef struct {
-    bool is_array;
-    ImpDynDataU32 data;
-} ImpDynU32;
-
-typedef union {
-    uint64_t scalar;
-    ImpArrayRaw array;
-} ImpDynDataU64;
-typedef struct {
-    bool is_array;
-    ImpDynDataU64 data;
-} ImpDynU64;
-
-typedef union {
-    size_t scalar;
-    ImpArrayRaw array;
-} ImpDynDataUsize;
-typedef struct {
-    bool is_array;
-    ImpDynDataUsize data;
-} ImpDynUsize;
-
-typedef union {
-    float scalar;
-    ImpArrayRaw array;
-} ImpDynDataF32;
-typedef struct {
-    bool is_array;
-    ImpDynDataF32 data;
-} ImpDynF32;
-
-typedef union {
-    double scalar;
-    ImpArrayRaw array;
-} ImpDynDataF64;
-typedef struct {
-    bool is_array;
-    ImpDynDataF64 data;
-} ImpDynF64;
 "#;
 
 impl<'ast> Traverse<'ast> for CompileH {
@@ -147,20 +75,7 @@ fn base_ctype(ty: &Type) -> String {
 }
 
 fn dyn_ctype(ty: &Type) -> String {
-    if ty.is_array_or_scalar() {
-        use BaseType::*;
-        match &ty.ty {
-            Bool => "ImpDynBool".to_owned(),
-            Usize => "ImpDynUsize".to_owned(),
-            U32 => "ImpDynU32".to_owned(),
-            U64 => "ImpDynU64".to_owned(),
-            I32 => "ImpDynI32".to_owned(),
-            I64 => "ImpDynI64".to_owned(),
-            F32 => "ImpDynF32".to_owned(),
-            F64 => "ImpDynF64".to_owned(),
-            Udf(udf) => format!("ImpDyn{}", udf),
-        }
-    } else if ty.is_array() {
+    if ty.is_array() {
         "ImpArrayRaw".to_owned()
     } else {
         base_ctype(ty)

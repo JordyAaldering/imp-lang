@@ -66,9 +66,10 @@ impl<'ast> Traverse<'ast> for CompileFfi {
 
 impl CompileFfi {
     fn emit_direct_wrapper(&mut self, base_name: &str, fundef: &Fundef<'_, TypedAst>) {
+        let ret_ty_str = rust_wrapper_type(&fundef.ret_type);
         self.push(&format!("fn {}(", base_name));
-        self.push(&join_args(&fundef.args, rust_api_arg_type));
-        self.push(&format!(") -> {} {{\n", rust_api_ret_type(&fundef.ret_type)));
+        self.push(&join_args(&fundef.args, rust_wrapper_type));
+        self.push(&format!(") -> {ret_ty_str} {{\n"));
 
         let shape_checks = generate_shape_checks(&fundef.args);
         if !shape_checks.is_empty() {
@@ -76,7 +77,7 @@ impl CompileFfi {
         }
 
         let call_args = emit_marshaled_call_args(&mut self.output, &fundef.args);
-        let ret = &emit_return_conversion(&fundef.name, &fundef.ret_type, &call_args);
+        let ret = emit_return_expr(&fundef.name, &fundef.ret_type, &call_args);
         for line in ret.lines() {
             self.push("    ");
             self.push(line);
@@ -85,60 +86,92 @@ impl CompileFfi {
         self.push("}\n");
     }
 
-    fn emit_family_wrapper(&mut self, base_name: &str, sig: &BaseSignature, fundefs: &Vec<&Fundef<'_, TypedAst>>) {
+    fn emit_family_wrapper(
+        &mut self,
+        base_name: &str,
+        sig: &BaseSignature,
+        fundefs: &Vec<&Fundef<'_, TypedAst>>,
+    ) {
         let sig_str = sig.base_types.iter().map(rust_base_type).collect::<Vec<_>>();
-        let fargs = sig.base_types.iter()
+
+        // Per-position: is this arg scalar for ALL variants?
+        let n_args = sig.base_types.len();
+        let all_scalar_args: Vec<bool> = (0..n_args)
+            .map(|i| fundefs.iter().all(|f| f.args[i].ty.is_scalar()))
+            .collect();
+        let all_scalar_ret = fundefs.iter().all(|f| f.ret_type.is_scalar());
+
+        let fargs = sig
+            .base_types
+            .iter()
             .enumerate()
-            .map(|(i, base)| format!("arg{}: ImpArrayOrScalar<{}>", i, rust_base_type(base)))
+            .map(|(i, base)| {
+                if all_scalar_args[i] {
+                    format!("arg{}: {}", i, rust_base_type(base))
+                } else {
+                    format!("arg{}: ImpArray<{}>", i, rust_base_type(base))
+                }
+            })
             .collect::<Vec<_>>()
             .join(", ");
 
-        self.push(&format!("fn {}_{}(", base_name, sig_str.join("_")));
-        self.push(&fargs);
         let first = fundefs[0];
-        self.push(&format!(") -> {} {{\n", rust_api_ret_type(&first.ret_type)));
+        let ret_ty_str = if all_scalar_ret {
+            rust_base_type(&first.ret_type.ty)
+        } else {
+            format!("ImpArray<{}>", rust_base_type(&first.ret_type.ty))
+        };
 
-        let match_args = &(0..sig.base_types.len())
-            .map(|i| format!("arg{i}"))
-            .collect::<Vec<_>>()
-            .join(", ");
-        self.push("    match (");
-        self.push(&match_args);
-        self.push(") {\n");
+        self.push(&format!(
+            "fn {}_{}({}) -> {ret_ty_str} {{\n",
+            base_name,
+            sig_str.join("_"),
+            fargs
+        ));
 
-        for fundef in fundefs {
-            let pattern = fundef.args.iter()
-                .enumerate()
-                .map(|(i, arg)| family_match_pattern(i, &arg.ty))
-                .collect::<Vec<_>>()
-                .join(", ");
-            let guard = family_match_guard(&fundef.args);
-            self.push("        (");
-            self.push(&pattern);
-            self.push(")");
-
-            if !guard.is_empty() {
-                self.push(" if ");
-                self.push(&guard);
+        for (idx, fundef) in fundefs.iter().enumerate() {
+            let condition = build_variant_condition(&fundef.args, &all_scalar_args);
+            if idx == 0 {
+                self.push(&format!("    if {condition} {{\n"));
+            } else {
+                self.push(&format!("    }} else if {condition} {{\n"));
             }
-            self.push(" => {\n");
 
-            let branch_args = fundef.args.iter().enumerate().map(|(i, _)| format!("arg{i}")).collect::<Vec<_>>();
-            let marshaled = emit_marshaled_branch_args(&mut self.output, &fundef.args, &branch_args, 3);
-            let ret = emit_return_conversion(&fundef.name, &fundef.ret_type, &marshaled);
+            let branch_arg_names: Vec<String> =
+                (0..n_args).map(|i| format!("arg{i}")).collect();
+            let marshaled = emit_marshaled_branch_args(
+                &mut self.output,
+                &fundef.args,
+                &branch_arg_names,
+                &all_scalar_args,
+                2,
+            );
+            let ret = emit_family_return_expr(
+                &fundef.name,
+                &fundef.ret_type,
+                &marshaled,
+                all_scalar_ret,
+            );
             for line in ret.lines() {
-                self.push("            ");
+                self.push("        ");
                 self.push(line);
                 self.push("\n");
             }
-            self.push("        }\n");
         }
 
-        self.push("        _ => panic!(\"runtime overload dispatch failed\"),\n");
+        self.push("    } else {\n");
+        self.push(&format!(
+            "        panic!(\"runtime overload dispatch failed: {}\");\n",
+            base_name
+        ));
         self.push("    }\n");
         self.push("}\n");
     }
 }
+
+// ---------------------------------------------------------------------------
+// Helper functions
+// ---------------------------------------------------------------------------
 
 fn is_static_array(ty: &Type) -> bool {
     ty.is_array()
@@ -151,32 +184,18 @@ fn join_args(args: &[Farg], map_ty: fn(&Type) -> String) -> String {
         .join(", ")
 }
 
-fn rust_api_type(ty: &Type) -> String {
-    if ty.is_array_or_scalar() {
-        format!("ImpDyn<{}>", rust_base_type(&ty.ty))
-    } else if ty.is_array() {
+/// Rust type used in wrapper signatures: arrays -> `ImpArray<T>`, scalars -> `T`.
+fn rust_wrapper_type(ty: &Type) -> String {
+    if ty.is_array() {
         format!("ImpArray<{}>", rust_base_type(&ty.ty))
     } else {
         rust_base_type(&ty.ty)
     }
 }
 
-fn rust_api_arg_type(ty: &Type) -> String {
-    if ty.is_array_or_scalar() {
-        format!("ImpArrayOrScalar<{}>", rust_base_type(&ty.ty))
-    } else {
-        rust_api_type(ty)
-    }
-}
-
-fn rust_api_ret_type(ty: &Type) -> String {
-    format!("ImpArrayOrScalar<{}>", rust_base_type(&ty.ty))
-}
-
+/// Rust type used in `extern "C"` FFI declarations: arrays -> `ImpArrayRaw`, scalars -> `T`.
 fn rust_ffi_type(ty: &Type) -> String {
-    if ty.is_array_or_scalar() {
-        format!("ImpDyn<{}>", rust_base_type(&ty.ty))
-    } else if ty.is_array() {
+    if ty.is_array() {
         "ImpArrayRaw".to_owned()
     } else {
         rust_base_type(&ty.ty).to_owned()
@@ -198,19 +217,14 @@ fn rust_base_type(ty: &BaseType) -> String {
     }
 }
 
+/// Marshal args for a direct (single-overload) wrapper call.
+/// Array args are converted to `ImpArrayRaw`; scalar args are passed through as `T`.
 fn emit_marshaled_call_args(out: &mut String, args: &[Farg]) -> Vec<String> {
     let mut call_args = Vec::with_capacity(args.len());
     for arg in args {
         if is_static_array(&arg.ty) {
             out.push_str(&format!("    let {}_raw = {}.into_raw();\n", arg.id, arg.id));
             call_args.push(format!("{}_raw", arg.id));
-        } else if arg.ty.is_array_or_scalar() {
-            out.push_str(&format!("    let mut {}_dyn = {};\n", arg.id, arg.id));
-            out.push_str(&format!("    let {}_ffi = match &mut {}_dyn {{\n", arg.id, arg.id));
-            out.push_str("        ImpArrayOrScalar::Scalar(v) => ImpDyn::from_scalar(*v),\n");
-            out.push_str("        ImpArrayOrScalar::Array(a) => ImpDyn::from_array_raw(a.into_raw()),\n");
-            out.push_str("    };\n");
-            call_args.push(format!("{}_ffi", arg.id));
         } else {
             call_args.push(arg.id.clone());
         }
@@ -218,88 +232,147 @@ fn emit_marshaled_call_args(out: &mut String, args: &[Farg]) -> Vec<String> {
     call_args
 }
 
-fn emit_marshaled_branch_args(out: &mut String, args: &[Farg], branch_names: &[String], indent: usize) -> Vec<String> {
+/// Marshal branch arguments for a family wrapper variant.
+///
+/// `all_scalar_args[i]` = the family wrapper exposes arg i as plain `T`.
+/// - `T` exposed, variant is scalar  -> pass through directly
+/// - `ImpArray<T>` exposed, variant is scalar -> extract `.data[0]`
+/// - `ImpArray<T>` exposed, variant is array  -> `.into_raw()`
+fn emit_marshaled_branch_args(
+    out: &mut String,
+    args: &[Farg],
+    branch_names: &[String],
+    all_scalar_args: &[bool],
+    indent: usize,
+) -> Vec<String> {
     let pad = "    ".repeat(indent);
     let mut call_args = Vec::with_capacity(args.len());
-    for (arg, branch_name) in args.iter().zip(branch_names.iter()) {
+    for ((arg, branch_name), &exposed_as_scalar) in
+        args.iter().zip(branch_names.iter()).zip(all_scalar_args.iter())
+    {
         if is_static_array(&arg.ty) {
-            out.push_str(&format!("{pad}let {}_raw = {}.into_raw();\n", branch_name, branch_name));
-            call_args.push(format!("{}_raw", branch_name));
-        } else if arg.ty.is_array_or_scalar() {
-            out.push_str(&format!("{pad}let mut {}_dyn = {};\n", branch_name, branch_name));
-            out.push_str(&format!("{pad}let {}_ffi = match &mut {}_dyn {{\n", branch_name, branch_name));
-            out.push_str(&format!("{pad}    ImpArrayOrScalar::Scalar(v) => ImpDyn::from_scalar(*v),\n"));
-            out.push_str(&format!("{pad}    ImpArrayOrScalar::Array(a) => ImpDyn::from_array_raw(a.into_raw()),\n"));
-            out.push_str(&format!("{pad}}};\n"));
-            call_args.push(format!("{}_ffi", branch_name));
-        } else {
+            out.push_str(&format!(
+                "{pad}let {branch_name}_raw = {branch_name}.into_raw();\n"
+            ));
+            call_args.push(format!("{branch_name}_raw"));
+        } else if exposed_as_scalar {
+            // wrapper takes T, variant expects scalar -> pass through
             call_args.push(branch_name.clone());
+        } else {
+            // wrapper takes ImpArray<T>, variant expects scalar -> extract element
+            out.push_str(&format!(
+                "{pad}let {branch_name}_val = {branch_name}.data[0];\n"
+            ));
+            call_args.push(format!("{branch_name}_val"));
         }
     }
     call_args
 }
 
-fn emit_return_conversion(symbol_name: &str, ret_type: &Type, call_args: &[String]) -> String {
-    if ret_type.is_array_or_scalar() {
-        format!("let res0_dyn = unsafe {{ IMP_{}({}) }};\nunsafe {{ res0_dyn.into_array_or_scalar() }}",
-            symbol_name, call_args.join(", ") )
-    } else if is_static_array(ret_type) {
-        format!("let res0_raw = unsafe {{ IMP_{}({}) }};\nImpArrayOrScalar::Array(unsafe {{ ImpArray::<{}>::from_raw(res0_raw) }})",
-            symbol_name, call_args.join(", "), rust_base_type(&ret_type.ty)
+/// Return expression for a direct (single-overload) wrapper.
+fn emit_return_expr(symbol_name: &str, ret_type: &Type, call_args: &[String]) -> String {
+    if is_static_array(ret_type) {
+        format!(
+            "let __res_raw = unsafe {{ IMP_{}({}) }};\nunsafe {{ ImpArray::<{}>::from_raw(__res_raw) }}",
+            symbol_name,
+            call_args.join(", "),
+            rust_base_type(&ret_type.ty),
         )
     } else {
-        format!("ImpArrayOrScalar::Scalar(unsafe {{ IMP_{}({}) }})",
-            symbol_name, call_args.join(", "))
+        format!("unsafe {{ IMP_{}({}) }}", symbol_name, call_args.join(", "))
     }
 }
 
-fn family_match_pattern(arg_index: usize, ty: &Type) -> String {
-    match ty.shape {
-        TypePattern::Scalar => format!("ImpArrayOrScalar::Scalar(arg{arg_index})"),
-        _ => format!("ImpArrayOrScalar::Array(arg{arg_index})"),
+/// Return expression for one variant inside a family wrapper.
+///
+/// `all_scalar_ret` = the family wrapper's declared return type is `T`.
+fn emit_family_return_expr(
+    symbol_name: &str,
+    ret_type: &Type,
+    call_args: &[String],
+    all_scalar_ret: bool,
+) -> String {
+    if all_scalar_ret {
+        format!("unsafe {{ IMP_{}({}) }}", symbol_name, call_args.join(", "))
+    } else if is_static_array(ret_type) {
+        format!(
+            "let __res_raw = unsafe {{ IMP_{}({}) }};\nunsafe {{ ImpArray::<{}>::from_raw(__res_raw) }}",
+            symbol_name,
+            call_args.join(", "),
+            rust_base_type(&ret_type.ty),
+        )
+    } else {
+        // variant returns scalar but wrapper return type is ImpArray<T>
+        format!(
+            "let __res_val = unsafe {{ IMP_{}({}) }};\nImpArray {{ shp: vec![], data: vec![__res_val] }}",
+            symbol_name,
+            call_args.join(", "),
+        )
     }
 }
 
-fn family_match_guard(args: &[Farg]) -> String {
+/// Build the dispatch condition for one overload variant inside a family wrapper.
+///
+/// Only checks positions exposed as `ImpArray<T>` (i.e., `!all_scalar_args[i]`).
+/// Positions exposed as `T` are always scalar -- no runtime check needed.
+fn build_variant_condition(args: &[Farg], all_scalar_args: &[bool]) -> String {
     let mut checks = Vec::new();
     let mut bound_dims: Vec<(String, String)> = Vec::new();
     let mut bound_ranks: Vec<(String, String)> = Vec::new();
 
-    for (arg_index, arg) in args.iter().enumerate() {
-        let TypePattern::Axes(axes) = &arg.ty.shape else {
+    for (arg_index, (arg, &exposed_as_scalar)) in
+        args.iter().zip(all_scalar_args.iter()).enumerate()
+    {
+        if exposed_as_scalar {
             continue;
-        };
-
-        if !axes.iter().any(|axis| matches!(axis, AxisPattern::Rank(_))) {
-            checks.push(format!("arg{arg_index}.shp.len() == {}", axes.len()));
         }
-
-        for (axis_index, axis) in axes.iter().enumerate() {
-            match axis {
-                AxisPattern::Dim(DimPattern::Known(v)) => {
-                    checks.push(format!("arg{arg_index}.shp[{axis_index}] == {v}"));
+        match &arg.ty.shape {
+            TypePattern::Scalar => {
+                checks.push(format!("arg{arg_index}.shp.is_empty()"));
+            }
+            TypePattern::Axes(axes) => {
+                if axes.iter().any(|ax| matches!(ax, AxisPattern::Rank(_))) {
+                    checks.push(format!("!arg{arg_index}.shp.is_empty()"));
+                } else {
+                    checks.push(format!("arg{arg_index}.shp.len() == {}", axes.len()));
                 }
-                AxisPattern::Dim(DimPattern::Var(extent)) => {
-                    let expr = format!("arg{arg_index}.shp[{axis_index}]");
-                    if let Some((_, bound_expr)) = bound_dims.iter().find(|(name, _)| name == extent) {
-                        checks.push(format!("{expr} == {bound_expr}"));
-                    } else {
-                        bound_dims.push((extent.clone(), expr));
-                    }
-                }
-                AxisPattern::Rank(capture) => {
-                    let expr = format!("arg{arg_index}.shp.len()");
-                    if let Some((_, bound_expr)) = bound_ranks.iter().find(|(name, _)| name == &capture.dim_name) {
-                        checks.push(format!("{expr} == {bound_expr}"));
-                    } else {
-                        bound_ranks.push((capture.dim_name.clone(), expr));
+                for (axis_index, axis) in axes.iter().enumerate() {
+                    match axis {
+                        AxisPattern::Dim(DimPattern::Known(v)) => {
+                            checks.push(format!("arg{arg_index}.shp[{axis_index}] == {v}"));
+                        }
+                        AxisPattern::Dim(DimPattern::Var(extent)) => {
+                            let expr = format!("arg{arg_index}.shp[{axis_index}]");
+                            if let Some((_, bound_expr)) =
+                                bound_dims.iter().find(|(name, _)| name == extent)
+                            {
+                                checks.push(format!("{expr} == {bound_expr}"));
+                            } else {
+                                bound_dims.push((extent.clone(), expr));
+                            }
+                        }
+                        AxisPattern::Rank(capture) => {
+                            let expr = format!("arg{arg_index}.shp.len()");
+                            if let Some((_, bound_expr)) = bound_ranks
+                                .iter()
+                                .find(|(name, _)| name == &capture.dim_name)
+                            {
+                                checks.push(format!("{expr} == {bound_expr}"));
+                            } else {
+                                bound_ranks.push((capture.dim_name.clone(), expr));
+                            }
+                        }
                     }
                 }
             }
         }
     }
 
-    checks.join(" && ")
+    if checks.is_empty() {
+        "true".to_owned()
+    } else {
+        checks.join(" && ")
+    }
 }
 
 fn generate_shape_checks(args: &[Farg]) -> String {
@@ -326,30 +399,36 @@ fn generate_shape_checks(args: &[Farg]) -> String {
                 AxisPattern::Dim(DimPattern::Known(v)) => {
                     out.push_str(&format!(
                         "    assert_eq!({}.shp[{}], {}, \"{} extent mismatch at axis {}\");\n",
-                        arg.id,
-                        idx,
-                        v,
-                        arg.id,
-                        idx,
+                        arg.id, idx, v, arg.id, idx,
                     ));
                 }
                 AxisPattern::Dim(DimPattern::Var(extent)) => {
                     let binding = format!("_imp_extent_{}", extent);
                     if bound_dims.iter().any(|existing| existing == &binding) {
-                        out.push_str(&format!("    assert_eq!({}.shp[{}], {}, \"extent {} mismatch\");\n",
-                            arg.id, idx, binding, extent));
+                        out.push_str(&format!(
+                            "    assert_eq!({}.shp[{}], {}, \"extent {} mismatch\");\n",
+                            arg.id, idx, binding, extent
+                        ));
                     } else {
-                        out.push_str(&format!("    let {} = {}.shp[{}];\n", binding, arg.id, idx));
+                        out.push_str(&format!(
+                            "    let {} = {}.shp[{}];\n",
+                            binding, arg.id, idx
+                        ));
                         bound_dims.push(binding);
                     }
                 }
                 AxisPattern::Rank(capture) => {
                     let binding = format!("_imp_rank_{}", capture.dim_name);
                     if bound_ranks.iter().any(|existing| existing == &binding) {
-                        out.push_str(&format!("    assert_eq!({}.shp.len(), {}, \"rank {} mismatch\");\n",
-                            arg.id, binding, capture.dim_name));
+                        out.push_str(&format!(
+                            "    assert_eq!({}.shp.len(), {}, \"rank {} mismatch\");\n",
+                            arg.id, binding, capture.dim_name
+                        ));
                     } else {
-                        out.push_str(&format!("    let {} = {}.shp.len();\n", binding, arg.id));
+                        out.push_str(&format!(
+                            "    let {} = {}.shp.len();\n",
+                            binding, arg.id
+                        ));
                         bound_ranks.push(binding);
                     }
                 }
