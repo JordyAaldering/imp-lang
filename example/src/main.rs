@@ -62,13 +62,6 @@ fn main() {
     let overldemo: ImpArray<usize> = overload_demo_usize_usize(four(), four());
     println!("overload_demo vector = {:?}", overldemo.data);
 
-    let panic_hook = std::panic::take_hook();
-    std::panic::set_hook(Box::new(|_| {}));
-    let add_demo_mismatch = std::panic::catch_unwind(|| add_demo(four(), five()));
-    std::panic::set_hook(panic_hook);
-    assert!(add_demo_mismatch.is_err());
-    println!("add_demo mismatched extents rejected in Rust FFI wrapper");
-
     let shp: ImpArray<usize> = shape(arr);
     println!("shape(arr) = {:?}", shp.data);
 

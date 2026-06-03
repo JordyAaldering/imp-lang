@@ -1,7 +1,6 @@
-use std::{ffi::c_void, slice};
-use std::mem;
+use std::{ffi::c_void, mem, slice};
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct ImpArray<T>
 where
     T: Copy,
@@ -11,12 +10,12 @@ where
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct ImpArrayRaw {
     pub len: usize,
     pub dim: usize,
-    pub shp: *mut usize,
-    pub data: *mut c_void,
+    pub shp_ptr: *mut usize,
+    pub data_ptr: *mut c_void,
 }
 
 unsafe extern "C" {
@@ -47,23 +46,23 @@ where
         let data_ptr = self.data.as_mut_ptr() as *mut c_void;
         mem::forget(self.shp);
         mem::forget(self.data);
-        ImpArrayRaw { len, dim, shp: shp_ptr, data: data_ptr }
+        ImpArrayRaw { len, dim, shp_ptr, data_ptr }
     }
 
     pub unsafe fn from_raw(raw: ImpArrayRaw) -> Self {
-        let shp = if raw.shp.is_null() {
+        let shp = if raw.shp_ptr.is_null() {
             Vec::new()
         } else {
-            let shp = unsafe { slice::from_raw_parts(raw.shp, raw.dim) }.to_vec();
-            unsafe { free(raw.shp as *mut c_void) };
+            let shp = unsafe { slice::from_raw_parts(raw.shp_ptr, raw.dim) }.to_vec();
+            unsafe { free(raw.shp_ptr as *mut c_void) };
             shp
         };
 
-        let data = if raw.data.is_null() {
+        let data = if raw.data_ptr.is_null() {
             Vec::new()
         } else {
-            let data = unsafe { slice::from_raw_parts(raw.data as *const T, raw.len) }.to_vec();
-            unsafe { free(raw.data) };
+            let data = unsafe { slice::from_raw_parts(raw.data_ptr as *const T, raw.len) }.to_vec();
+            unsafe { free(raw.data_ptr) };
             data
         };
 
