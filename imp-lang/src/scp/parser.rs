@@ -560,7 +560,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         let (token, span) = self.next()?;
         let pattern = match token {
             Token::NatValue(n) => {
-                AxisPattern::Dim(DimPattern::Known(n as usize))
+                AxisPattern::Dim(DimCapture::Known(n as usize))
             }
             Token::Identifier(name) => {
                 if self.matches(&Token::Gt).is_some() || self.matches(&Token::Ge).is_some() {
@@ -577,17 +577,17 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                     self.expect(Token::Colon)?;
                     let (shp_name, _) = self.parse_id()?;
                     AxisPattern::Rank(RankCapture {
-                        dim_name: name,
-                        shp_name,
+                        dim: DimCapture::Var(name),
+                        shp: shp_name,
                     })
                 } else if self.matches(&Token::Colon).is_some() {
                     let (shp_name, _) = self.parse_id()?;
                     AxisPattern::Rank(RankCapture {
-                        dim_name: name,
-                        shp_name,
+                        dim: DimCapture::Var(name),
+                        shp: shp_name,
                     })
                 } else {
-                    AxisPattern::Dim(DimPattern::Var(name))
+                    AxisPattern::Dim(DimCapture::Var(name))
                 }
             }
             _ => {

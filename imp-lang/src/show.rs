@@ -237,12 +237,15 @@ impl<'ast, Ast: AstConfig + 'ast> Traverse<'ast> for Show<'ast, Ast> {
                 self.write("[");
                 for axis in axes {
                     match axis {
-                        AxisPattern::Dim(DimPattern::Known(n)) => self.write(&n.to_string()),
-                        AxisPattern::Dim(DimPattern::Var(var)) => self.write(&var),
+                        AxisPattern::Dim(DimCapture::Known(n)) => self.write(&n.to_string()),
+                        AxisPattern::Dim(DimCapture::Var(var)) => self.write(&var),
                         AxisPattern::Rank(capture) => {
-                            self.write(&capture.dim_name);
+                            match &capture.dim {
+                                DimCapture::Known(n) => self.write(&n.to_string()),
+                                DimCapture::Var(var) => self.write(&var),
+                            }
                             self.write(":");
-                            self.write(&capture.shp_name);
+                            self.write(&capture.shp);
                         }
                     }
                     self.write(",")

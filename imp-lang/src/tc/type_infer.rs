@@ -105,7 +105,7 @@ impl<'ast> TypeInfer<'ast> {
     fn array_literal_type(&mut self, elem_types: Vec<Type>) -> Type {
         let count = elem_types.len();
         let Some(first) = elem_types.first() else {
-            return Type::vector_dim(BaseType::I32, DimPattern::Known(0));
+            return Type::vector_dim(BaseType::I32, DimCapture::Known(0));
         };
 
         let base_ty = first.ty.clone();
@@ -122,7 +122,7 @@ impl<'ast> TypeInfer<'ast> {
             }
         }
 
-        let leading = AxisPattern::Dim(DimPattern::Known(count));
+        let leading = AxisPattern::Dim(DimCapture::Known(count));
         let result_shape = match &elem_shape {
             TypePattern::Scalar => {
                 TypePattern::Axes(vec![leading])
@@ -143,8 +143,8 @@ impl<'ast> TypeInfer<'ast> {
             TypePattern::Scalar => unreachable!("cannot iterate over scalar ub"),
             TypePattern::Axes(axes) if axes.len() == 1 && matches!(axes[0], AxisPattern::Dim(_)) => {
                 match &axes[0] {
-                    AxisPattern::Dim(DimPattern::Known(k)) => (Type::vector_dim(ub_ty.ty.clone(), DimPattern::Known(*k)), Some(*k)),
-                    AxisPattern::Dim(DimPattern::Var(name)) => (Type::vector_dim(ub_ty.ty.clone(), DimPattern::Var(name.clone())), None),
+                    AxisPattern::Dim(DimCapture::Known(k)) => (Type::vector_dim(ub_ty.ty.clone(), DimCapture::Known(*k)), Some(*k)),
+                    AxisPattern::Dim(DimCapture::Var(name)) => (Type::vector_dim(ub_ty.ty.clone(), DimCapture::Var(name.clone())), None),
                     _ => unreachable!("unexpected axis pattern inside Dim guard"),
                 }
             }
@@ -183,10 +183,10 @@ impl<'ast> TypeInfer<'ast> {
         let mut axes = Vec::with_capacity(arr.elems.len());
         for elem in &arr.elems {
             let dp = match elem {
-                Id::Arg(i) => DimPattern::Var(self.args[*i].id.clone()),
+                Id::Arg(i) => DimCapture::Var(self.args[*i].id.clone()),
                 Id::Var(v) => match v.ssa {
-                    Some(Expr::Const(Const::Usize(val))) => DimPattern::Known(*val),
-                    _ => DimPattern::Var(v.name.clone()),
+                    Some(Expr::Const(Const::Usize(val))) => DimCapture::Known(*val),
+                    _ => DimCapture::Var(v.name.clone()),
                 },
             };
             axes.push(AxisPattern::Dim(dp));
@@ -345,7 +345,7 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
                         provided: arr_ty,
                     });
                 }
-                Type::vector_dim(BaseType::Usize, DimPattern::any())
+                Type::vector_dim(BaseType::Usize, DimCapture::any())
             }
             DimA(arr) => {
                 let arr_ty = self.trav_id(arr);
@@ -412,7 +412,7 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
         let (iv_ty, leading_k) = Self::tensor_iv_and_dims(&ub_ty);
 
         let leading_axes: Option<Vec<AxisPattern>> = ub_named_axes.or_else(|| {
-            leading_k.map(|k| (0..k).map(|_| AxisPattern::Dim(DimPattern::any())).collect())
+            leading_k.map(|k| (0..k).map(|_| AxisPattern::Dim(DimCapture::any())).collect())
         });
 
         self.typed.insert(tensor.iv as *const _, iv_ty.clone());
@@ -538,12 +538,12 @@ fn axes_compatible(expected: &AxisPattern, provided: &AxisPattern) -> bool {
     }
 }
 
-fn dims_compatible(expected: &DimPattern, provided: &DimPattern) -> bool {
+fn dims_compatible(expected: &DimCapture, provided: &DimCapture) -> bool {
     match (expected, provided) {
-        (DimPattern::Known(e), DimPattern::Known(p)) => e == p,
-        (DimPattern::Var(_), DimPattern::Known(_)) => true,
-        (DimPattern::Known(_), DimPattern::Var(_)) => true,
-        (DimPattern::Var(_), DimPattern::Var(_)) => true,
+        (DimCapture::Known(e), DimCapture::Known(p)) => e == p,
+        (DimCapture::Var(_), DimCapture::Known(_)) => true,
+        (DimCapture::Known(_), DimCapture::Var(_)) => true,
+        (DimCapture::Var(_), DimCapture::Var(_)) => true,
     }
 }
 
@@ -641,11 +641,11 @@ fn axis_more_or_equal(a: &AxisPattern, b: &AxisPattern) -> bool {
     }
 }
 
-fn dim_more_or_equal(a: &DimPattern, b: &DimPattern) -> bool {
+fn dim_more_or_equal(a: &DimCapture, b: &DimCapture) -> bool {
     match (a, b) {
-        (DimPattern::Known(_), DimPattern::Var(_)) => true,
-        (DimPattern::Known(x), DimPattern::Known(y)) => x == y,
-        (DimPattern::Var(x), DimPattern::Var(y)) => x == y,
+        (DimCapture::Known(_), DimCapture::Var(_)) => true,
+        (DimCapture::Known(x), DimCapture::Known(y)) => x == y,
+        (DimCapture::Var(x), DimCapture::Var(y)) => x == y,
         _ => false,
     }
 }
@@ -660,6 +660,6 @@ fn type_requires_runtime_dispatch(ty: &Type) -> bool {
 fn axis_requires_runtime_dispatch(axis: &AxisPattern) -> bool {
     match axis {
         AxisPattern::Rank(_) => true,
-        AxisPattern::Dim(dim) => matches!(dim, DimPattern::Var(_)),
+        AxisPattern::Dim(dim) => matches!(dim, DimCapture::Var(_)),
     }
 }

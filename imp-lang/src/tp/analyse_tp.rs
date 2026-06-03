@@ -86,19 +86,19 @@ impl<'ast> AnalyseTp {
 
             for (axis_index, axis) in axes.iter().enumerate() {
                 match axis {
-                    AxisPattern::Dim(DimPattern::Var(var)) => {
+                    AxisPattern::Dim(DimCapture::Var(var)) => {
                         let term = ShapeTerm::ArgDim { arg_index, axis_index };
                         let expr = self.dim_at_expr(fundef, arg_index, axis_index);
                         pending.push((var.clone(), term, expr, Type::scalar(BaseType::Usize)));
                     }
-                    AxisPattern::Rank(capture) => {
+                    AxisPattern::Rank(RankCapture { dim: DimCapture::Var(dim), shp }) => {
                         let dim_term = ShapeTerm::ArgRank {
                             arg_index,
                             axis_index,
                         };
                         let dim_expr = self.dim_of_arg_expr(fundef, arg_index);
                         pending.push((
-                            capture.dim_name.clone(),
+                            dim.clone(),
                             dim_term,
                             dim_expr,
                             Type::scalar(BaseType::Usize),
@@ -110,7 +110,7 @@ impl<'ast> AnalyseTp {
                         };
                         let shp_expr = self.shape_of_arg_expr(fundef, arg_index);
                         pending.push((
-                            capture.shp_name.clone(),
+                            shp.clone(),
                             shp_term,
                             shp_expr,
                             Type {
@@ -119,7 +119,10 @@ impl<'ast> AnalyseTp {
                             },
                         ));
                     }
-                    AxisPattern::Dim(DimPattern::Known(_)) => {}
+                    AxisPattern::Rank(_) => {
+                        todo!()
+                    }
+                    AxisPattern::Dim(DimCapture::Known(_)) => {}
                 }
             }
         }
@@ -138,7 +141,7 @@ impl<'ast> AnalyseTp {
 
         for (axis_index, axis) in axes.iter().enumerate() {
             match axis {
-                AxisPattern::Dim(DimPattern::Var(var)) => {
+                AxisPattern::Dim(DimCapture::Var(var)) => {
                     let constrained_by = if self.defined.contains(var) {
                         vec![ShapeTerm::Symbol(var.clone())]
                     } else {
@@ -150,9 +153,9 @@ impl<'ast> AnalyseTp {
                         constrained_by,
                     });
                 }
-                AxisPattern::Rank(capture) => {
-                    let constrained_by = if self.defined.contains(&capture.dim_name) {
-                        vec![ShapeTerm::Symbol(capture.dim_name.clone())]
+                AxisPattern::Rank(RankCapture { dim: DimCapture::Var(dim), shp: _ }) => {
+                    let constrained_by = if self.defined.contains(dim) {
+                        vec![ShapeTerm::Symbol(dim.clone())]
                     } else {
                         unconstrained_rank_captures += 1;
                         Vec::new()
@@ -163,7 +166,10 @@ impl<'ast> AnalyseTp {
                         constrained_by,
                     });
                 }
-                AxisPattern::Dim(DimPattern::Known(_)) => {}
+                AxisPattern::Rank(_) => {
+                    todo!()
+                }
+                AxisPattern::Dim(DimCapture::Known(_)) => {}
             }
         }
 

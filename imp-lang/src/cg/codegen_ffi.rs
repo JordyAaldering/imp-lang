@@ -338,10 +338,10 @@ fn build_variant_condition(args: &[Farg], all_scalar_args: &[bool]) -> String {
                 }
                 for (axis_index, axis) in axes.iter().enumerate() {
                     match axis {
-                        AxisPattern::Dim(DimPattern::Known(v)) => {
+                        AxisPattern::Dim(DimCapture::Known(v)) => {
                             checks.push(format!("arg{arg_index}.shp[{axis_index}] == {v}"));
                         }
-                        AxisPattern::Dim(DimPattern::Var(extent)) => {
+                        AxisPattern::Dim(DimCapture::Var(extent)) => {
                             let expr = format!("arg{arg_index}.shp[{axis_index}]");
                             if let Some((_, bound_expr)) =
                                 bound_dims.iter().find(|(name, _)| name == extent)
@@ -351,16 +351,17 @@ fn build_variant_condition(args: &[Farg], all_scalar_args: &[bool]) -> String {
                                 bound_dims.push((extent.clone(), expr));
                             }
                         }
-                        AxisPattern::Rank(capture) => {
+                        AxisPattern::Rank(RankCapture { dim: DimCapture::Var(dim), shp: _ }) => {
                             let expr = format!("arg{arg_index}.shp.len()");
-                            if let Some((_, bound_expr)) = bound_ranks
-                                .iter()
-                                .find(|(name, _)| name == &capture.dim_name)
+                            if let Some((_, bound_expr)) = bound_ranks.iter().find(|(name, _)| name == dim)
                             {
                                 checks.push(format!("{expr} == {bound_expr}"));
                             } else {
-                                bound_ranks.push((capture.dim_name.clone(), expr));
+                                bound_ranks.push((dim.clone(), expr));
                             }
+                        }
+                        AxisPattern::Rank(_capture) => {
+                            todo!()
                         }
                     }
                 }
@@ -396,13 +397,13 @@ fn generate_shape_checks(args: &[Farg]) -> String {
 
         for (idx, axis) in axes.iter().enumerate() {
             match axis {
-                AxisPattern::Dim(DimPattern::Known(v)) => {
+                AxisPattern::Dim(DimCapture::Known(v)) => {
                     out.push_str(&format!(
                         "    assert_eq!({}.shp[{}], {}, \"{} extent mismatch at axis {}\");\n",
                         arg.id, idx, v, arg.id, idx,
                     ));
                 }
-                AxisPattern::Dim(DimPattern::Var(extent)) => {
+                AxisPattern::Dim(DimCapture::Var(extent)) => {
                     let binding = format!("_imp_extent_{}", extent);
                     if bound_dims.iter().any(|existing| existing == &binding) {
                         out.push_str(&format!(
@@ -417,20 +418,20 @@ fn generate_shape_checks(args: &[Farg]) -> String {
                         bound_dims.push(binding);
                     }
                 }
-                AxisPattern::Rank(capture) => {
-                    let binding = format!("_imp_rank_{}", capture.dim_name);
+                AxisPattern::Rank(RankCapture { dim: DimCapture::Var(dim), shp: _ }) => {
+                    let binding = format!("_imp_rank_{}", dim);
                     if bound_ranks.iter().any(|existing| existing == &binding) {
-                        out.push_str(&format!(
-                            "    assert_eq!({}.shp.len(), {}, \"rank {} mismatch\");\n",
-                            arg.id, binding, capture.dim_name
-                        ));
+                        out.push_str(&format!("    assert_eq!({}.shp.len(), {}, \"rank {} mismatch\");\n",
+                            arg.id, binding, dim));
                     } else {
-                        out.push_str(&format!(
-                            "    let {} = {}.shp.len();\n",
+                        out.push_str(&format!("    let {} = {}.shp.len();\n",
                             binding, arg.id
                         ));
                         bound_ranks.push(binding);
                     }
+                }
+                AxisPattern::Rank(_capture) => {
+                    todo!()
                 }
             }
         }

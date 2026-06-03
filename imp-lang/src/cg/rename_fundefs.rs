@@ -127,10 +127,14 @@ fn mangle_shape(shape: &TypePattern) -> String {
 
 fn mangle_axis(axis: &AxisPattern) -> String {
     match axis {
-        AxisPattern::Dim(dim) => match dim {
-            DimPattern::Known(v) => v.to_string(),
-            DimPattern::Var(ext) => ext.clone(),
-        },
-        AxisPattern::Rank(capture) => format!("{}_{}", capture.dim_name, capture.shp_name),
+        AxisPattern::Dim(dim) => mangle_axis_dim(dim),
+        AxisPattern::Rank(capture) => format!("{}_{}", mangle_axis_dim(&capture.dim), capture.shp),
+    }
+}
+
+fn mangle_axis_dim(axis: &DimCapture) -> String {
+    match axis {
+        DimCapture::Known(v) => v.to_string(),
+        DimCapture::Var(ext) => ext.clone(),
     }
 }

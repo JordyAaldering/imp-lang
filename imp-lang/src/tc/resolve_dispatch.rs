@@ -429,11 +429,11 @@ fn axis_more_or_equal(a: &AxisPattern, b: &AxisPattern) -> bool {
     }
 }
 
-fn dim_more_or_equal(a: &DimPattern, b: &DimPattern) -> bool {
+fn dim_more_or_equal(a: &DimCapture, b: &DimCapture) -> bool {
     match (a, b) {
-        (DimPattern::Known(_), DimPattern::Var(_)) => true,
-        (DimPattern::Known(x), DimPattern::Known(y)) => x == y,
-        (DimPattern::Var(x), DimPattern::Var(y)) => x == y,
+        (DimCapture::Known(_), DimCapture::Var(_)) => true,
+        (DimCapture::Known(x), DimCapture::Known(y)) => x == y,
+        (DimCapture::Var(x), DimCapture::Var(y)) => x == y,
         _ => false,
     }
 }
@@ -467,12 +467,12 @@ fn axes_compatible(expected: &AxisPattern, provided: &AxisPattern) -> bool {
     }
 }
 
-fn dims_compatible(expected: &DimPattern, provided: &DimPattern) -> bool {
+fn dims_compatible(expected: &DimCapture, provided: &DimCapture) -> bool {
     match (expected, provided) {
-        (DimPattern::Known(e), DimPattern::Known(p)) => e == p,
-        (DimPattern::Var(_), DimPattern::Known(_)) => true,
-        (DimPattern::Known(_), DimPattern::Var(_)) => true,
-        (DimPattern::Var(_), DimPattern::Var(_)) => true,
+        (DimCapture::Known(e), DimCapture::Known(p)) => e == p,
+        (DimCapture::Var(_), DimCapture::Known(_)) => true,
+        (DimCapture::Known(_), DimCapture::Var(_)) => true,
+        (DimCapture::Var(_), DimCapture::Var(_)) => true,
     }
 }
 
@@ -486,6 +486,6 @@ fn type_requires_runtime_dispatch(ty: &Type) -> bool {
 fn axis_requires_runtime_dispatch(axis: &AxisPattern) -> bool {
     match axis {
         AxisPattern::Rank(_) => true,
-        AxisPattern::Dim(dim) => matches!(dim, DimPattern::Var(_)),
+        AxisPattern::Dim(dim) => matches!(dim, DimCapture::Var(_)),
     }
 }

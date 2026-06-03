@@ -69,18 +69,21 @@ impl CheckTypePatterns {
 
 		for axis in axes {
 			match axis {
-				AxisPattern::Dim(DimPattern::Var(var)) => {
+				AxisPattern::Dim(DimCapture::Var(var)) => {
 					defined_symbols.insert(var.clone());
 				}
-				AxisPattern::Rank(capture) => {
-					if !defined_symbols.contains(&capture.dim_name) {
+				AxisPattern::Rank(RankCapture { dim: DimCapture::Var(dim), shp }) => {
+					if !defined_symbols.contains(dim) {
 						*unconstrained_rank_captures += 1;
 					}
 
-					defined_symbols.insert(capture.dim_name.clone());
-					defined_symbols.insert(capture.shp_name.clone());
+					defined_symbols.insert(dim.clone());
+					defined_symbols.insert(shp.clone());
 				}
-				AxisPattern::Dim(DimPattern::Known(_)) => {}
+				AxisPattern::Rank(_) => {
+					todo!()
+				}
+				AxisPattern::Dim(DimCapture::Known(_)) => {}
 			}
 		}
 	}
@@ -91,11 +94,12 @@ impl CheckTypePatterns {
 		};
 
 		for axis in axes {
-			if let AxisPattern::Rank(capture) = axis
-				&& !defined_symbols.contains(&capture.dim_name) {
+			if let AxisPattern::Rank(RankCapture { dim: DimCapture::Var(dim), shp: _ }) = axis
+				&& !defined_symbols.contains(dim)
+			{
 				self.errors.push(format!(
 					"function `{}` return type contains unconstrained rank capture `{}`; return rank captures must be constrained by argument symbols",
-					fundef_name, capture.dim_name
+					fundef_name, dim
 				));
 			}
 		}

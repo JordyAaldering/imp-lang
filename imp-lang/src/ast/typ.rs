@@ -36,14 +36,14 @@ pub enum TypePattern {
 #[derive(Clone, Debug)]
 pub enum AxisPattern {
     /// A single dimension (`_`, `42`, or a named symbol)
-    Dim(DimPattern),
+    Dim(DimCapture),
     /// Rank-and-shape capture (`d:shp`): binds the full rank and shape of the array
     Rank(RankCapture),
 }
 
 /// A single dimension pattern entry
 #[derive(Clone, Debug)]
-pub enum DimPattern {
+pub enum DimCapture {
     /// Compile-time constant.
     ///
     /// Example: `u32[42]`
@@ -59,9 +59,9 @@ pub enum DimPattern {
 #[derive(Clone, Debug)]
 pub struct RankCapture {
     /// Name bound to the array's rank (`arr.dim`) as a `usize` scalar
-    pub dim_name: String,
+    pub dim: DimCapture,
     /// Name bound to the array's shape vector (`arr.shp`) as a `usize[d]` array
-    pub shp_name: String,
+    pub shp: String,
 }
 
 impl Type {
@@ -69,7 +69,7 @@ impl Type {
         Self { ty, shape: TypePattern::Scalar }
     }
 
-    pub fn vector_dim(ty: BaseType, dim: DimPattern) -> Self {
+    pub fn vector_dim(ty: BaseType, dim: DimCapture) -> Self {
         Self { ty, shape: TypePattern::Axes(vec![AxisPattern::Dim(dim)]) }
     }
 
@@ -102,14 +102,14 @@ impl TypePattern {
     /// But first, lets make the rust type checker happy
     pub fn any() -> Self {
         TypePattern::Axes(vec![AxisPattern::Rank(RankCapture {
-            dim_name: String::new(),
-            shp_name: String::new(),
+            dim: DimCapture::any(),
+            shp: String::new(),
         })])
     }
 }
 
-impl DimPattern {
+impl DimCapture {
     pub fn any() -> Self {
-        DimPattern::Var(String::new())
+        DimCapture::Var(String::new())
     }
 }

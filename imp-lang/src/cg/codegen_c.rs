@@ -689,7 +689,7 @@ fn shape_match_condition(shape: &TypePattern, arg: &str) -> String {
                 format!("{arg}.dim == {}", axes.len()),
             ];
             for (i, axis) in axes.iter().enumerate() {
-                if let AxisPattern::Dim(DimPattern::Known(v)) = axis {
+                if let AxisPattern::Dim(DimCapture::Known(v)) = axis {
                     checks.push(format!("{arg}.shp[{i}] == {v}"));
                 }
             }
