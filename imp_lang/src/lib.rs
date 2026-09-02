@@ -16,8 +16,8 @@ use ast::{Scope, ParsedAst, TypedAst, UntypedAst};
 pub use phase::Phase;
 
 macro_rules! breakpoint {
-    ($breakpoint:ident, $phase:pat, $ast:ident) => {
-        if matches!($breakpoint, Some($phase)) {
+    ($breakpoint:ident, $phase:expr, $ast:ident) => {
+        if $breakpoint == Some($phase) {
             print!("{}", show::show(&mut $ast));
             return None;
         }
@@ -25,8 +25,8 @@ macro_rules! breakpoint {
 }
 
 macro_rules! breakpoint_str {
-    ($breakpoint:ident, $phase:pat, $src:ident) => {
-        if matches!($breakpoint, Some($phase)) {
+    ($breakpoint:ident, $phase:expr, $src:ident) => {
+        if $breakpoint == Some($phase) {
             print!("{}", $src);
             return None;
         }
