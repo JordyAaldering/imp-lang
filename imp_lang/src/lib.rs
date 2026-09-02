@@ -13,7 +13,7 @@ use std::{fs, path::PathBuf};
 
 use clap::{Parser, ValueEnum};
 
-use ast::{Scope, ParsedAst, TypedAst, UntypedAst};
+use crate::ast::{Scope, ParsedAst, TypedAst, UntypedAst};
 
 pub fn compile(options: Options) {
     let src = fs::read_to_string(&options.infile).unwrap();

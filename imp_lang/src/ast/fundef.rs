@@ -6,9 +6,9 @@ pub struct Fundef<'ast, Ast: AstConfig> {
     pub args: Vec<Farg>,
     pub shape_prelude: Vec<Assign<'ast, Ast>>,
     pub shape_facts: ShapeFacts,
-    /// Variables declared in this function, for diagnostics/pretty-printing.
+    /// Variables declared in this function.
     ///
-    /// Non-owning: the `VarInfo` values themselves live in the phase's `Arenas`.
+    /// Non-owning: the [`VarInfo`] values themselves live in the phase's [`Scope`].
     pub decs: Vec<&'ast VarInfo<'ast, Ast>>,
     pub body: Body<'ast, Ast>,
 }
