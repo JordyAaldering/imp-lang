@@ -1,27 +1,26 @@
 use std::{cell::RefCell, collections::HashMap, mem};
 
-use typed_arena::Arena;
-
 use crate::{ast::*, trav_name::TravName};
 
-pub fn to_ssa<'ast>(program: Program<'ast, ParsedAst>) -> Program<'ast, UntypedAst> {
+pub fn to_ssa<'ast>(program: Program<'ast, ParsedAst>, arenas: &'ast Arenas<'ast, UntypedAst>) -> Program<'ast, UntypedAst> {
     let mut overloads = HashMap::new();
-    let fundefs_arena: Arena<Fundef<'ast, UntypedAst>> = Arena::new();
+    let mut fundefs = Vec::new();
 
     for (name, groups) in program.overloads {
         let mut new_groups = HashMap::new();
 
-        for (sig, fundefs) in groups {
-            let mut new_fundefs = Vec::new();
+        for (sig, fundef_ids) in groups {
+            let mut new_ids = Vec::new();
 
-            for fundef in fundefs {
-                let out_fundef = ToSsa::new().trav_fundef(fundef);
-                let out_ref = fundefs_arena.alloc(out_fundef);
-                let out_ref: &'ast Fundef<'ast, UntypedAst> = unsafe { std::mem::transmute(out_ref) };
-                new_fundefs.push(out_ref);
+            for fundef_id in fundef_ids {
+                let src_fundef = &program.fundefs[fundef_id.0];
+                let out_fundef = ToSsa::new(arenas).trav_fundef(src_fundef);
+                let id = FundefId(fundefs.len());
+                fundefs.push(out_fundef);
+                new_ids.push(id);
             }
 
-            new_groups.insert(sig, new_fundefs);
+            new_groups.insert(sig, new_ids);
         }
 
         overloads.insert(name, new_groups);
@@ -29,35 +28,37 @@ pub fn to_ssa<'ast>(program: Program<'ast, ParsedAst>) -> Program<'ast, UntypedA
 
     Program {
         overloads,
-        fundefs: fundefs_arena,
+        fundefs,
     }
 }
 
 pub struct ToSsa<'ast> {
+    arenas: &'ast Arenas<'ast, UntypedAst>,
     trav_name: TravName,
-    decs_arena: Arena<VarInfo<'ast, UntypedAst>>,
-    expr_arena: Arena<ExprCell<'ast, UntypedAst>>,
+    new_decs: Vec<&'ast VarInfo<'ast, UntypedAst>>,
     new_assigns: Vec<Stmt<'ast, UntypedAst>>,
     env_stack: Vec<HashMap<String, Id<'ast, UntypedAst>>>,
 }
 
 impl<'ast> ToSsa<'ast> {
-    fn new() -> Self {
+    fn new(arenas: &'ast Arenas<'ast, UntypedAst>) -> Self {
         Self {
+            arenas,
             trav_name: TravName::new(crate::Phase::SSA),
-            decs_arena: Arena::new(),
-            expr_arena: Arena::new(),
+            new_decs: Vec::new(),
             new_assigns: Vec::new(),
             env_stack: Vec::new(),
         }
     }
 
-    fn alloc_lvis(&self, name: String, ssa: Option<&'ast ExprCell<'ast, UntypedAst>>) -> &'ast VarInfo<'ast, UntypedAst> {
-        unsafe { std::mem::transmute(self.decs_arena.alloc(VarInfo { name, ty: RefCell::new(None), ssa })) }
+    fn alloc_lvis(&mut self, name: String, ssa: Option<&'ast ExprCell<'ast, UntypedAst>>) -> &'ast VarInfo<'ast, UntypedAst> {
+        let lvis = self.arenas.alloc_lvis(name, RefCell::new(None), ssa);
+        self.new_decs.push(lvis);
+        lvis
     }
 
     fn alloc_expr(&self, expr: Expr<'ast, UntypedAst>) -> &'ast ExprCell<'ast, UntypedAst> {
-        unsafe { std::mem::transmute(self.expr_arena.alloc(ExprCell::new(expr))) }
+        self.arenas.alloc_expr(expr)
     }
 
     fn unwrap_id_operand(&mut self, operand: &'ast ExprCell<'ast, ParsedAst>) -> Id<'ast, UntypedAst> {
@@ -89,8 +90,7 @@ impl<'ast> ToSsa<'ast> {
     }
 
     fn trav_fundef(&mut self, fundef: &Fundef<'ast, ParsedAst>) -> Fundef<'ast, UntypedAst> {
-        self.decs_arena = Arena::new();
-        self.expr_arena = Arena::new();
+        debug_assert!(self.new_decs.is_empty());
 
         self.push_env();
 
@@ -113,8 +113,7 @@ impl<'ast> ToSsa<'ast> {
 
         self.pop_env();
 
-        let decs = mem::take(&mut self.decs_arena);
-        let exprs = mem::take(&mut self.expr_arena);
+        let decs = mem::take(&mut self.new_decs);
 
         Fundef {
             name: fundef.name.clone(),
@@ -122,7 +121,6 @@ impl<'ast> ToSsa<'ast> {
             shape_prelude,
             shape_facts: fundef.shape_facts.clone(),
             decs,
-            exprs,
             body,
             ret_type: fundef.ret_type.clone(),
         }

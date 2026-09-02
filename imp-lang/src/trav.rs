@@ -19,7 +19,7 @@ pub trait Traverse<'ast> {
     fn trav_fundef(&mut self, fundef: &mut Fundef<'ast, Self::Ast>) {
         self.trav_fargs(&mut fundef.args);
 
-        for vardec in fundef.decs.iter_mut() {
+        for vardec in &fundef.decs {
             self.trav_vardec(vardec);
         }
 
@@ -38,7 +38,7 @@ pub trait Traverse<'ast> {
 
     fn trav_farg(&mut self, _arg: &mut Farg) {}
 
-    fn trav_vardec(&mut self, _vardec: &mut VarInfo<'ast, Self::Ast>) {}
+    fn trav_vardec(&mut self, _vardec: &VarInfo<'ast, Self::Ast>) {}
 
     // Statements
 
@@ -201,7 +201,7 @@ pub trait Traverse<'ast> {
         self.expr_default()
     }
 
-    fn trav_type(&mut self, _ty: &mut Type) -> Self::ExprOut {
+    fn trav_type(&mut self, _ty: &Type) -> Self::ExprOut {
         self.expr_default()
     }
 }

@@ -1,19 +1,18 @@
-use std::{collections::HashMap, mem};
-
-use typed_arena::Arena;
+use std::collections::HashMap;
 
 use crate::ast::*;
 
 pub fn type_infer<'ast>(program: &mut Program<'ast, UntypedAst>) -> Result<(), InferenceError> {
-    validate_overload_families(&program.overloads)?;
+    validate_overload_families(&program.overloads, &program.fundefs)?;
 
     let mut stubs: HashMap<String, HashMap<BaseSignature, Vec<DispatchStub>>> = HashMap::new();
 
     for (name, overloads) in &program.overloads {
         let mut stub_groups = HashMap::new();
-        for (sig, fundefs) in overloads {
+        for (sig, fundef_ids) in overloads {
             let mut stub_fundefs = Vec::new();
-            for fundef in fundefs {
+            for fundef_id in fundef_ids {
+                let fundef = &program.fundefs[fundef_id.0];
                 stub_fundefs.push(DispatchStub {
                     args: fundef.args.clone(),
                     ret_type: fundef.ret_type.clone(),
@@ -42,12 +41,16 @@ struct DispatchStub {
     ret_type: Type,
 }
 
-fn validate_overload_families(overloads: &HashMap<String, HashMap<BaseSignature, Vec<&Fundef<'_, UntypedAst>>>>) -> Result<(), InferenceError> {
+fn validate_overload_families(
+    overloads: &HashMap<String, HashMap<BaseSignature, Vec<FundefId>>>,
+    fundefs: &[Fundef<'_, UntypedAst>],
+) -> Result<(), InferenceError> {
     for (name, group) in overloads {
-        for (sig, fundefs) in group {
-            let (first, rest) = fundefs.split_first().unwrap();
-            let expected_ret_ty = &first.ret_type.ty;
-            for fundef in rest {
+        for (sig, ids) in group {
+            let (first, rest) = ids.split_first().unwrap();
+            let expected_ret_ty = &fundefs[first.0].ret_type.ty;
+            for id in rest {
+                let fundef = &fundefs[id.0];
                 if &fundef.ret_type.ty != expected_ret_ty {
                     return Err(InferenceError::InconsistentOverloadReturnBase {
                         name: name.clone(),
@@ -62,10 +65,8 @@ fn validate_overload_families(overloads: &HashMap<String, HashMap<BaseSignature,
     Ok(())
 }
 
-pub struct TypeInfer<'ast> {
+pub struct TypeInfer {
     args: Vec<Farg>,
-    decs: Arena<VarInfo<'ast, UntypedAst>>,
-    exprs: Arena<ExprCell<'ast, UntypedAst>>,
     stubs: HashMap<String, HashMap<BaseSignature, Vec<DispatchStub>>>,
     errors: Vec<InferenceError>,
 }
@@ -89,12 +90,10 @@ pub enum InferenceError {
     MissingTypeAnnotation { name: String },
 }
 
-impl<'ast> TypeInfer<'ast> {
+impl TypeInfer {
     fn new(overloads: HashMap<String, HashMap<BaseSignature, Vec<DispatchStub>>>) -> Self {
         Self {
             args: Vec::new(),
-            decs: Arena::new(),
-            exprs: Arena::new(),
             stubs: overloads,
             errors: Vec::new(),
         }
@@ -167,7 +166,7 @@ impl<'ast> TypeInfer<'ast> {
         Type { ty: elem_ty.ty, shape: result_shape }
     }
 
-    fn extract_ub_axes(&self, ub: &Id<'ast, UntypedAst>) -> Option<Vec<AxisPattern>> {
+    fn extract_ub_axes<'ast>(&self, ub: &Id<'ast, UntypedAst>) -> Option<Vec<AxisPattern>> {
         let lvis = match ub {
             Id::Var(v) => v,
             Id::Arg(_) => return None,
@@ -253,7 +252,7 @@ impl<'ast> TypeInfer<'ast> {
     }
 }
 
-impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
+impl<'ast> Traverse<'ast> for TypeInfer {
     type Ast = UntypedAst;
 
     type ExprOut = Type;
@@ -262,12 +261,8 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
 
     fn trav_fundef(&mut self, fundef: &mut Fundef<'ast, UntypedAst>) {
         debug_assert!(self.args.is_empty());
-        debug_assert!(self.decs.len() == 0);
-        debug_assert!(self.exprs.len() == 0);
 
         self.args = fundef.args.clone();
-        self.decs = mem::take(&mut fundef.decs);
-        self.exprs = mem::take(&mut fundef.exprs);
 
         for assign in &mut fundef.shape_prelude {
             self.trav_assign(assign);
@@ -275,8 +270,6 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
 
         let _ret_ty = self.trav_body(&mut fundef.body);
 
-        fundef.decs = mem::take(&mut self.decs);
-        fundef.exprs = mem::take(&mut self.exprs);
         self.args.clear();
     }
 

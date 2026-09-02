@@ -2,51 +2,53 @@ use std::collections::{HashMap, HashSet};
 
 use crate::ast::*;
 
-pub fn analyse_tp<'ast>(program: &mut Program<'ast, ParsedAst>) {
-    AnalyseTp::new().trav_program(program);
+pub fn analyse_tp<'ast>(program: &mut Program<'ast, ParsedAst>, arenas: &'ast Arenas<'ast, ParsedAst>) {
+    AnalyseTp::new(arenas).trav_program(program);
 }
 
-struct AnalyseTp {
+struct AnalyseTp<'ast> {
+    arenas: &'ast Arenas<'ast, ParsedAst>,
     /// Symbols that have been defined so far in the current fundef,
     /// accumulated left-to-right across arguments and their type patterns.
     defined: HashSet<String>,
     symbol_terms: HashMap<String, ShapeTerm>,
 }
 
-impl<'ast> AnalyseTp {
-    fn new() -> Self {
+impl<'ast> AnalyseTp<'ast> {
+    fn new(arenas: &'ast Arenas<'ast, ParsedAst>) -> Self {
         Self {
+            arenas,
             defined: HashSet::new(),
             symbol_terms: HashMap::new(),
         }
     }
 
-    fn alloc_lvis(&self, fundef: &Fundef<'ast, ParsedAst>, name: String, ty: Option<Type>) -> &'ast VarInfo<'ast, ParsedAst> {
-        // SAFETY: allocation arena is stored in the owning Fundef.
-        unsafe { std::mem::transmute(fundef.decs.alloc(VarInfo { name, ty, ssa: () })) }
+    fn alloc_lvis(&self, fundef: &mut Fundef<'ast, ParsedAst>, name: String, ty: Option<Type>) -> &'ast VarInfo<'ast, ParsedAst> {
+        let lvis = self.arenas.alloc_lvis(name, ty, ());
+        fundef.decs.push(lvis);
+        lvis
     }
 
-    fn alloc_expr(&self, fundef: &Fundef<'ast, ParsedAst>, expr: Expr<'ast, ParsedAst>) -> &'ast ExprCell<'ast, ParsedAst> {
-        // SAFETY: allocation arena is stored in the owning Fundef.
-        unsafe { std::mem::transmute(fundef.exprs.alloc(ExprCell::new(expr))) }
+    fn alloc_expr(&self, expr: Expr<'ast, ParsedAst>) -> &'ast ExprCell<'ast, ParsedAst> {
+        self.arenas.alloc_expr(expr)
     }
 
-    fn arg_expr(&self, fundef: &Fundef<'ast, ParsedAst>, arg_index: usize) -> &'ast ExprCell<'ast, ParsedAst> {
-        self.alloc_expr(fundef, Expr::Id(Id::Arg(arg_index)))
+    fn arg_expr(&self, arg_index: usize) -> &'ast ExprCell<'ast, ParsedAst> {
+        self.alloc_expr(Expr::Id(Id::Arg(arg_index)))
     }
 
-    fn shape_of_arg_expr(&self, fundef: &Fundef<'ast, ParsedAst>, arg_index: usize) -> Expr<'ast, ParsedAst> {
-        Expr::Prf(Prf::ShapeA(self.arg_expr(fundef, arg_index)))
+    fn shape_of_arg_expr(&self, arg_index: usize) -> Expr<'ast, ParsedAst> {
+        Expr::Prf(Prf::ShapeA(self.arg_expr(arg_index)))
     }
 
-    fn dim_of_arg_expr(&self, fundef: &Fundef<'ast, ParsedAst>, arg_index: usize) -> Expr<'ast, ParsedAst> {
-        Expr::Prf(Prf::DimA(self.arg_expr(fundef, arg_index)))
+    fn dim_of_arg_expr(&self, arg_index: usize) -> Expr<'ast, ParsedAst> {
+        Expr::Prf(Prf::DimA(self.arg_expr(arg_index)))
     }
 
-    fn dim_at_expr(&self, fundef: &Fundef<'ast, ParsedAst>, arg_index: usize, axis_index: usize) -> Expr<'ast, ParsedAst> {
-        let idx = self.alloc_expr(fundef, Expr::Const(Const::Usize(axis_index)));
-        let idx_vec = self.alloc_expr(fundef, Expr::Array(Array { elems: vec![idx] }));
-        let shp = self.alloc_expr(fundef, self.shape_of_arg_expr(fundef, arg_index));
+    fn dim_at_expr(&self, arg_index: usize, axis_index: usize) -> Expr<'ast, ParsedAst> {
+        let idx = self.alloc_expr(Expr::Const(Const::Usize(axis_index)));
+        let idx_vec = self.alloc_expr(Expr::Array(Array { elems: vec![idx] }));
+        let shp = self.alloc_expr(self.shape_of_arg_expr(arg_index));
         Expr::Prf(Prf::SelVxA(idx_vec, shp))
     }
 
@@ -62,7 +64,7 @@ impl<'ast> AnalyseTp {
             self.symbol_terms.insert(symbol.to_owned(), term.clone());
 
             let lhs = self.alloc_lvis(fundef, symbol.to_owned(), Some(ty));
-            let expr = self.alloc_expr(fundef, expr);
+            let expr = self.alloc_expr(expr);
             fundef.shape_prelude.push(Assign { lhs, expr });
             fundef.shape_facts.bindings.push(ShapeBinding {
                 symbol: symbol.to_owned(),
@@ -88,7 +90,7 @@ impl<'ast> AnalyseTp {
                 match axis {
                     AxisPattern::Dim(DimCapture::Var(var)) => {
                         let term = ShapeTerm::ArgDim { arg_index, axis_index };
-                        let expr = self.dim_at_expr(fundef, arg_index, axis_index);
+                        let expr = self.dim_at_expr(arg_index, axis_index);
                         pending.push((var.clone(), term, expr, Type::scalar(BaseType::Usize)));
                     }
                     AxisPattern::Rank(RankCapture { dim: DimCapture::Var(dim), shp }) => {
@@ -96,7 +98,7 @@ impl<'ast> AnalyseTp {
                             arg_index,
                             axis_index,
                         };
-                        let dim_expr = self.dim_of_arg_expr(fundef, arg_index);
+                        let dim_expr = self.dim_of_arg_expr(arg_index);
                         pending.push((
                             dim.clone(),
                             dim_term,
@@ -108,7 +110,7 @@ impl<'ast> AnalyseTp {
                             arg_index,
                             start_axis: axis_index,
                         };
-                        let shp_expr = self.shape_of_arg_expr(fundef, arg_index);
+                        let shp_expr = self.shape_of_arg_expr(arg_index);
                         pending.push((
                             shp.clone(),
                             shp_term,
@@ -177,7 +179,7 @@ impl<'ast> AnalyseTp {
     }
 }
 
-impl<'ast> Traverse<'ast> for AnalyseTp {
+impl<'ast> Traverse<'ast> for AnalyseTp<'ast> {
     type Ast = ParsedAst;
 
     type ExprOut = ();

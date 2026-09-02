@@ -1,6 +1,6 @@
-use crate::{ast::*, cg::rename_fundefs};
+use crate::ast::*;
 
-pub fn emit_c(ast: &mut Program<'static, TypedAst>, module_name: String) -> String {
+pub fn emit_c<'ast>(ast: &mut Program<'ast, TypedAst>, module_name: String) -> String {
     let mut cg = CompileC::new(module_name);
     cg.trav_program(ast);
     cg.finish()
@@ -9,6 +9,7 @@ pub fn emit_c(ast: &mut Program<'static, TypedAst>, module_name: String) -> Stri
 pub struct CompileC {
     output: String,
     module_name: String,
+    fundef_names: Vec<String>,
     arg_names: Vec<String>,
     arg_types: Vec<Type>,
     ret_type: Option<Type>,
@@ -24,6 +25,7 @@ impl CompileC {
         Self {
             output: String::new(),
             module_name,
+            fundef_names: Vec::new(),
             arg_names: Vec::new(),
             arg_types: Vec::new(),
             ret_type: None,
@@ -192,23 +194,25 @@ impl<'ast> Traverse<'ast> for CompileC {
     fn expr_default(&self) -> Self::ExprOut { () }
 
     fn trav_program(&mut self, program: &mut Program<'ast, TypedAst>) {
+        self.fundef_names = program.fundef_names();
+
         self.output.push_str(&format!("#include \"{}.h\"\n", self.module_name));
         self.output.push_str(HEADER);
 
         for (_name, overloads) in &program.overloads {
-            for (_sig, fundefs) in overloads {
-                for fundef in fundefs {
+            for (_sig, fundef_ids) in overloads {
+                for fundef_id in fundef_ids {
                     self.output.push('\n');
-                    self.emit_function_prototype(fundef);
+                    self.emit_function_prototype(&program.fundefs[fundef_id.0]);
                 }
             }
         }
 
         for (name, overloads) in &program.overloads {
-            for (sig, fundefs) in overloads {
-                if overloads.len() > 1 || fundefs.len() > 1 {
+            for (sig, fundef_ids) in overloads {
+                if overloads.len() > 1 || fundef_ids.len() > 1 {
                     self.output.push('\n');
-                    let first = fundefs[0];
+                    let first = &program.fundefs[fundef_ids[0].0];
                     self.emit_wrapper_prototype(&name, sig, &first.ret_type.ty);
                 }
             }
@@ -219,10 +223,11 @@ impl<'ast> Traverse<'ast> for CompileC {
         }
 
         for (name, overloads) in &program.overloads {
-            for (sig, fundefs) in overloads {
-                if overloads.len() > 1 || fundefs.len() > 1 {
+            for (sig, fundef_ids) in overloads {
+                if overloads.len() > 1 || fundef_ids.len() > 1 {
                     self.output.push('\n');
-                    self.emit_wrapper_function(&name, sig, fundefs);
+                    let family: Vec<&Fundef<TypedAst>> = fundef_ids.iter().map(|id| &program.fundefs[id.0]).collect();
+                    self.emit_wrapper_function(&name, sig, &family);
                 }
             }
         }
@@ -491,15 +496,11 @@ impl<'ast> Traverse<'ast> for CompileC {
 
         let (fold_name, call_args) = match &fold.foldfun {
             FoldFun::Name(id) => {
-                let name = match id {
-                    CallTarget::Function(f) => rename_fundefs::mangle_fundef_name(&f.name, &f.args),
-                };
+                let name = self.fundef_names[id.0].clone();
                 (name, vec![target_name.clone(), sel_expr])
             }
             FoldFun::Apply { id, args } => {
-                let name = match id {
-                    CallTarget::Function(f) => rename_fundefs::mangle_fundef_name(&f.name, &f.args),
-                };
+                let name = self.fundef_names[id.0].clone();
                 let mut hole = 0usize;
                 let mut out = Vec::with_capacity(args.len());
                 for arg in args {
@@ -534,9 +535,7 @@ impl<'ast> Traverse<'ast> for CompileC {
     }
 
     fn trav_call(&mut self, call: &mut Call<'ast, TypedAst>) {
-        let name = match &call.id {
-            CallTarget::Function(f) => rename_fundefs::mangle_fundef_name(&f.name, &f.args),
-        };
+        let name = self.fundef_names[call.id.0].clone();
 
         let args: Vec<String> = call.args.iter()
             .map(|arg| self.render_id(*arg))

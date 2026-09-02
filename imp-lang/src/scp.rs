@@ -6,11 +6,11 @@ mod parser;
 
 use lexer::Lexer;
 use parser::Parser;
-use crate::ast::{Program, ParsedAst};
+use crate::ast::{Arenas, Program, ParsedAst};
 
-pub fn scanparse(src: &str) -> Result<Program<'static, ParsedAst>, String> {
+pub fn scanparse<'ast>(src: &str, arenas: &'ast Arenas<'ast, ParsedAst>) -> Result<Program<'ast, ParsedAst>, String> {
     let lexer = Lexer::new(src);
-    let mut parser = Parser::new(lexer);
+    let mut parser = Parser::new(lexer, arenas);
     parser.parse_program()
         .map_err(|e| format!("{:?}", e))
 }
