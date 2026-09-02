@@ -2,19 +2,19 @@ use std::mem;
 
 use crate::{ast::*, trav_name::TravName};
 
-pub fn flatten<'ast>(program: &mut Program<'ast, ParsedAst>, arenas: &'ast Arenas<'ast, ParsedAst>) {
+pub fn flatten<'ast>(program: &mut Program<'ast, ParsedAst>, arenas: &'ast Scope<'ast, ParsedAst>) {
     Flatten::new(arenas).trav_program(program);
 }
 
 struct Flatten<'ast> {
-    arenas: &'ast Arenas<'ast, ParsedAst>,
+    arenas: &'ast Scope<'ast, ParsedAst>,
     trav_name: TravName,
     new_decs: Vec<&'ast VarInfo<'ast, ParsedAst>>,
     new_assigns: Vec<Assign<'ast, ParsedAst>>,
 }
 
 impl<'ast> Flatten<'ast> {
-    fn new(arenas: &'ast Arenas<'ast, ParsedAst>) -> Self {
+    fn new(arenas: &'ast Scope<'ast, ParsedAst>) -> Self {
         Self {
             arenas,
             trav_name: TravName::new(crate::Phase::FLT),

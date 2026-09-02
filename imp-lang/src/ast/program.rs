@@ -1,7 +1,5 @@
 use std::collections::HashMap;
 
-use id_arena::Arena;
-
 use super::*;
 
 pub struct Program<'ast, Ast: AstConfig> {
@@ -30,7 +28,7 @@ pub struct Program<'ast, Ast: AstConfig> {
     /// Owns every `Fundef` in the program; cross-references use `FundefId` rather
     /// than raw pointers, so this arena can be freely mutated (`iter_mut`) without
     /// invalidating anything that references a fundef by id.
-    pub fundefs: Arena<Fundef<'ast, Ast>>,
+    pub fundefs: id_arena::Arena<Fundef<'ast, Ast>>,
 }
 
 impl<'ast, Ast: AstConfig> Program<'ast, Ast> {

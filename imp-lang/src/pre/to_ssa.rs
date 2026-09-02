@@ -2,7 +2,7 @@ use std::{cell::RefCell, collections::HashMap, mem};
 
 use crate::{ast::*, trav_name::TravName};
 
-pub fn to_ssa<'ast>(program: Program<'ast, ParsedAst>, arenas: &'ast Arenas<'ast, UntypedAst>) -> Program<'ast, UntypedAst> {
+pub fn to_ssa<'ast>(program: Program<'ast, ParsedAst>, arenas: &'ast Scope<'ast, UntypedAst>) -> Program<'ast, UntypedAst> {
     let mut overloads = HashMap::new();
     let mut fundefs = id_arena::Arena::new();
 
@@ -32,7 +32,7 @@ pub fn to_ssa<'ast>(program: Program<'ast, ParsedAst>, arenas: &'ast Arenas<'ast
 }
 
 pub struct ToSsa<'ast> {
-    arenas: &'ast Arenas<'ast, UntypedAst>,
+    arenas: &'ast Scope<'ast, UntypedAst>,
     trav_name: TravName,
     new_decs: Vec<&'ast VarInfo<'ast, UntypedAst>>,
     new_assigns: Vec<Stmt<'ast, UntypedAst>>,
@@ -40,7 +40,7 @@ pub struct ToSsa<'ast> {
 }
 
 impl<'ast> ToSsa<'ast> {
-    fn new(arenas: &'ast Arenas<'ast, UntypedAst>) -> Self {
+    fn new(arenas: &'ast Scope<'ast, UntypedAst>) -> Self {
         Self {
             arenas,
             trav_name: TravName::new(crate::Phase::SSA),

@@ -1,5 +1,3 @@
-use typed_arena::Arena;
-
 use super::*;
 
 /// Owns the bump-allocated storage backing `VarInfo`/`Expr` nodes for one `AstConfig` phase.
@@ -9,16 +7,16 @@ use super::*;
 /// then `flatten`/`analyse_tp`, all operating on `ParsedAst`). Because the arena is never owned
 /// by the AST values built from it, `alloc_lvis`/`alloc_expr` hand back references that are
 /// genuinely valid for `'ast` -- no lifetime-extending `unsafe` is required.
-pub struct Arenas<'ast, Ast: AstConfig> {
-    decs: Arena<VarInfo<'ast, Ast>>,
-    exprs: Arena<ExprCell<'ast, Ast>>,
+pub struct Scope<'ast, Ast: AstConfig> {
+    decs: typed_arena::Arena<VarInfo<'ast, Ast>>,
+    exprs: typed_arena::Arena<ExprCell<'ast, Ast>>,
 }
 
-impl<'ast, Ast: AstConfig> Arenas<'ast, Ast> {
+impl<'ast, Ast: AstConfig> Scope<'ast, Ast> {
     pub fn new() -> Self {
         Self {
-            decs: Arena::new(),
-            exprs: Arena::new(),
+            decs: typed_arena::Arena::new(),
+            exprs: typed_arena::Arena::new(),
         }
     }
 

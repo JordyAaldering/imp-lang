@@ -13,7 +13,7 @@ use std::{fs, path::PathBuf};
 
 use clap::{Parser, ValueEnum};
 
-use ast::{Arenas, ParsedAst, TypedAst, UntypedAst};
+use ast::{Scope, ParsedAst, TypedAst, UntypedAst};
 
 pub fn compile(options: Options) {
     let src = fs::read_to_string(&options.infile).unwrap();
@@ -22,7 +22,7 @@ pub fn compile(options: Options) {
         return;
     }
 
-    let parsed_arenas = Arenas::<ParsedAst>::new();
+    let parsed_arenas = Scope::<ParsedAst>::new();
     let mut ast = scp::scanparse(&src, &parsed_arenas).unwrap();
     if matches!(options.b, Some(Phase::SCP)) {
         print!("{}", show::show(&mut ast));
@@ -47,7 +47,7 @@ pub fn compile(options: Options) {
         return;
     }
 
-    let untyped_arenas = Arenas::<UntypedAst>::new();
+    let untyped_arenas = Scope::<UntypedAst>::new();
     let mut ast = pre::to_ssa(ast, &untyped_arenas);
     if matches!(options.b, Some(Phase::SSA)) {
         print!("{}", show::show(&mut ast));
@@ -61,7 +61,7 @@ pub fn compile(options: Options) {
         return;
     }
 
-    let typed_arenas = Arenas::<TypedAst>::new();
+    let typed_arenas = Scope::<TypedAst>::new();
     let mut ast = tc::resolve_dispatch(ast, &typed_arenas).unwrap();
     if matches!(options.b, Some(Phase::DR)) {
         print!("{}", show::show(&mut ast));

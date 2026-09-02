@@ -1,9 +1,8 @@
 // Declarations
 mod program;
 mod fundef;
-mod fundef_id;
 mod shapefact;
-mod arenas;
+mod scope;
 // Statements
 mod body;
 mod stmt;
@@ -25,9 +24,8 @@ mod typ;
 // Declarations
 pub use program::*;
 pub use fundef::*;
-pub use fundef_id::*;
 pub use shapefact::*;
-pub use arenas::*;
+pub use scope::*;
 // Statements
 pub use body::*;
 pub use stmt::*;
@@ -46,10 +44,16 @@ pub use id::*;
 pub use constval::*;
 pub use typ::*;
 
+use std::{cell::RefCell, fmt};
+
 pub use crate::trav::Traverse;
 
-use std::cell::RefCell;
-use std::fmt;
+/// A lightweight, `Copy` handle to a `Fundef` stored in `Program.fundefs`.
+///
+/// Backed by `id_arena::Id`, which is generic over the pointee type: `FundefId<'ast, ParsedAst>`,
+/// `FundefId<'ast, UntypedAst>` and `FundefId<'ast, TypedAst>` are distinct types, so an id from
+/// one phase's arena can't accidentally be used to index another phase's.
+pub type FundefId<'ast, Ast> = id_arena::Id<Fundef<'ast, Ast>>;
 
 /// Shared, in-place-rewritable storage for an expression node.
 ///
