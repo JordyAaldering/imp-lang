@@ -2,7 +2,6 @@ use std::path::PathBuf;
 
 use clap::Parser;
 
-
 #[derive(Parser)]
 #[derive(Default)]
 pub struct Options {

@@ -13,95 +13,70 @@ use std::{fs, path::PathBuf};
 
 use crate::ast::{Scope, ParsedAst, TypedAst, UntypedAst};
 
+macro_rules! breakpoint {
+    ($breakpoint:ident, $phase:pat, $ast:ident) => {
+        if matches!($breakpoint, Some($phase)) {
+            print!("{}", show::show(&mut $ast));
+            return None;
+        }
+    };
+}
+
+macro_rules! breakpoint_str {
+    ($breakpoint:ident, $phase:pat, $src:ident) => {
+        if matches!($breakpoint, Some($phase)) {
+            print!("{}", $src);
+            return None;
+        }
+    };
+}
+
 pub fn compile(breakpoint: Option<Phase>, infile: &PathBuf, outdir: Option<&PathBuf>) -> Option<PathBuf> {
     let src = fs::read_to_string(&infile).unwrap();
-    if matches!(breakpoint, Some(Phase::RD)) {
-        println!("{}", src.trim_end_matches('\n'));
-        return None;
-    }
+    breakpoint_str!(breakpoint, Phase::RD, src);
 
     let parsed_arenas = Scope::<ParsedAst>::new();
     let mut ast = scp::scanparse(&src, &parsed_arenas).unwrap();
-    if matches!(breakpoint, Some(Phase::SCP)) {
-        print!("{}", show::show(&mut ast));
-        return None;
-    }
+    breakpoint!(breakpoint, Phase::SCP, ast);
 
     let mut ast = tp::check_tp(ast).unwrap();
-    if matches!(breakpoint, Some(Phase::CTP)) {
-        print!("{}", show::show(&mut ast));
-        return None;
-    }
+    breakpoint!(breakpoint, Phase::CTP, ast);
 
     tp::analyse_tp(&mut ast, &parsed_arenas);
-    if matches!(breakpoint, Some(Phase::ATP)) {
-        print!("{}", show::show(&mut ast));
-        return None;
-    }
+    breakpoint!(breakpoint, Phase::ATP, ast);
 
     pre::flatten(&mut ast, &parsed_arenas);
-    if matches!(breakpoint, Some(Phase::FLT)) {
-        print!("{}", show::show(&mut ast));
-        return None;
-    }
+    breakpoint!(breakpoint, Phase::FLT, ast);
 
     let untyped_arenas = Scope::<UntypedAst>::new();
     let mut ast = pre::to_ssa(ast, &untyped_arenas);
-    if matches!(breakpoint, Some(Phase::SSA)) {
-        print!("{}", show::show(&mut ast));
-        return None;
-    }
+    breakpoint!(breakpoint, Phase::SSA, ast);
 
     tc::type_infer(&mut ast).unwrap();
-    if matches!(breakpoint, Some(Phase::TI)) {
-        let mut ast = ast;
-        print!("{}", show::show(&mut ast));
-        return None;
-    }
+    breakpoint!(breakpoint, Phase::TI, ast);
 
     let typed_arenas = Scope::<TypedAst>::new();
     let mut ast = tc::resolve_dispatch(ast, &typed_arenas).unwrap();
-    if matches!(breakpoint, Some(Phase::DR)) {
-        print!("{}", show::show(&mut ast));
-        return None;
-    }
+    breakpoint!(breakpoint, Phase::DR, ast);
 
     opt::constant_fold(&mut ast);
-    if matches!(breakpoint, Some(Phase::CF)) {
-        print!("{}", show::show(&mut ast));
-        return None;
-    }
+    breakpoint!(breakpoint, Phase::CF, ast);
 
     opt::dead_code_removal(&mut ast);
-    if matches!(breakpoint, Some(Phase::DCR)) {
-        print!("{}", show::show(&mut ast));
-        return None;
-    }
+    breakpoint!(breakpoint, Phase::DCR, ast);
 
     cg::rename_fundefs(&mut ast);
-    if matches!(breakpoint, Some(Phase::RNF)) {
-        print!("{}", show::show(&mut ast));
-        return None;
-    }
+    breakpoint!(breakpoint, Phase::RNF, ast);
 
     let h_str = cg::emit_h(&mut ast);
-    if matches!(breakpoint, Some(Phase::CGH)) {
-        print!("{}", h_str);
-        return None;
-    }
+    breakpoint_str!(breakpoint, Phase::CGH, h_str);
 
     let module_name = format!("IMP{}", infile.file_stem().unwrap().to_str().unwrap());
     let c_str = cg::emit_c(&mut ast, &module_name);
-    if matches!(breakpoint, Some(Phase::CGC)) {
-        print!("{}", c_str);
-        return None;
-    }
+    breakpoint_str!(breakpoint, Phase::CGC, c_str);
 
     let rs_str = cg::emit_ffi(&mut ast);
-    if matches!(breakpoint, Some(Phase::CGRS)) {
-        print!("{}", rs_str);
-        return None;
-    }
+    breakpoint_str!(breakpoint, Phase::CGRS, rs_str);
 
     if let Some(outdir) = outdir {
         let c_path = outdir.join(&module_name).with_extension("c");
