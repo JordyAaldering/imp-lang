@@ -1,25 +1,5 @@
 use crate::ast::*;
 
-pub fn emit_h<'ast>(ast: &mut Program<'ast, TypedAst>) -> String {
-    let mut cg = CompileH::new();
-    cg.trav_program(ast);
-    cg.finish()
-}
-
-pub struct CompileH {
-    output: String,
-}
-
-impl CompileH {
-    pub fn new() -> Self {
-        Self { output: String::new() }
-    }
-
-    pub fn finish(self) -> String {
-        self.output
-    }
-}
-
 const HEADER: &str =
 r#"#pragma once
 #include <stdlib.h>
@@ -34,7 +14,18 @@ typedef struct {
 } ImpArrayRaw;
 "#;
 
-impl<'ast> Traverse<'ast> for CompileH {
+pub fn emit_h(ast: &mut Program<'_, TypedAst>) -> String {
+    let mut cg = CompileHeader::default();
+    cg.trav_program(ast);
+    cg.output
+}
+
+#[derive(Default)]
+struct CompileHeader {
+    output: String,
+}
+
+impl<'ast> Traverse<'ast> for CompileHeader {
     type Ast = TypedAst;
 
     type ExprOut = ();
@@ -50,34 +41,24 @@ impl<'ast> Traverse<'ast> for CompileH {
     }
 
     fn trav_fundef(&mut self, fundef: &mut Fundef<'ast, TypedAst>) {
-        let args: Vec<String> = fundef.args.iter()
+        let args: Vec<String> = fundef.args
+            .iter()
             .map(|arg| format!("{} {}", dyn_ctype(&arg.ty), arg.id))
             .collect();
-        self.output.push_str(&format!("{} IMP_{}({});\n",
-            dyn_ctype(&fundef.ret_type), fundef.name, args.join(", ")
-        ));
-    }
-}
 
-fn base_ctype(ty: &Type) -> String {
-    use BaseType::*;
-    match &ty.ty {
-        Bool => "bool".to_owned(),
-        Usize => "size_t".to_owned(),
-        U32 => "uint32_t".to_owned(),
-        U64 => "uint64_t".to_owned(),
-        I32 => "int32_t".to_owned(),
-        I64 => "int64_t".to_owned(),
-        F32 => "float".to_owned(),
-        F64 => "double".to_owned(),
-        Udf(udf) => udf.to_owned(),
+        self.output.push_str(&format!(
+            "{} IMP_{}({});\n",
+            dyn_ctype(&fundef.ret_type),
+            fundef.name,
+            args.join(", "),
+        ));
     }
 }
 
 fn dyn_ctype(ty: &Type) -> String {
     if ty.is_array() {
-        "ImpArrayRaw".to_owned()
+        "ImpArrayRaw".to_string()
     } else {
-        base_ctype(ty)
+        ty.basetype.ctype()
     }
 }

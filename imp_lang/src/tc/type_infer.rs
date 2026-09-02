@@ -48,15 +48,15 @@ fn validate_overload_families<'ast>(
     for (name, group) in overloads {
         for (sig, ids) in group {
             let (first, rest) = ids.split_first().unwrap();
-            let expected_ret_ty = &fundefs[*first].ret_type.ty;
+            let expected_ret_ty = &fundefs[*first].ret_type.basetype;
             for &id in rest {
                 let fundef = &fundefs[id];
-                if &fundef.ret_type.ty != expected_ret_ty {
+                if &fundef.ret_type.basetype != expected_ret_ty {
                     return Err(InferenceError::InconsistentOverloadReturnBase {
                         name: name.clone(),
                         arg_bases: sig.clone(),
                         expected: expected_ret_ty.clone(),
-                        found: fundef.ret_type.ty.clone(),
+                        found: fundef.ret_type.basetype.clone(),
                     });
                 }
             }
@@ -105,12 +105,12 @@ impl TypeInfer {
             return Type::vector_dim(BaseType::I32, DimCapture::Known(0));
         };
 
-        let base_ty = first.ty.clone();
+        let base_ty = first.basetype.clone();
         let elem_shape = first.shape.clone();
         let elem_rank = first.rank();
 
         for (i, ty) in elem_types.iter().enumerate().skip(1) {
-            if ty.ty != base_ty || ty.rank() != elem_rank {
+            if ty.basetype != base_ty || ty.rank() != elem_rank {
                 self.errors.push(InferenceError::InhomogeneousArray {
                     element: i,
                     expected: first.clone(),
@@ -132,7 +132,7 @@ impl TypeInfer {
             }
         };
 
-        Type { ty: base_ty, shape: result_shape }
+        Type { basetype: base_ty, shape: result_shape }
     }
 
     fn tensor_iv_and_dims(ub_ty: &Type) -> (Type, Option<usize>) {
@@ -140,12 +140,12 @@ impl TypeInfer {
             TypePattern::Scalar => unreachable!("cannot iterate over scalar ub"),
             TypePattern::Axes(axes) if axes.len() == 1 && matches!(axes[0], AxisPattern::Dim(_)) => {
                 match &axes[0] {
-                    AxisPattern::Dim(DimCapture::Known(k)) => (Type::vector_dim(ub_ty.ty.clone(), DimCapture::Known(*k)), Some(*k)),
-                    AxisPattern::Dim(DimCapture::Var(name)) => (Type::vector_dim(ub_ty.ty.clone(), DimCapture::Var(name.clone())), None),
+                    AxisPattern::Dim(DimCapture::Known(k)) => (Type::vector_dim(ub_ty.basetype.clone(), DimCapture::Known(*k)), Some(*k)),
+                    AxisPattern::Dim(DimCapture::Var(name)) => (Type::vector_dim(ub_ty.basetype.clone(), DimCapture::Var(name.clone())), None),
                     _ => unreachable!("unexpected axis pattern inside Dim guard"),
                 }
             }
-            _ => (Type { ty: ub_ty.ty.clone(), shape: TypePattern::any() }, None),
+            _ => (Type { basetype: ub_ty.basetype.clone(), shape: TypePattern::any() }, None),
         }
     }
 
@@ -163,7 +163,7 @@ impl TypeInfer {
                 TypePattern::Axes(new_axes)
             }
         };
-        Type { ty: elem_ty.ty, shape: result_shape }
+        Type { basetype: elem_ty.basetype, shape: result_shape }
     }
 
     fn extract_ub_axes<'ast>(&self, ub: &Id<'ast, UntypedAst>) -> Option<Vec<AxisPattern>> {
@@ -204,7 +204,7 @@ impl TypeInfer {
         };
 
         let key = BaseSignature {
-            base_types: arg_types.iter().map(|t| t.ty.clone()).collect(),
+            base_types: arg_types.iter().map(|t| t.basetype.clone()).collect(),
         };
 
         let Some(candidates) = group.get(&key) else {
@@ -281,7 +281,7 @@ impl<'ast> Traverse<'ast> for TypeInfer {
     fn trav_cond(&mut self, cond: &mut Cond<'ast, UntypedAst>) -> Self::ExprOut {
         let cond_ty = self.trav_id(&mut cond.cond);
 
-        if !(cond_ty.is_scalar() && cond_ty.ty == BaseType::Bool) {
+        if !(cond_ty.is_scalar() && cond_ty.basetype == BaseType::Bool) {
             self.errors.push(InferenceError::PrimitiveArgumentKindMismatch {
                 primitive: "cond".to_owned(),
                 arg_index: 0,
@@ -314,7 +314,7 @@ impl<'ast> Traverse<'ast> for TypeInfer {
 
         let (target, runtime_dispatch) = self.resolve_overload(&call.id, &arg_types);
         let out_ty = if runtime_dispatch {
-            Type { ty: target.ret_type.ty.clone(), shape: TypePattern::any() }
+            Type { basetype: target.ret_type.basetype.clone(), shape: TypePattern::any() }
         } else {
             target.ret_type.clone()
         };
@@ -352,27 +352,27 @@ impl<'ast> Traverse<'ast> for TypeInfer {
             SelVxA(idx, arr) => {
                 let _idx_ty = self.trav_id(idx);
                 let arr_ty = self.trav_id(arr);
-                Type::scalar(arr_ty.ty)
+                Type::scalar(arr_ty.basetype)
             }
             AddSxS(l, r) => {
                 let l_ty = self.trav_id(l);
                 let _r_ty = self.trav_id(r);
-                Type::scalar(l_ty.ty)
+                Type::scalar(l_ty.basetype)
             }
             SubSxS(l, r) => {
                 let l_ty = self.trav_id(l);
                 let _r_ty = self.trav_id(r);
-                Type::scalar(l_ty.ty)
+                Type::scalar(l_ty.basetype)
             }
             MulSxS(l, r) => {
                 let l_ty = self.trav_id(l);
                 let _r_ty = self.trav_id(r);
-                Type::scalar(l_ty.ty)
+                Type::scalar(l_ty.basetype)
             }
             DivSxS(l, r) => {
                 let l_ty = self.trav_id(l);
                 let _r_ty = self.trav_id(r);
-                Type::scalar(l_ty.ty)
+                Type::scalar(l_ty.basetype)
             }
             LtSxS(l, r) | LeSxS(l, r) | GtSxS(l, r) | GeSxS(l, r) | EqSxS(l, r) | NeSxS(l, r) => {
                 let _l_ty = self.trav_id(l);
@@ -381,7 +381,7 @@ impl<'ast> Traverse<'ast> for TypeInfer {
             }
             NegS(r) => {
                 let r_ty = self.trav_id(r);
-                Type::scalar(r_ty.ty)
+                Type::scalar(r_ty.basetype)
             }
             NotS(r) => {
                 let _r_ty = self.trav_id(r);
@@ -412,7 +412,7 @@ impl<'ast> Traverse<'ast> for TypeInfer {
         let result_ty = match leading_axes {
             Some(axes) => Self::tensor_result_type(ret_ty, axes),
             None => Type {
-                ty: ret_ty.ty,
+                basetype: ret_ty.basetype,
                 shape: TypePattern::any(),
             },
         };
@@ -437,7 +437,7 @@ impl<'ast> Traverse<'ast> for TypeInfer {
                 let arg_types = vec![neutral_ty.clone(), neutral_ty.clone()];
                 let (target, runtime_dispatch) = self.resolve_overload(&id, &arg_types);
                 let out_ty = if runtime_dispatch {
-                    Type { ty: target.ret_type.ty.clone(), shape: TypePattern::any() }
+                    Type { basetype: target.ret_type.basetype.clone(), shape: TypePattern::any() }
                 } else {
                     target.ret_type.clone()
                 };
@@ -492,7 +492,7 @@ impl<'ast> Traverse<'ast> for TypeInfer {
 }
 
 fn types_compatible(expected: &Type, provided: &Type) -> bool {
-    expected.ty == provided.ty && shapes_compatible(&expected.shape, &provided.shape)
+    expected.basetype == provided.basetype && shapes_compatible(&expected.shape, &provided.shape)
 }
 
 fn shapes_compatible(expected: &TypePattern, provided: &TypePattern) -> bool {

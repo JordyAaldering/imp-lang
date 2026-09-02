@@ -99,7 +99,7 @@ where
 
 pub fn mangle_type(ty: &Type) -> String {
     use BaseType::*;
-    let base = match &ty.ty {
+    let base = match &ty.basetype {
         Bool => "bool",
         I32 => "i32",
         I64 => "i64",

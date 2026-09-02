@@ -41,7 +41,7 @@ pub struct BaseSignature {
 impl<'ast, Ast: AstConfig> Fundef<'ast, Ast> {
     pub fn signature(&self) -> BaseSignature {
         BaseSignature {
-            base_types: self.args.iter().map(|arg| arg.ty.ty.clone()).collect(),
+            base_types: self.args.iter().map(|arg| arg.ty.basetype.clone()).collect(),
         }
     }
 }

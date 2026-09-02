@@ -123,7 +123,7 @@ impl<'ast, 'stubs> DispatchResolver<'ast, 'stubs> {
         };
 
         let key = BaseSignature {
-            base_types: arg_types.iter().map(|ty| ty.ty.clone()).collect(),
+            base_types: arg_types.iter().map(|ty| ty.basetype.clone()).collect(),
         };
 
         let Some(candidates) = group.get(&key) else {
@@ -437,7 +437,7 @@ fn dim_more_or_equal(a: &DimCapture, b: &DimCapture) -> bool {
 }
 
 fn types_compatible(expected: &Type, provided: &Type) -> bool {
-    expected.ty == provided.ty && shapes_compatible(&expected.shape, &provided.shape)
+    expected.basetype == provided.basetype && shapes_compatible(&expected.shape, &provided.shape)
 }
 
 fn shapes_compatible(expected: &TypePattern, provided: &TypePattern) -> bool {

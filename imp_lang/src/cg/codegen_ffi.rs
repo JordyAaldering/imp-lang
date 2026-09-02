@@ -1,26 +1,17 @@
 use crate::ast::*;
 
-pub fn emit_ffi<'ast>(ast: &mut Program<'ast, TypedAst>) -> String {
-    let mut cg = CompileFfi::new();
+pub fn emit_ffi(ast: &mut Program<'_, TypedAst>) -> String {
+    let mut cg = CompileFfi::default();
     cg.trav_program(ast);
-    cg.finish()
+    cg.output
 }
 
-pub struct CompileFfi {
+#[derive(Default)]
+struct CompileFfi {
     output: String,
 }
 
 impl CompileFfi {
-    pub fn new() -> Self {
-        Self {
-            output: String::new(),
-        }
-    }
-
-    pub fn finish(self) -> String {
-        self.output
-    }
-
     fn push(&mut self, s: &str) {
         self.output.push_str(s);
     }
@@ -94,7 +85,7 @@ impl CompileFfi {
         sig: &BaseSignature,
         fundefs: &Vec<&Fundef<'_, TypedAst>>,
     ) {
-        let sig_str = sig.base_types.iter().map(rust_base_type).collect::<Vec<_>>();
+        let sig_str = sig.base_types.iter().map(BaseType::rstype).collect::<Vec<_>>();
 
         // Per-position: is this arg scalar for ALL variants?
         let n_args = sig.base_types.len();
@@ -109,9 +100,9 @@ impl CompileFfi {
             .enumerate()
             .map(|(i, base)| {
                 if all_scalar_args[i] {
-                    format!("arg{}: {}", i, rust_base_type(base))
+                    format!("arg{}: {}", i, base.rstype())
                 } else {
-                    format!("arg{}: ImpArray<{}>", i, rust_base_type(base))
+                    format!("arg{}: ImpArray<{}>", i, base.rstype())
                 }
             })
             .collect::<Vec<_>>()
@@ -119,9 +110,9 @@ impl CompileFfi {
 
         let first = fundefs[0];
         let ret_ty_str = if all_scalar_ret {
-            rust_base_type(&first.ret_type.ty)
+            first.ret_type.basetype.rstype()
         } else {
-            format!("ImpArray<{}>", rust_base_type(&first.ret_type.ty))
+            format!("ImpArray<{}>", first.ret_type.basetype.rstype())
         };
 
         self.push(&format!(
@@ -189,33 +180,18 @@ fn join_args(args: &[Farg], map_ty: fn(&Type) -> String) -> String {
 /// Rust type used in wrapper signatures: arrays -> `ImpArray<T>`, scalars -> `T`.
 fn rust_wrapper_type(ty: &Type) -> String {
     if ty.is_array() {
-        format!("ImpArray<{}>", rust_base_type(&ty.ty))
+        format!("ImpArray<{}>", ty.basetype.rstype())
     } else {
-        rust_base_type(&ty.ty)
+        ty.basetype.rstype()
     }
 }
 
 /// Rust type used in `extern "C"` FFI declarations: arrays -> `ImpArrayRaw`, scalars -> `T`.
 fn rust_ffi_type(ty: &Type) -> String {
     if ty.is_array() {
-        "ImpArrayRaw".to_owned()
+        "ImpArrayRaw".to_string()
     } else {
-        rust_base_type(&ty.ty).to_owned()
-    }
-}
-
-fn rust_base_type(ty: &BaseType) -> String {
-    use BaseType::*;
-    match ty {
-        Bool => "bool".to_owned(),
-        Usize => "usize".to_owned(),
-        U32 => "u32".to_owned(),
-        U64 => "u64".to_owned(),
-        I32 => "i32".to_owned(),
-        I64 => "i64".to_owned(),
-        F32 => "f32".to_owned(),
-        F64 => "f64".to_owned(),
-        Udf(udf) => udf.to_owned(),
+        ty.basetype.rstype()
     }
 }
 
@@ -278,7 +254,7 @@ fn emit_return_expr(symbol_name: &str, ret_type: &Type, call_args: &[String]) ->
             "let __res_raw = unsafe {{ IMP_{}({}) }};\nunsafe {{ ImpArray::<{}>::from_raw(__res_raw) }}",
             symbol_name,
             call_args.join(", "),
-            rust_base_type(&ret_type.ty),
+            ret_type.basetype.rstype(),
         )
     } else {
         format!("unsafe {{ IMP_{}({}) }}", symbol_name, call_args.join(", "))
@@ -301,7 +277,7 @@ fn emit_family_return_expr(
             "let __res_raw = unsafe {{ IMP_{}({}) }};\nunsafe {{ ImpArray::<{}>::from_raw(__res_raw) }}",
             symbol_name,
             call_args.join(", "),
-            rust_base_type(&ret_type.ty),
+            ret_type.basetype.rstype(),
         )
     } else {
         // variant returns scalar but wrapper return type is ImpArray<T>

@@ -1,12 +1,35 @@
 use crate::ast::*;
 
-pub fn emit_c<'ast>(ast: &mut Program<'ast, TypedAst>, module_name: String) -> String {
-    let mut cg = CompileC::new(module_name);
-    cg.trav_program(ast);
-    cg.finish()
+const HEADER: &str =
+r#"#include <stdio.h>
+#include <string.h>
+
+static size_t imp_flat_index(ImpArrayRaw arr, ImpArrayRaw idx) {
+    size_t flat = 0;
+    for (size_t d = 0; d < idx.len; d += 1) {
+        flat = flat * arr.shp[d] + ((size_t *)idx.data)[d];
+    }
+    return flat;
 }
 
-pub struct CompileC {
+static ImpArrayRaw imp_clone_array_raw(ImpArrayRaw src, size_t elem_size) {
+    size_t *shp = src.dim == 0 ? NULL : (size_t *)malloc(src.dim * sizeof(size_t));
+    if (src.dim > 0) { memcpy(shp, src.shp, src.dim * sizeof(size_t)); }
+    void *data = src.len == 0 ? NULL : malloc(src.len * elem_size);
+    if (src.len > 0) { memcpy(data, src.data, src.len * elem_size); }
+    return (ImpArrayRaw) { .len = src.len, .dim = src.dim, .shp = shp, .data = data };
+}
+"#;
+
+pub fn emit_c(ast: &mut Program<'_, TypedAst>, module_name: String) -> String {
+    let mut cg = CompileC::default();
+    cg.module_name = module_name;
+    cg.trav_program(ast);
+    cg.output
+}
+
+#[derive(Default)]
+struct CompileC {
     output: String,
     module_name: String,
     fundef_names: Vec<String>,
@@ -21,26 +44,6 @@ pub struct CompileC {
 }
 
 impl CompileC {
-    pub fn new(module_name: String) -> Self {
-        Self {
-            output: String::new(),
-            module_name,
-            fundef_names: Vec::new(),
-            arg_names: Vec::new(),
-            arg_types: Vec::new(),
-            ret_type: None,
-            expr_stack: Vec::new(),
-            lhs_target: None,
-            indent: 0,
-            shp_uid: 0,
-            tensor_uid: 0,
-        }
-    }
-
-    pub fn finish(self) -> String {
-        self.output
-    }
-
     fn push_line(&mut self, line: &str) {
         self.output.push_str(&"    ".repeat(self.indent));
         self.output.push_str(line);
@@ -81,7 +84,7 @@ impl CompileC {
     }
 
     fn emit_wrapper_prototype(&mut self, base_name: &str, sig: &BaseSignature, _ret_ty: &BaseType) {
-        let sig_str = sig.base_types.iter().map(base_rstype).collect::<Vec<_>>();
+        let sig_str = sig.base_types.iter().map(BaseType::ctype).collect::<Vec<_>>();
         let fargs: Vec<String> = sig.base_types
             .iter()
             .enumerate()
@@ -92,7 +95,7 @@ impl CompileC {
     }
 
     fn emit_wrapper_function(&mut self, base_name: &str, sig: &BaseSignature, family: &Vec<&Fundef<'_, TypedAst>>) {
-        let sig_str = sig.base_types.iter().map(base_rstype).collect::<Vec<_>>();
+        let sig_str = sig.base_types.iter().map(BaseType::ctype).collect::<Vec<_>>();
         let fargs: Vec<String> = sig.base_types
             .iter()
             .enumerate()
@@ -121,7 +124,7 @@ impl CompileC {
             let call_args: Vec<String> = fundef.args
                 .iter()
                 .enumerate()
-                .map(|(i, arg)| wrapper_call_arg(&arg.ty.shape, &format!("arg{i}"), &arg.ty.ty))
+                .map(|(i, arg)| wrapper_call_arg(&arg.ty.shape, &format!("arg{i}"), &arg.ty.basetype))
                 .collect();
             let call_expr = format!("IMP_{}({})", fundef.name, call_args.join(", "));
 
@@ -129,7 +132,7 @@ impl CompileC {
                 self.push_line(&format!("return {call_expr};"));
             } else {
                 // Scalar return: wrap in a 0-d ImpArrayRaw (dim=0, len=1, shp=NULL)
-                let base = base_ctype(&fundef.ret_type);
+                let base = fundef.ret_type.basetype.ctype();
                 self.push_line(&format!("{base} __ret_val = {call_expr};"));
                 self.push_line(&format!("{base} *__ret_data = ({base} *)malloc(sizeof({base}));"));
                 self.push_line("*__ret_data = __ret_val;");
@@ -157,34 +160,13 @@ impl CompileC {
             self.push_line(&format!(
                 "return imp_clone_array_raw({}, sizeof({}));",
                 name,
-                base_ctype(&declared_ty)
+                declared_ty.basetype.ctype()
             ));
         } else {
             self.push_line(&format!("return {};", name));
         }
     }
 }
-
-const HEADER: &str = r#"
-#include <stdio.h>
-#include <string.h>
-
-static size_t imp_flat_index(ImpArrayRaw arr, ImpArrayRaw idx) {
-    size_t flat = 0;
-    for (size_t d = 0; d < idx.len; d += 1) {
-        flat = flat * arr.shp[d] + ((size_t *)idx.data)[d];
-    }
-    return flat;
-}
-
-static ImpArrayRaw imp_clone_array_raw(ImpArrayRaw src, size_t elem_size) {
-    size_t *shp = src.dim == 0 ? NULL : (size_t *)malloc(src.dim * sizeof(size_t));
-    if (src.dim > 0) { memcpy(shp, src.shp, src.dim * sizeof(size_t)); }
-    void *data = src.len == 0 ? NULL : malloc(src.len * elem_size);
-    if (src.len > 0) { memcpy(data, src.data, src.len * elem_size); }
-    return (ImpArrayRaw) { .len = src.len, .dim = src.dim, .shp = shp, .data = data };
-}
-"#;
 
 impl<'ast> Traverse<'ast> for CompileC {
     type Ast = TypedAst;
@@ -196,7 +178,7 @@ impl<'ast> Traverse<'ast> for CompileC {
     fn trav_program(&mut self, program: &mut Program<'ast, TypedAst>) {
         self.fundef_names = program.fundef_names();
 
-        self.output.push_str(&format!("#include \"{}.h\"\n", self.module_name));
+        self.output.push_str(&format!("#include \"{}.h\"\n\n", self.module_name));
         self.output.push_str(HEADER);
 
         for (_name, overloads) in &program.overloads {
@@ -213,7 +195,7 @@ impl<'ast> Traverse<'ast> for CompileC {
                 if overloads.len() > 1 || fundef_ids.len() > 1 {
                     self.output.push('\n');
                     let first = program.fundef(fundef_ids[0]);
-                    self.emit_wrapper_prototype(&name, sig, &first.ret_type.ty);
+                    self.emit_wrapper_prototype(&name, sig, &first.ret_type.basetype);
                 }
             }
         }
@@ -323,7 +305,7 @@ impl<'ast> Traverse<'ast> for CompileC {
 
     fn trav_tensor(&mut self, tensor: &mut Tensor<'ast, Self::Ast>) {
         let (target_name, target_ty) = self.lhs_target.clone().expect("tensor target must be set");
-        let base = base_ctype(&target_ty);
+        let base = target_ty.basetype.ctype();
         let iv_name = tensor.iv.name.clone();
 
         let rank = tensor.iv.ty.rank()
@@ -380,7 +362,7 @@ impl<'ast> Traverse<'ast> for CompileC {
         }
 
         // Build iv as a stack-allocated ImpArrayRaw so that iv[i] selections work.
-        let iv_elem = base_ctype(&tensor.iv.ty);
+        let iv_elem = &tensor.iv.ty.basetype.ctype();
         let iv_components: Vec<String> = (0..rank)
             .map(|d| format!("({iv_elem}){iv_name}_{d}_{t_uid}"))
             .collect();
@@ -475,7 +457,7 @@ impl<'ast> Traverse<'ast> for CompileC {
             self.indent += 1;
         }
 
-        let iv_elem = base_ctype(&fold.selection.iv.ty);
+        let iv_elem = fold.selection.iv.ty.basetype.ctype();
         let iv_components: Vec<String> = (0..rank)
             .map(|d| format!("({iv_elem}){iv_name}_{d}_{t_uid}"))
             .collect();
@@ -594,7 +576,7 @@ impl<'ast> Traverse<'ast> for CompileC {
         let data_name = format!("{}_data", target_name);
         let shp_name = format!("{}_shp", target_name);
         let len_name = format!("{}_len", target_name);
-        let base = base_ctype(&target_ty);
+        let base = target_ty.basetype.ctype();
 
         self.push_line(&format!("size_t {} = {};", len_name, array.elems.len()));
         self.push_line(&format!("{} *{} = ({} *)malloc({} * sizeof({}));", base, data_name, base, len_name, base));
@@ -620,56 +602,15 @@ impl<'ast> Traverse<'ast> for CompileC {
     }
 
     fn trav_const(&mut self, c: &mut Const) {
-        use Const::*;
-        let s = match c {
-            Bool(v) => v.to_string(),
-            Usize(v) => v.to_string(),
-            U32(v) => v.to_string(),
-            U64(v) => v.to_string(),
-            I32(v) => v.to_string(),
-            I64(v) => v.to_string(),
-            F32(v) => v.to_string(),
-            F64(v) => v.to_string(),
-        };
-        self.expr_stack.push(s)
-    }
-}
-
-fn base_rstype(ty: &BaseType) -> String {
-    use BaseType::*;
-    match ty {
-        Bool => "bool".to_owned(),
-        Usize => "usize".to_owned(),
-        U32 => "u32".to_owned(),
-        U64 => "u64".to_owned(),
-        I32 => "i32".to_owned(),
-        I64 => "i64".to_owned(),
-        F32 => "f32".to_owned(),
-        F64 => "f64".to_owned(),
-        Udf(udf) => udf.to_owned(),
-    }
-}
-
-fn base_ctype(ty: &Type) -> String {
-    use BaseType::*;
-    match &ty.ty {
-        Bool => "bool".to_owned(),
-        Usize => "size_t".to_owned(),
-        U32 => "uint32_t".to_owned(),
-        U64 => "uint64_t".to_owned(),
-        I32 => "int32_t".to_owned(),
-        I64 => "int64_t".to_owned(),
-        F32 => "float".to_owned(),
-        F64 => "double".to_owned(),
-        Udf(udf) => udf.to_owned(),
+        self.expr_stack.push(c.to_string())
     }
 }
 
 fn full_ctype(ty: &Type) -> String {
     if ty.is_array() {
-        "ImpArrayRaw".to_owned()
+        "ImpArrayRaw".to_string()
     } else {
-        base_ctype(ty).to_owned()
+        ty.basetype.ctype()
     }
 }
 
@@ -699,34 +640,14 @@ fn shape_match_condition(shape: &TypePattern, arg: &str) -> String {
 
 fn wrapper_call_arg(shape: &TypePattern, arg: &str, base: &BaseType) -> String {
     match shape {
-        TypePattern::Scalar => {
-            let ctype = base_ctype_str(base);
-            format!("(*({ctype}*){arg}.data)")
-        }
+        TypePattern::Scalar => format!("(*({}*){}.data)", base.ctype(), arg),
         TypePattern::Axes(_) => arg.to_owned(),
-    }
-}
-
-fn base_ctype_str(ty: &BaseType) -> &'static str {
-    use BaseType::*;
-    match ty {
-        Bool => "bool",
-        Usize => "size_t",
-        U32 => "uint32_t",
-        U64 => "uint64_t",
-        I32 => "int32_t",
-        I64 => "int64_t",
-        F32 => "float",
-        F64 => "double",
-        Udf(_) => "void",
     }
 }
 
 fn elem_ctype_of_id(id: &Id<'_, TypedAst>) -> String {
     match id {
-        Id::Arg(_) => "uint32_t".to_owned(),  // args used directly as array bounds are uncommon
-        Id::Var(v) => {
-            base_ctype(&v.ty)
-        }
+        Id::Arg(_) => "uint32_t".to_string(),
+        Id::Var(v) => v.ty.basetype.ctype(),
     }
 }

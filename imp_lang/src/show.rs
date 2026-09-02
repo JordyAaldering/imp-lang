@@ -220,7 +220,7 @@ impl<'ast, Ast: AstConfig + 'ast> Traverse<'ast> for Show<'ast, Ast> {
 
     fn trav_type(&mut self, ty: &Type) {
         use BaseType::*;
-        let ty_str = match &ty.ty {
+        let ty_str = match &ty.basetype {
             Bool => "bool",
             Usize => "usize",
             U32 => "u32",

@@ -16,7 +16,7 @@ pub enum BaseType {
 
 #[derive(Clone, Debug)]
 pub struct Type {
-    pub ty: BaseType,
+    pub basetype: BaseType,
     pub shape: TypePattern,
 }
 
@@ -65,12 +65,12 @@ pub struct RankCapture {
 }
 
 impl Type {
-    pub const fn scalar(ty: BaseType) -> Self {
-        Self { ty, shape: TypePattern::Scalar }
+    pub const fn scalar(basetype: BaseType) -> Self {
+        Self { basetype, shape: TypePattern::Scalar }
     }
 
-    pub fn vector_dim(ty: BaseType, dim: DimCapture) -> Self {
-        Self { ty, shape: TypePattern::Axes(vec![AxisPattern::Dim(dim)]) }
+    pub fn vector_dim(basetype: BaseType, dim: DimCapture) -> Self {
+        Self { basetype, shape: TypePattern::Axes(vec![AxisPattern::Dim(dim)]) }
     }
 
     /// TODO: we might not be sure whether this is a scalar (i32[d:shp] can be both)
@@ -111,5 +111,37 @@ impl TypePattern {
 impl DimCapture {
     pub fn any() -> Self {
         DimCapture::Var(String::new())
+    }
+}
+
+impl BaseType {
+    /// Rust type name for this base type.
+    pub fn rstype(&self) -> String {
+        match self {
+            Self::Bool => "bool".to_string(),
+            Self::Usize => "usize".to_string(),
+            Self::U32 => "u32".to_string(),
+            Self::U64 => "u64".to_string(),
+            Self::I32 => "i32".to_string(),
+            Self::I64 => "i64".to_string(),
+            Self::F32 => "f32".to_string(),
+            Self::F64 => "f64".to_string(),
+            Self::Udf(udf) => udf.clone(),
+        }
+    }
+
+    /// C type name for this base type.
+    pub fn ctype(&self) -> String {
+        match self {
+            Self::Bool => "bool".to_string(),
+            Self::Usize => "size_t".to_string(),
+            Self::U32 => "uint32_t".to_string(),
+            Self::U64 => "uint64_t".to_string(),
+            Self::I32 => "int32_t".to_string(),
+            Self::I64 => "int64_t".to_string(),
+            Self::F32 => "float".to_string(),
+            Self::F64 => "double".to_string(),
+            Self::Udf(udf) => udf.clone(),
+        }
     }
 }

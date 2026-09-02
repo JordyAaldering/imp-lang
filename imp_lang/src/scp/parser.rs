@@ -530,7 +530,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         let span_to = self.expect(Token::RSquare)?;
 
         let shape = TypePattern::Axes(axes);
-        let ty = Type { ty: base, shape };
+        let ty = Type { basetype: base, shape };
         Ok((ty, span_from.to(&span_to)))
     }
 
