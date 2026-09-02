@@ -48,19 +48,12 @@ use std::{cell::RefCell, fmt};
 
 pub use crate::trav::Traverse;
 
-/// A lightweight, `Copy` handle to a `Fundef` stored in `Program.fundefs`.
-///
-/// Backed by `id_arena::Id`, which is generic over the pointee type: `FundefId<'ast, ParsedAst>`,
-/// `FundefId<'ast, UntypedAst>` and `FundefId<'ast, TypedAst>` are distinct types, so an id from
-/// one phase's arena can't accidentally be used to index another phase's.
+/// Reference to a fundef in the AST.
+/// This is a copyable handle that can be used to access the fundef in the program's arena.
 pub type FundefId<'ast, Ast> = id_arena::Id<Fundef<'ast, Ast>>;
 
 /// Shared, in-place-rewritable storage for an expression node.
-///
-/// Multiple parts of the AST (e.g. an `Assign` and the `VarInfo` it defines) can
-/// hold a reference to the same `ExprCell`; rewriting passes replace its contents
-/// via `RefCell::replace`, so every alias observes the update and no unsafe
-/// aliasing of `&mut` is required.
+/// Multiple parts of the AST can hold a reference to the same ExprCell.
 pub type ExprCell<'ast, Ast> = RefCell<Expr<'ast, Ast>>;
 
 pub trait AstConfig: Clone + fmt::Debug {
@@ -76,8 +69,6 @@ pub trait AstConfig: Clone + fmt::Debug {
 
     fn var_name<'ast>(link: &Self::VarLink<'ast>) -> String;
 
-    /// `fundef_names` maps a `FundefId` to its (current) mangled name; unused by
-    /// phases whose `Dispatch` is already a plain name.
     fn dispatch_name<'ast>(dispatch: &Self::Dispatch<'ast>, fundef_names: &[String]) -> String;
 
     fn trav_type<'ast, V>(trav: &mut V, ty: &Self::VarType)

@@ -8,7 +8,9 @@ pub trait Traverse<'ast> {
     /// The value produced for expression positions that a pass doesn't override.
     fn expr_default(&self) -> Self::ExprOut;
 
+    //
     // Declarations
+    //
 
     fn trav_program(&mut self, program: &mut Program<'ast, Self::Ast>) {
         for (_, fundef) in program.fundefs.iter_mut() {
@@ -40,7 +42,9 @@ pub trait Traverse<'ast> {
 
     fn trav_vardec(&mut self, _vardec: &VarInfo<'ast, Self::Ast>) {}
 
+    //
     // Statements
+    //
 
     fn trav_body(&mut self, body: &mut Body<'ast, Self::Ast>) -> Self::ExprOut {
         for stmt in &mut body.stmts {
@@ -66,16 +70,14 @@ pub trait Traverse<'ast> {
         self.trav_id(&mut printf.id);
     }
 
+    //
     // Expressions
+    //
 
-    /// Traverses the expression stored in `cell`, allowing the traversal to replace it.
+    /// Traverses the expression stored in an [`ExprCell`], allowing the traversal to replace it.
     ///
-    /// The current value is swapped out with a cheap placeholder for the duration of
-    /// the traversal (so a panic mid-traversal can't leave the cell in a half-read
-    /// state) and the rewritten value is swapped back in afterwards. Since `cell` may
-    /// be aliased (e.g. an `Assign`'s RHS and its `VarInfo`'s def-use link are the same
-    /// cell), every alias observes the rewrite -- there is no separate, staleness-prone
-    /// copy of the expression.
+    /// The current value is swapped out with a placeholder for the duration of the traversal, and the rewritten value is swapped back in afterwards.
+    /// Since `cell` may be aliased, every alias observes the rewrite: there is no separate and potentially stale copy.
     fn trav_expr(&mut self, cell: &'ast ExprCell<'ast, Self::Ast>) -> Self::ExprOut {
         let placeholder = Expr::Const(Const::Bool(false));
         let current = cell.replace(placeholder);

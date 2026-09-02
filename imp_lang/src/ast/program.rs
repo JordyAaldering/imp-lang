@@ -25,9 +25,9 @@ pub struct Program<'ast, Ast: AstConfig> {
     /// }
     /// ```
     pub overloads: HashMap<String, HashMap<BaseSignature, Vec<FundefId<'ast, Ast>>>>,
-    /// Owns every `Fundef` in the program; cross-references use `FundefId` rather
-    /// than raw pointers, so this arena can be freely mutated (`iter_mut`) without
-    /// invalidating anything that references a fundef by id.
+    /// Owns every [`Fundef`] in the program.
+    ///
+    /// References use [`FundefId`] rather than raw pointers, so this arena can be freely mutated.
     pub fundefs: id_arena::Arena<Fundef<'ast, Ast>>,
 }
 
