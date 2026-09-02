@@ -69,7 +69,7 @@ struct DispatchResolver<'ast> {
     args: Vec<Farg>,
     idmap: HashMap<*const VarInfo<'ast, UntypedAst>, &'ast VarInfo<'ast, TypedAst>>,
     decs_arena: Arena<VarInfo<'ast, TypedAst>>,
-    expr_arena: Arena<Expr<'ast, TypedAst>>,
+    expr_arena: Arena<ExprCell<'ast, TypedAst>>,
     errors: Vec<DispatchError>,
     overloads: HashMap<String, HashMap<BaseSignature, Vec<&'ast Fundef<'ast, TypedAst>>>>,
 }
@@ -86,12 +86,12 @@ impl<'ast> DispatchResolver<'ast> {
         }
     }
 
-    fn alloc_lvis(&self, name: String, ty: Type, ssa: Option<&'ast Expr<'ast, TypedAst>>) -> &'ast VarInfo<'ast, TypedAst> {
+    fn alloc_lvis(&self, name: String, ty: Type, ssa: Option<&'ast ExprCell<'ast, TypedAst>>) -> &'ast VarInfo<'ast, TypedAst> {
         unsafe { std::mem::transmute(self.decs_arena.alloc(VarInfo { name, ty, ssa })) }
     }
 
-    fn alloc_expr(&self, expr: Expr<'ast, TypedAst>) -> &'ast Expr<'ast, TypedAst> {
-        unsafe { std::mem::transmute(self.expr_arena.alloc(expr)) }
+    fn alloc_expr(&self, expr: Expr<'ast, TypedAst>) -> &'ast ExprCell<'ast, TypedAst> {
+        unsafe { std::mem::transmute(self.expr_arena.alloc(ExprCell::new(expr))) }
     }
 
     fn require_ty(&mut self, name: &str, ty: &Option<Type>) -> Type {
@@ -211,9 +211,9 @@ impl<'ast> DispatchResolver<'ast> {
     }
 
     fn lower_assign(&mut self, assign: Assign<'ast, UntypedAst>) -> Assign<'ast, TypedAst> {
-        let expr = self.lower_expr((*assign.expr).clone());
+        let expr = self.lower_expr(assign.expr.borrow().clone());
         let expr_ref = self.alloc_expr(expr);
-        let lhs_ty = self.require_ty(&assign.lhs.name, &assign.lhs.ty);
+        let lhs_ty = self.require_ty(&assign.lhs.name, &assign.lhs.ty.borrow());
         let lhs = self.alloc_lvis(assign.lhs.name.clone(), lhs_ty, Some(expr_ref));
         self.idmap.insert(assign.lhs as *const _, lhs);
         Assign { lhs, expr: expr_ref }
@@ -303,7 +303,7 @@ impl<'ast> DispatchResolver<'ast> {
     }
 
     fn lower_tensor(&mut self, tensor: Tensor<'ast, UntypedAst>) -> Tensor<'ast, TypedAst> {
-        let iv_ty = self.require_ty(&tensor.iv.name, &tensor.iv.ty);
+        let iv_ty = self.require_ty(&tensor.iv.name, &tensor.iv.ty.borrow());
         let iv = self.alloc_lvis(tensor.iv.name.clone(), iv_ty, None);
         self.idmap.insert(tensor.iv as *const _, iv);
 

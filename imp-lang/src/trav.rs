@@ -5,7 +5,8 @@ pub trait Traverse<'ast> {
 
     type ExprOut;
 
-    const EXPR_DEFAULT: Self::ExprOut;
+    /// The value produced for expression positions that a pass doesn't override.
+    fn expr_default(&self) -> Self::ExprOut;
 
     // Declarations
 
@@ -67,14 +68,19 @@ pub trait Traverse<'ast> {
 
     // Expressions
 
-    fn trav_expr(&mut self, expr: &'ast Expr<'ast, Self::Ast>) -> Self::ExprOut {
-        self.trav_expr_ptr(expr as *const Expr<'ast, Self::Ast> as *mut Expr<'ast, Self::Ast>)
-    }
-
-    fn trav_expr_ptr(&mut self, expr: *mut Expr<'ast, Self::Ast>) -> Self::ExprOut {
-        let current = unsafe { std::ptr::read(expr) };
+    /// Traverses the expression stored in `cell`, allowing the traversal to replace it.
+    ///
+    /// The current value is swapped out with a cheap placeholder for the duration of
+    /// the traversal (so a panic mid-traversal can't leave the cell in a half-read
+    /// state) and the rewritten value is swapped back in afterwards. Since `cell` may
+    /// be aliased (e.g. an `Assign`'s RHS and its `VarInfo`'s def-use link are the same
+    /// cell), every alias observes the rewrite -- there is no separate, staleness-prone
+    /// copy of the expression.
+    fn trav_expr(&mut self, cell: &'ast ExprCell<'ast, Self::Ast>) -> Self::ExprOut {
+        let placeholder = Expr::Const(Const::Bool(false));
+        let current = cell.replace(placeholder);
         let (rewritten, out) = self.trav_expr_value(current);
-        unsafe { std::ptr::write(expr, rewritten); }
+        cell.replace(rewritten);
         out
     }
 
@@ -101,7 +107,7 @@ pub trait Traverse<'ast> {
         Self::Ast::trav_operand(self, &mut cond.cond);
         self.trav_body(&mut cond.then_branch);
         self.trav_body(&mut cond.else_branch);
-        Self::EXPR_DEFAULT
+        self.expr_default()
     }
 
     fn trav_call_expr(&mut self, mut call: Call<'ast, Self::Ast>) -> (Expr<'ast, Self::Ast>, Self::ExprOut) {
@@ -113,7 +119,7 @@ pub trait Traverse<'ast> {
         for arg in &mut call.args {
             Self::Ast::trav_operand(self, arg);
         }
-        Self::EXPR_DEFAULT
+        self.expr_default()
     }
 
     fn trav_prf_expr(&mut self, mut prf: Prf<'ast, Self::Ast>) -> (Expr<'ast, Self::Ast>, Self::ExprOut) {
@@ -125,7 +131,7 @@ pub trait Traverse<'ast> {
         for arg in prf.args_mut() {
             Self::Ast::trav_operand(self, arg);
         }
-        Self::EXPR_DEFAULT
+        self.expr_default()
     }
 
     fn trav_tensor_expr(&mut self, mut tensor: Tensor<'ast, Self::Ast>) -> (Expr<'ast, Self::Ast>, Self::ExprOut) {
@@ -139,7 +145,7 @@ pub trait Traverse<'ast> {
         }
         Self::Ast::trav_operand(self, &mut tensor.ub);
         self.trav_body(&mut tensor.body);
-        Self::EXPR_DEFAULT
+        self.expr_default()
     }
 
     fn trav_fold_expr(&mut self, mut fold: Fold<'ast, Self::Ast>) -> (Expr<'ast, Self::Ast>, Self::ExprOut) {
@@ -162,7 +168,7 @@ pub trait Traverse<'ast> {
         }
 
         self.trav_tensor(&mut fold.selection);
-        Self::EXPR_DEFAULT
+        self.expr_default()
     }
 
     fn trav_array_expr(&mut self, mut array: Array<'ast, Self::Ast>) -> (Expr<'ast, Self::Ast>, Self::ExprOut) {
@@ -174,7 +180,7 @@ pub trait Traverse<'ast> {
         for value in &mut array.elems {
             Self::Ast::trav_operand(self, value);
         }
-        Self::EXPR_DEFAULT
+        self.expr_default()
     }
 
     fn trav_id_expr(&mut self, mut id: Id<'ast, Self::Ast>) -> (Expr<'ast, Self::Ast>, Self::ExprOut) {
@@ -183,7 +189,7 @@ pub trait Traverse<'ast> {
     }
 
     fn trav_id(&mut self, _id: &mut Id<'ast, Self::Ast>) -> Self::ExprOut {
-        Self::EXPR_DEFAULT
+        self.expr_default()
     }
 
     fn trav_const_expr(&mut self, mut c: Const) -> (Expr<'ast, Self::Ast>, Self::ExprOut) {
@@ -192,10 +198,10 @@ pub trait Traverse<'ast> {
     }
 
     fn trav_const(&mut self, _c: &mut Const) -> Self::ExprOut {
-        Self::EXPR_DEFAULT
+        self.expr_default()
     }
 
     fn trav_type(&mut self, _ty: &mut Type) -> Self::ExprOut {
-        Self::EXPR_DEFAULT
+        self.expr_default()
     }
 }

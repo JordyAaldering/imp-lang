@@ -65,8 +65,7 @@ fn validate_overload_families(overloads: &HashMap<String, HashMap<BaseSignature,
 pub struct TypeInfer<'ast> {
     args: Vec<Farg>,
     decs: Arena<VarInfo<'ast, UntypedAst>>,
-    exprs: Arena<Expr<'ast, UntypedAst>>,
-    typed: HashMap<*const VarInfo<'ast, UntypedAst>, Type>,
+    exprs: Arena<ExprCell<'ast, UntypedAst>>,
     stubs: HashMap<String, HashMap<BaseSignature, Vec<DispatchStub>>>,
     errors: Vec<InferenceError>,
 }
@@ -96,7 +95,6 @@ impl<'ast> TypeInfer<'ast> {
             args: Vec::new(),
             decs: Arena::new(),
             exprs: Arena::new(),
-            typed: HashMap::new(),
             stubs: overloads,
             errors: Vec::new(),
         }
@@ -175,19 +173,25 @@ impl<'ast> TypeInfer<'ast> {
             Id::Arg(_) => return None,
         };
 
-        let arr = match lvis.ssa? {
-            Expr::Array(arr) => arr,
+        let elems: Vec<Id<'ast, UntypedAst>> = match &*lvis.ssa?.borrow() {
+            Expr::Array(arr) => arr.elems.clone(),
             _ => return None,
         };
 
-        let mut axes = Vec::with_capacity(arr.elems.len());
-        for elem in &arr.elems {
+        let mut axes = Vec::with_capacity(elems.len());
+        for elem in &elems {
             let dp = match elem {
                 Id::Arg(i) => DimCapture::Var(self.args[*i].id.clone()),
-                Id::Var(v) => match v.ssa {
-                    Some(Expr::Const(Const::Usize(val))) => DimCapture::Known(*val),
-                    _ => DimCapture::Var(v.name.clone()),
-                },
+                Id::Var(v) => {
+                    let known_usize = v.ssa.and_then(|cell| match &*cell.borrow() {
+                        Expr::Const(Const::Usize(val)) => Some(*val),
+                        _ => None,
+                    });
+                    match known_usize {
+                        Some(val) => DimCapture::Known(val),
+                        None => DimCapture::Var(v.name.clone()),
+                    }
+                }
             };
             axes.push(AxisPattern::Dim(dp));
         }
@@ -254,11 +258,10 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
 
     type ExprOut = Type;
 
-    const EXPR_DEFAULT: Self::ExprOut = unreachable!();
+    fn expr_default(&self) -> Self::ExprOut { unreachable!() }
 
     fn trav_fundef(&mut self, fundef: &mut Fundef<'ast, UntypedAst>) {
         debug_assert!(self.args.is_empty());
-        debug_assert!(self.typed.is_empty());
         debug_assert!(self.decs.len() == 0);
         debug_assert!(self.exprs.len() == 0);
 
@@ -274,18 +277,12 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
 
         fundef.decs = mem::take(&mut self.decs);
         fundef.exprs = mem::take(&mut self.exprs);
-        self.typed.clear();
         self.args.clear();
     }
 
     fn trav_assign(&mut self, assign: &mut Assign<'ast, UntypedAst>) {
-        let ty = self.trav_expr(&mut assign.expr);
-        self.typed.insert(assign.lhs as *const _, ty.clone());
-
-        unsafe {
-            let ptr = assign.lhs as *const VarInfo<'ast, UntypedAst> as *mut VarInfo<'ast, UntypedAst>;
-            (*ptr).ty = Some(ty);
-        }
+        let ty = self.trav_expr(assign.expr);
+        *assign.lhs.ty.borrow_mut() = Some(ty);
     }
 
     fn trav_cond(&mut self, cond: &mut Cond<'ast, UntypedAst>) -> Self::ExprOut {
@@ -415,12 +412,7 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
             leading_k.map(|k| (0..k).map(|_| AxisPattern::Dim(DimCapture::any())).collect())
         });
 
-        self.typed.insert(tensor.iv as *const _, iv_ty.clone());
-
-        unsafe {
-            let ptr = tensor.iv as *const VarInfo<'ast, UntypedAst> as *mut VarInfo<'ast, UntypedAst>;
-            (*ptr).ty = Some(iv_ty);
-        }
+        *tensor.iv.ty.borrow_mut() = Some(iv_ty);
 
         let ret_ty = self.trav_body(&mut tensor.body);
 
@@ -485,12 +477,9 @@ impl<'ast> Traverse<'ast> for TypeInfer<'ast> {
     fn trav_id(&mut self, id: &mut Id<'ast, UntypedAst>) -> Self::ExprOut {
         match *id {
             Id::Arg(i) => self.args[i].ty.clone(),
-            Id::Var(id) => {
-                self.typed
-                    .get(&(id as *const _))
-                    .expect("Id::Var referenced before its assignment was processed")
-                    .clone()
-            }
+            Id::Var(id) => id.ty.borrow()
+                .clone()
+                .expect("Id::Var referenced before its assignment was processed"),
         }
     }
 

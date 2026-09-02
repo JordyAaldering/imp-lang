@@ -39,7 +39,7 @@ impl<'ast> Traverse<'ast> for CompileH {
 
     type ExprOut = ();
 
-    const EXPR_DEFAULT: Self::ExprOut = ();
+    fn expr_default(&self) -> Self::ExprOut { () }
 
     fn trav_program(&mut self, program: &mut Program<'ast, TypedAst>) {
         self.output.push_str(HEADER);

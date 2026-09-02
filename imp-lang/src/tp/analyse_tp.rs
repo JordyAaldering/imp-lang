@@ -26,12 +26,12 @@ impl<'ast> AnalyseTp {
         unsafe { std::mem::transmute(fundef.decs.alloc(VarInfo { name, ty, ssa: () })) }
     }
 
-    fn alloc_expr(&self, fundef: &Fundef<'ast, ParsedAst>, expr: Expr<'ast, ParsedAst>) -> &'ast Expr<'ast, ParsedAst> {
+    fn alloc_expr(&self, fundef: &Fundef<'ast, ParsedAst>, expr: Expr<'ast, ParsedAst>) -> &'ast ExprCell<'ast, ParsedAst> {
         // SAFETY: allocation arena is stored in the owning Fundef.
-        unsafe { std::mem::transmute(fundef.exprs.alloc(expr)) }
+        unsafe { std::mem::transmute(fundef.exprs.alloc(ExprCell::new(expr))) }
     }
 
-    fn arg_expr(&self, fundef: &Fundef<'ast, ParsedAst>, arg_index: usize) -> &'ast Expr<'ast, ParsedAst> {
+    fn arg_expr(&self, fundef: &Fundef<'ast, ParsedAst>, arg_index: usize) -> &'ast ExprCell<'ast, ParsedAst> {
         self.alloc_expr(fundef, Expr::Id(Id::Arg(arg_index)))
     }
 
@@ -182,7 +182,7 @@ impl<'ast> Traverse<'ast> for AnalyseTp {
 
     type ExprOut = ();
 
-    const EXPR_DEFAULT: Self::ExprOut = ();
+    fn expr_default(&self) -> Self::ExprOut { () }
 
     fn trav_fundef(&mut self, fundef: &mut Fundef<'ast, ParsedAst>) {
         self.defined.clear();

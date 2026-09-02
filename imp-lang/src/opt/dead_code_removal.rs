@@ -27,7 +27,7 @@ impl<'ast> Traverse<'ast> for DeadCodeRemoval {
 
     type ExprOut = ();
 
-    const EXPR_DEFAULT: Self::ExprOut = ();
+    fn expr_default(&self) -> Self::ExprOut { () }
 
     fn trav_fundef(&mut self, fundef: &mut Fundef<'ast, Self::Ast>) {
         self.used.clear();

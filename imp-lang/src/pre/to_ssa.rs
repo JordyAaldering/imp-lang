@@ -1,4 +1,4 @@
-use std::{collections::HashMap, mem};
+use std::{cell::RefCell, collections::HashMap, mem};
 
 use typed_arena::Arena;
 
@@ -36,7 +36,7 @@ pub fn to_ssa<'ast>(program: Program<'ast, ParsedAst>) -> Program<'ast, UntypedA
 pub struct ToSsa<'ast> {
     trav_name: TravName,
     decs_arena: Arena<VarInfo<'ast, UntypedAst>>,
-    expr_arena: Arena<Expr<'ast, UntypedAst>>,
+    expr_arena: Arena<ExprCell<'ast, UntypedAst>>,
     new_assigns: Vec<Stmt<'ast, UntypedAst>>,
     env_stack: Vec<HashMap<String, Id<'ast, UntypedAst>>>,
 }
@@ -52,16 +52,16 @@ impl<'ast> ToSsa<'ast> {
         }
     }
 
-    fn alloc_lvis(&self, name: String, ssa: Option<&'ast Expr<'ast, UntypedAst>>) -> &'ast VarInfo<'ast, UntypedAst> {
-        unsafe { std::mem::transmute(self.decs_arena.alloc(VarInfo { name, ty: None, ssa })) }
+    fn alloc_lvis(&self, name: String, ssa: Option<&'ast ExprCell<'ast, UntypedAst>>) -> &'ast VarInfo<'ast, UntypedAst> {
+        unsafe { std::mem::transmute(self.decs_arena.alloc(VarInfo { name, ty: RefCell::new(None), ssa })) }
     }
 
-    fn alloc_expr(&self, expr: Expr<'ast, UntypedAst>) -> &'ast Expr<'ast, UntypedAst> {
-        unsafe { std::mem::transmute(self.expr_arena.alloc(expr)) }
+    fn alloc_expr(&self, expr: Expr<'ast, UntypedAst>) -> &'ast ExprCell<'ast, UntypedAst> {
+        unsafe { std::mem::transmute(self.expr_arena.alloc(ExprCell::new(expr))) }
     }
 
-    fn unwrap_id_operand(&mut self, operand: &'ast Expr<'ast, ParsedAst>) -> Id<'ast, UntypedAst> {
-        match operand {
+    fn unwrap_id_operand(&mut self, operand: &'ast ExprCell<'ast, ParsedAst>) -> Id<'ast, UntypedAst> {
+        match &*operand.borrow() {
             Expr::Id(id) => self.trav_id(id.clone()),
             _ => panic!("to_ssa expected flattened Expr::Id operand"),
         }
@@ -164,7 +164,7 @@ impl<'ast> ToSsa<'ast> {
         let old_name = assign.lhs.name.clone();
         let new_name = self.trav_name.next();
 
-        let expr = self.trav_expr((*assign.expr).clone());
+        let expr = self.trav_expr(assign.expr.borrow().clone());
         let expr = self.alloc_expr(expr);
         let lvis = self.alloc_lvis(new_name, Some(expr));
         self.bind_env(old_name, Id::Var(lvis));

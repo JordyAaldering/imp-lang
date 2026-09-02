@@ -189,7 +189,7 @@ impl<'ast> Traverse<'ast> for CompileC {
 
     type ExprOut = ();
 
-    const EXPR_DEFAULT: Self::ExprOut = ();
+    fn expr_default(&self) -> Self::ExprOut { () }
 
     fn trav_program(&mut self, program: &mut Program<'ast, TypedAst>) {
         self.output.push_str(&format!("#include \"{}.h\"\n", self.module_name));
@@ -267,7 +267,7 @@ impl<'ast> Traverse<'ast> for CompileC {
         let name = assign.lhs.name.clone();
 
         self.trav_expr(assign.expr);
-        if !matches!(assign.expr, Expr::Tensor(_) | Expr::Fold(_) | Expr::Array(_)) {
+        if !matches!(&*assign.expr.borrow(), Expr::Tensor(_) | Expr::Fold(_) | Expr::Array(_)) {
             let rhs = self.expr_stack.pop().expect("expression stack underflow");
             self.push_line(&format!("{} {} = {};", full_ctype(&ty), name, rhs));
         }
