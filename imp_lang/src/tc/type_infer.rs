@@ -257,8 +257,6 @@ impl<'ast> Traverse<'ast> for TypeInfer {
 
     type ExprOut = Type;
 
-    fn expr_default(&self) -> Self::ExprOut { unreachable!() }
-
     fn trav_fundef(&mut self, fundef: &mut Fundef<'ast, UntypedAst>) {
         debug_assert!(self.args.is_empty());
 

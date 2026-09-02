@@ -20,6 +20,12 @@ pub struct Type {
     pub shape: TypePattern,
 }
 
+impl Default for Type {
+    fn default() -> Self {
+        unreachable!("Type::default() only exists as a placeholder for traversals; it should never be called")
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum TypePattern {
     /// Rank-0; no array dimensions

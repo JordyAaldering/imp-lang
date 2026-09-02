@@ -47,8 +47,6 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
 
     type ExprOut = ();
 
-    fn expr_default(&self) -> Self::ExprOut { () }
-
     fn trav_fundef(&mut self, fundef: &mut Fundef<'ast, ParsedAst>) {
         debug_assert!(self.new_decs.is_empty());
         debug_assert!(self.new_assigns.is_empty());
@@ -88,7 +86,7 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
         use Expr::*;
         let (expr, _) = match expr {
             Id(n) => {
-                return (Id(n), self.expr_default());
+                return (Id(n), ());
             }
             Cond(n) => self.trav_cond_expr(n),
             Call(n) => self.trav_call_expr(n),
@@ -100,6 +98,6 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
         };
 
         let id = self.emit_expr(expr);
-        (id, self.expr_default())
+        (id, ())
     }
 }

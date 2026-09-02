@@ -173,8 +173,6 @@ impl<'ast> Traverse<'ast> for CompileC {
 
     type ExprOut = ();
 
-    fn expr_default(&self) -> Self::ExprOut { () }
-
     fn trav_program(&mut self, program: &mut Program<'ast, TypedAst>) {
         self.fundef_names = program.fundef_names();
 
