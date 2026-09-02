@@ -11,8 +11,8 @@ pub fn type_infer<'ast>(program: &mut Program<'ast, UntypedAst>) -> Result<(), I
         let mut stub_groups = HashMap::new();
         for (sig, fundef_ids) in overloads {
             let mut stub_fundefs = Vec::new();
-            for fundef_id in fundef_ids {
-                let fundef = &program.fundefs[fundef_id.0];
+            for &fundef_id in fundef_ids {
+                let fundef = program.fundef(fundef_id);
                 stub_fundefs.push(DispatchStub {
                     args: fundef.args.clone(),
                     ret_type: fundef.ret_type.clone(),
@@ -23,7 +23,7 @@ pub fn type_infer<'ast>(program: &mut Program<'ast, UntypedAst>) -> Result<(), I
         stubs.insert(name.clone(), stub_groups);
     }
 
-    for fundef in program.fundefs.iter_mut() {
+    for (_, fundef) in program.fundefs.iter_mut() {
         let mut tc = TypeInfer::new(stubs.clone());
         tc.trav_fundef(fundef);
 
@@ -41,16 +41,16 @@ struct DispatchStub {
     ret_type: Type,
 }
 
-fn validate_overload_families(
-    overloads: &HashMap<String, HashMap<BaseSignature, Vec<FundefId>>>,
-    fundefs: &[Fundef<'_, UntypedAst>],
+fn validate_overload_families<'ast>(
+    overloads: &HashMap<String, HashMap<BaseSignature, Vec<FundefId<'ast, UntypedAst>>>>,
+    fundefs: &id_arena::Arena<Fundef<'ast, UntypedAst>>,
 ) -> Result<(), InferenceError> {
     for (name, group) in overloads {
         for (sig, ids) in group {
             let (first, rest) = ids.split_first().unwrap();
-            let expected_ret_ty = &fundefs[first.0].ret_type.ty;
-            for id in rest {
-                let fundef = &fundefs[id.0];
+            let expected_ret_ty = &fundefs[*first].ret_type.ty;
+            for &id in rest {
+                let fundef = &fundefs[id];
                 if &fundef.ret_type.ty != expected_ret_ty {
                     return Err(InferenceError::InconsistentOverloadReturnBase {
                         name: name.clone(),

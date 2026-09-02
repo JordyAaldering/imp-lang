@@ -21,7 +21,7 @@ impl CheckTypePatterns {
         for (_, groups) in &program.overloads {
             for (_, fundef_ids) in groups {
                 for fundef_id in fundef_ids {
-					self.check_fundef(&program.fundefs[fundef_id.0]);
+					self.check_fundef(program.fundef(*fundef_id));
                 }
             }
         }

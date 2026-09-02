@@ -3,18 +3,17 @@ use std::collections::HashMap;
 use crate::ast::*;
 
 pub fn resolve_dispatch<'ast>(program: Program<'ast, UntypedAst>, arenas: &'ast Arenas<'ast, TypedAst>) -> Result<Program<'ast, TypedAst>, DispatchError> {
-    let mut overloads: HashMap<String, HashMap<BaseSignature, Vec<FundefId>>> = HashMap::new();
-    let mut stubs: Vec<Fundef<'ast, TypedAst>> = Vec::new();
-    let mut work_items: Vec<(FundefId, FundefId)> = Vec::new();
+    let mut overloads: HashMap<String, HashMap<BaseSignature, Vec<FundefId<'ast, TypedAst>>>> = HashMap::new();
+    let mut stubs: id_arena::Arena<Fundef<'ast, TypedAst>> = id_arena::Arena::new();
+    let mut work_items: Vec<(FundefId<'ast, TypedAst>, FundefId<'ast, UntypedAst>)> = Vec::new();
 
     for (name, groups) in &program.overloads {
         let mut out_groups = HashMap::new();
         for (sig, fundef_ids) in groups {
             let mut out_ids = Vec::new();
-            for fundef_id in fundef_ids {
-                let fundef = &program.fundefs[fundef_id.0];
-                let id = FundefId(stubs.len());
-                stubs.push(Fundef {
+            for &fundef_id in fundef_ids {
+                let fundef = program.fundef(fundef_id);
+                let id = stubs.alloc(Fundef {
                     name: fundef.name.clone(),
                     ret_type: fundef.ret_type.clone(),
                     args: fundef.args.clone(),
@@ -27,7 +26,7 @@ pub fn resolve_dispatch<'ast>(program: Program<'ast, UntypedAst>, arenas: &'ast 
                     },
                 });
                 out_ids.push(id);
-                work_items.push((id, *fundef_id));
+                work_items.push((id, fundef_id));
             }
             out_groups.insert(sig.clone(), out_ids);
         }
@@ -35,13 +34,13 @@ pub fn resolve_dispatch<'ast>(program: Program<'ast, UntypedAst>, arenas: &'ast 
     }
 
     for (id, src_id) in work_items {
-        let src_fundef = &program.fundefs[src_id.0];
+        let src_fundef = program.fundef(src_id);
         let mut lower = DispatchResolver::new(arenas, &stubs, overloads.clone());
         let lowered = lower.lower_fundef(src_fundef);
         if let Some(err) = lower.errors.into_iter().next() {
             return Err(err);
         }
-        stubs[id.0] = lowered;
+        stubs[id] = lowered;
     }
 
     Ok(Program {
@@ -61,19 +60,19 @@ pub enum DispatchError {
 
 struct DispatchResolver<'ast, 'stubs> {
     arenas: &'ast Arenas<'ast, TypedAst>,
-    stubs: &'stubs [Fundef<'ast, TypedAst>],
+    stubs: &'stubs id_arena::Arena<Fundef<'ast, TypedAst>>,
     args: Vec<Farg>,
     idmap: HashMap<*const VarInfo<'ast, UntypedAst>, &'ast VarInfo<'ast, TypedAst>>,
     new_decs: Vec<&'ast VarInfo<'ast, TypedAst>>,
     errors: Vec<DispatchError>,
-    overloads: HashMap<String, HashMap<BaseSignature, Vec<FundefId>>>,
+    overloads: HashMap<String, HashMap<BaseSignature, Vec<FundefId<'ast, TypedAst>>>>,
 }
 
 impl<'ast, 'stubs> DispatchResolver<'ast, 'stubs> {
     fn new(
         arenas: &'ast Arenas<'ast, TypedAst>,
-        stubs: &'stubs [Fundef<'ast, TypedAst>],
-        overloads: HashMap<String, HashMap<BaseSignature, Vec<FundefId>>>,
+        stubs: &'stubs id_arena::Arena<Fundef<'ast, TypedAst>>,
+        overloads: HashMap<String, HashMap<BaseSignature, Vec<FundefId<'ast, TypedAst>>>>,
     ) -> Self {
         Self {
             arenas,
@@ -115,7 +114,7 @@ impl<'ast, 'stubs> DispatchResolver<'ast, 'stubs> {
         }
     }
 
-    fn resolve_target(&mut self, func_name: &str, arg_types: &[Type]) -> FundefId {
+    fn resolve_target(&mut self, func_name: &str, arg_types: &[Type]) -> FundefId<'ast, TypedAst> {
         let Some(group) = self.overloads.get(func_name) else {
             self.errors.push(DispatchError::UndefinedFunction {
                 name: func_name.to_owned(),
@@ -138,7 +137,7 @@ impl<'ast, 'stubs> DispatchResolver<'ast, 'stubs> {
         let mut matches = Vec::new();
         for &target in candidates {
             let mut ok = true;
-            for (expected, provided) in self.stubs[target.0].args.iter().zip(arg_types.iter()) {
+            for (expected, provided) in self.stubs[target].args.iter().zip(arg_types.iter()) {
                 if !types_compatible(&expected.ty, provided) {
                     ok = false;
                     break;
@@ -334,15 +333,15 @@ impl<'ast, 'stubs> DispatchResolver<'ast, 'stubs> {
     }
 }
 
-fn maximal_candidates(stubs: &[Fundef<'_, TypedAst>], candidates: &[FundefId]) -> Vec<FundefId> {
-    let mut maximal: Vec<FundefId> = Vec::new();
+fn maximal_candidates<'ast>(stubs: &id_arena::Arena<Fundef<'ast, TypedAst>>, candidates: &[FundefId<'ast, TypedAst>]) -> Vec<FundefId<'ast, TypedAst>> {
+    let mut maximal = Vec::new();
 
     'outer: for &a in candidates {
         for &b in candidates {
             if a == b {
                 continue;
             }
-            if overload_more_specific(&stubs[b.0].args, &stubs[a.0].args) {
+            if overload_more_specific(&stubs[b].args, &stubs[a].args) {
                 continue 'outer;
             }
         }

@@ -42,7 +42,7 @@ impl<'ast> Traverse<'ast> for CompileFfi {
         for (_name, overloads) in &program.overloads {
             for (_sig, fundef_ids) in overloads {
                 for fundef_id in fundef_ids {
-                    let fundef = &program.fundefs[fundef_id.0];
+                    let fundef = program.fundef(*fundef_id);
                     self.push(&format!("    fn IMP_{}(", fundef.name));
                     self.push(&join_args(&fundef.args, rust_ffi_type));
                     self.push(&format!(") -> {};\n", rust_ffi_type(&fundef.ret_type)));
@@ -54,7 +54,7 @@ impl<'ast> Traverse<'ast> for CompileFfi {
         for (name, overloads) in &program.overloads {
             for (sig, fundef_ids) in overloads {
                 self.push("\n");
-                let fundefs: Vec<&Fundef<TypedAst>> = fundef_ids.iter().map(|id| &program.fundefs[id.0]).collect();
+                let fundefs: Vec<&Fundef<TypedAst>> = fundef_ids.iter().map(|&id| program.fundef(id)).collect();
                 if overloads.len() > 1 || fundefs.len() > 1 {
                     self.emit_family_wrapper(&name, sig, &fundefs);
                 } else {

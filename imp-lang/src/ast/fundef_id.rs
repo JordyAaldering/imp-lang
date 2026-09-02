@@ -1,8 +1,11 @@
+use id_arena::Id;
+
+use super::*;
+
 /// A lightweight, `Copy` handle to a `Fundef` stored in `Program.fundefs`.
 ///
-/// Using an index instead of a raw `&'ast Fundef` pointer means cross-function
-/// references never alias the `Vec<Fundef>` they point into, so the owning
-/// `Program` can freely hand out `&mut Fundef` (e.g. via `iter_mut`) without any
-/// unsafe lifetime games.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct FundefId(pub usize);
+/// Backed by `id_arena::Id`, which is generic over the pointee type: `FundefId<'ast, ParsedAst>`,
+/// `FundefId<'ast, UntypedAst>` and `FundefId<'ast, TypedAst>` are distinct types, so an id from
+/// one phase's arena can't accidentally be used to index another phase's.
+pub type FundefId<'ast, Ast> = Id<Fundef<'ast, Ast>>;
+
