@@ -2,7 +2,7 @@ use std::{cell::RefCell, collections::HashMap, mem};
 
 use crate::{ast::*, trav_name::TravName};
 
-pub fn to_ssa<'ast>(program: Program<'ast, ParsedAst>, arenas: &'ast Scope<'ast, UntypedAst>) -> Program<'ast, UntypedAst> {
+pub fn to_ssa<'ast>(program: Program<'ast, ParsedAst>, scope: &'ast Scope<'ast, UntypedAst>) -> Program<'ast, UntypedAst> {
     let mut overloads = HashMap::new();
     let mut fundefs = id_arena::Arena::new();
 
@@ -14,7 +14,7 @@ pub fn to_ssa<'ast>(program: Program<'ast, ParsedAst>, arenas: &'ast Scope<'ast,
 
             for fundef_id in fundef_ids {
                 let src_fundef = &program.fundefs[fundef_id];
-                let out_fundef = ToSsa::new(arenas).trav_fundef(src_fundef);
+                let out_fundef = ToSsa::new(scope).trav_fundef(src_fundef);
                 let id = fundefs.alloc(out_fundef);
                 new_ids.push(id);
             }
@@ -32,7 +32,7 @@ pub fn to_ssa<'ast>(program: Program<'ast, ParsedAst>, arenas: &'ast Scope<'ast,
 }
 
 pub struct ToSsa<'ast> {
-    arenas: &'ast Scope<'ast, UntypedAst>,
+    scope: &'ast Scope<'ast, UntypedAst>,
     trav_name: TravName,
     new_decs: Vec<&'ast VarInfo<'ast, UntypedAst>>,
     new_assigns: Vec<Stmt<'ast, UntypedAst>>,
@@ -40,9 +40,9 @@ pub struct ToSsa<'ast> {
 }
 
 impl<'ast> ToSsa<'ast> {
-    fn new(arenas: &'ast Scope<'ast, UntypedAst>) -> Self {
+    fn new(scope: &'ast Scope<'ast, UntypedAst>) -> Self {
         Self {
-            arenas,
+            scope,
             trav_name: TravName::new(crate::Phase::SSA),
             new_decs: Vec::new(),
             new_assigns: Vec::new(),
@@ -51,13 +51,13 @@ impl<'ast> ToSsa<'ast> {
     }
 
     fn alloc_lvis(&mut self, name: String, ssa: Option<&'ast ExprCell<'ast, UntypedAst>>) -> &'ast VarInfo<'ast, UntypedAst> {
-        let lvis = self.arenas.alloc_lvis(name, RefCell::new(None), ssa);
+        let lvis = self.scope.alloc_lvis(name, RefCell::new(None), ssa);
         self.new_decs.push(lvis);
         lvis
     }
 
     fn alloc_expr(&self, expr: Expr<'ast, UntypedAst>) -> &'ast ExprCell<'ast, UntypedAst> {
-        self.arenas.alloc_expr(expr)
+        self.scope.alloc_expr(expr)
     }
 
     fn unwrap_id_operand(&mut self, operand: &'ast ExprCell<'ast, ParsedAst>) -> Id<'ast, UntypedAst> {

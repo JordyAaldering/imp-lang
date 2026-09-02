@@ -35,28 +35,28 @@ pub fn compile(breakpoint: Option<Phase>, infile: &PathBuf, outdir: Option<&Path
     let src = fs::read_to_string(&infile).unwrap();
     breakpoint_str!(breakpoint, Phase::RD, src);
 
-    let parsed_arenas = Scope::<ParsedAst>::new();
-    let mut ast = scp::scanparse(&src, &parsed_arenas).unwrap();
+    let parsed_scope = Scope::<ParsedAst>::new();
+    let mut ast = scp::scanparse(&src, &parsed_scope).unwrap();
     breakpoint!(breakpoint, Phase::SCP, ast);
 
     let mut ast = tp::check_tp(ast).unwrap();
     breakpoint!(breakpoint, Phase::CTP, ast);
 
-    tp::analyse_tp(&mut ast, &parsed_arenas);
+    tp::analyse_tp(&mut ast, &parsed_scope);
     breakpoint!(breakpoint, Phase::ATP, ast);
 
-    pre::flatten(&mut ast, &parsed_arenas);
+    pre::flatten(&mut ast, &parsed_scope);
     breakpoint!(breakpoint, Phase::FLT, ast);
 
-    let untyped_arenas = Scope::<UntypedAst>::new();
-    let mut ast = pre::to_ssa(ast, &untyped_arenas);
+    let untyped_scope = Scope::<UntypedAst>::new();
+    let mut ast = pre::to_ssa(ast, &untyped_scope);
     breakpoint!(breakpoint, Phase::SSA, ast);
 
     tc::type_infer(&mut ast).unwrap();
     breakpoint!(breakpoint, Phase::TI, ast);
 
-    let typed_arenas = Scope::<TypedAst>::new();
-    let mut ast = tc::resolve_dispatch(ast, &typed_arenas).unwrap();
+    let typed_scope = Scope::<TypedAst>::new();
+    let mut ast = tc::resolve_dispatch(ast, &typed_scope).unwrap();
     breakpoint!(breakpoint, Phase::DR, ast);
 
     opt::constant_fold(&mut ast);

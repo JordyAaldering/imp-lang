@@ -2,21 +2,21 @@ use std::mem;
 
 use crate::{ast::*, trav_name::TravName};
 
-pub fn flatten<'ast>(program: &mut Program<'ast, ParsedAst>, arenas: &'ast Scope<'ast, ParsedAst>) {
-    Flatten::new(arenas).trav_program(program);
+pub fn flatten<'ast>(program: &mut Program<'ast, ParsedAst>, scope: &'ast Scope<'ast, ParsedAst>) {
+    Flatten::new(scope).trav_program(program);
 }
 
 struct Flatten<'ast> {
-    arenas: &'ast Scope<'ast, ParsedAst>,
+    scope: &'ast Scope<'ast, ParsedAst>,
     trav_name: TravName,
     new_decs: Vec<&'ast VarInfo<'ast, ParsedAst>>,
     new_assigns: Vec<Assign<'ast, ParsedAst>>,
 }
 
 impl<'ast> Flatten<'ast> {
-    fn new(arenas: &'ast Scope<'ast, ParsedAst>) -> Self {
+    fn new(scope: &'ast Scope<'ast, ParsedAst>) -> Self {
         Self {
-            arenas,
+            scope,
             trav_name: TravName::new(crate::Phase::FLT),
             new_decs: Vec::new(),
             new_assigns: Vec::new(),
@@ -24,13 +24,13 @@ impl<'ast> Flatten<'ast> {
     }
 
     fn alloc_lvis(&mut self, name: String, ty: Option<Type>) -> &'ast VarInfo<'ast, ParsedAst> {
-        let lvis = self.arenas.alloc_lvis(name, ty, ());
+        let lvis = self.scope.alloc_lvis(name, ty, ());
         self.new_decs.push(lvis);
         lvis
     }
 
     fn alloc_expr(&self, expr: Expr<'ast, ParsedAst>) -> &'ast ExprCell<'ast, ParsedAst> {
-        self.arenas.alloc_expr(expr)
+        self.scope.alloc_expr(expr)
     }
 
     fn emit_expr(&mut self, expr: Expr<'ast, ParsedAst>) -> Expr<'ast, ParsedAst> {

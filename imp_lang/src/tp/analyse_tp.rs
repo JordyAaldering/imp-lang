@@ -2,12 +2,12 @@ use std::collections::{HashMap, HashSet};
 
 use crate::ast::*;
 
-pub fn analyse_tp<'ast>(program: &mut Program<'ast, ParsedAst>, arenas: &'ast Scope<'ast, ParsedAst>) {
-    AnalyseTp::new(arenas).trav_program(program);
+pub fn analyse_tp<'ast>(program: &mut Program<'ast, ParsedAst>, scope: &'ast Scope<'ast, ParsedAst>) {
+    AnalyseTp::new(scope).trav_program(program);
 }
 
 struct AnalyseTp<'ast> {
-    arenas: &'ast Scope<'ast, ParsedAst>,
+    scope: &'ast Scope<'ast, ParsedAst>,
     /// Symbols that have been defined so far in the current fundef,
     /// accumulated left-to-right across arguments and their type patterns.
     defined: HashSet<String>,
@@ -15,22 +15,22 @@ struct AnalyseTp<'ast> {
 }
 
 impl<'ast> AnalyseTp<'ast> {
-    fn new(arenas: &'ast Scope<'ast, ParsedAst>) -> Self {
+    fn new(scope: &'ast Scope<'ast, ParsedAst>) -> Self {
         Self {
-            arenas,
+            scope,
             defined: HashSet::new(),
             symbol_terms: HashMap::new(),
         }
     }
 
     fn alloc_lvis(&self, fundef: &mut Fundef<'ast, ParsedAst>, name: String, ty: Option<Type>) -> &'ast VarInfo<'ast, ParsedAst> {
-        let lvis = self.arenas.alloc_lvis(name, ty, ());
+        let lvis = self.scope.alloc_lvis(name, ty, ());
         fundef.decs.push(lvis);
         lvis
     }
 
     fn alloc_expr(&self, expr: Expr<'ast, ParsedAst>) -> &'ast ExprCell<'ast, ParsedAst> {
-        self.arenas.alloc_expr(expr)
+        self.scope.alloc_expr(expr)
     }
 
     fn arg_expr(&self, arg_index: usize) -> &'ast ExprCell<'ast, ParsedAst> {

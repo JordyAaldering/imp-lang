@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::ast::*;
 
-pub fn resolve_dispatch<'ast>(program: Program<'ast, UntypedAst>, arenas: &'ast Scope<'ast, TypedAst>) -> Result<Program<'ast, TypedAst>, DispatchError> {
+pub fn resolve_dispatch<'ast>(program: Program<'ast, UntypedAst>, scope: &'ast Scope<'ast, TypedAst>) -> Result<Program<'ast, TypedAst>, DispatchError> {
     let mut overloads: HashMap<String, HashMap<BaseSignature, Vec<FundefId<'ast, TypedAst>>>> = HashMap::new();
     let mut stubs: id_arena::Arena<Fundef<'ast, TypedAst>> = id_arena::Arena::new();
     let mut work_items: Vec<(FundefId<'ast, TypedAst>, FundefId<'ast, UntypedAst>)> = Vec::new();
@@ -35,7 +35,7 @@ pub fn resolve_dispatch<'ast>(program: Program<'ast, UntypedAst>, arenas: &'ast 
 
     for (id, src_id) in work_items {
         let src_fundef = program.fundef(src_id);
-        let mut lower = DispatchResolver::new(arenas, &stubs, overloads.clone());
+        let mut lower = DispatchResolver::new(scope, &stubs, overloads.clone());
         let lowered = lower.lower_fundef(src_fundef);
         if let Some(err) = lower.errors.into_iter().next() {
             return Err(err);
@@ -59,7 +59,7 @@ pub enum DispatchError {
 }
 
 struct DispatchResolver<'ast, 'stubs> {
-    arenas: &'ast Scope<'ast, TypedAst>,
+    scope: &'ast Scope<'ast, TypedAst>,
     stubs: &'stubs id_arena::Arena<Fundef<'ast, TypedAst>>,
     args: Vec<Farg>,
     idmap: HashMap<*const VarInfo<'ast, UntypedAst>, &'ast VarInfo<'ast, TypedAst>>,
@@ -70,12 +70,12 @@ struct DispatchResolver<'ast, 'stubs> {
 
 impl<'ast, 'stubs> DispatchResolver<'ast, 'stubs> {
     fn new(
-        arenas: &'ast Scope<'ast, TypedAst>,
+        scope: &'ast Scope<'ast, TypedAst>,
         stubs: &'stubs id_arena::Arena<Fundef<'ast, TypedAst>>,
         overloads: HashMap<String, HashMap<BaseSignature, Vec<FundefId<'ast, TypedAst>>>>,
     ) -> Self {
         Self {
-            arenas,
+            scope,
             stubs,
             args: Vec::new(),
             idmap: HashMap::new(),
@@ -86,13 +86,13 @@ impl<'ast, 'stubs> DispatchResolver<'ast, 'stubs> {
     }
 
     fn alloc_lvis(&mut self, name: String, ty: Type, ssa: Option<&'ast ExprCell<'ast, TypedAst>>) -> &'ast VarInfo<'ast, TypedAst> {
-        let lvis = self.arenas.alloc_lvis(name, ty, ssa);
+        let lvis = self.scope.alloc_lvis(name, ty, ssa);
         self.new_decs.push(lvis);
         lvis
     }
 
     fn alloc_expr(&self, expr: Expr<'ast, TypedAst>) -> &'ast ExprCell<'ast, TypedAst> {
-        self.arenas.alloc_expr(expr)
+        self.scope.alloc_expr(expr)
     }
 
     fn require_ty(&mut self, name: &str, ty: &Option<Type>) -> Type {
