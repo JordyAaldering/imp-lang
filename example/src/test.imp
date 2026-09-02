@@ -3,5 +3,5 @@ fn add(i32 x, i32 y) -> i32 {
 }
 
 fn genarray(usize[n] shp, i32 v) -> i32[n:shp] {
-    { v + 0i32 | iv < shp }
+    { v + 0i32 | _ < shp }
 }
