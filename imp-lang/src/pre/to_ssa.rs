@@ -4,7 +4,7 @@ use crate::{ast::*, trav_name::TravName};
 
 pub fn to_ssa<'ast>(program: Program<'ast, ParsedAst>, arenas: &'ast Arenas<'ast, UntypedAst>) -> Program<'ast, UntypedAst> {
     let mut overloads = HashMap::new();
-    let mut fundefs = Vec::new();
+    let mut fundefs = id_arena::Arena::new();
 
     for (name, groups) in program.overloads {
         let mut new_groups = HashMap::new();
@@ -13,10 +13,9 @@ pub fn to_ssa<'ast>(program: Program<'ast, ParsedAst>, arenas: &'ast Arenas<'ast
             let mut new_ids = Vec::new();
 
             for fundef_id in fundef_ids {
-                let src_fundef = &program.fundefs[fundef_id.0];
+                let src_fundef = &program.fundefs[fundef_id];
                 let out_fundef = ToSsa::new(arenas).trav_fundef(src_fundef);
-                let id = FundefId(fundefs.len());
-                fundefs.push(out_fundef);
+                let id = fundefs.alloc(out_fundef);
                 new_ids.push(id);
             }
 

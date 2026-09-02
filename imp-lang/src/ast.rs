@@ -173,7 +173,7 @@ impl AstConfig for TypedAst {
 
     type SsaLink<'ast> = Option<&'ast ExprCell<'ast, TypedAst>>;
 
-    type Dispatch<'ast> = FundefId;
+    type Dispatch<'ast> = FundefId<'ast, TypedAst>;
 
     type Operand<'ast> = Id<'ast, TypedAst>;
 
@@ -182,7 +182,7 @@ impl AstConfig for TypedAst {
     }
 
     fn dispatch_name<'ast>(dispatch: &Self::Dispatch<'ast>, fundef_names: &[String]) -> String {
-        fundef_names[dispatch.0].clone()
+        fundef_names[dispatch.index()].clone()
     }
 
     fn trav_type<'ast, V>(trav: &mut V, ty: &Self::VarType)

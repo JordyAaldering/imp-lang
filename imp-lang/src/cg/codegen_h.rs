@@ -44,7 +44,7 @@ impl<'ast> Traverse<'ast> for CompileH {
     fn trav_program(&mut self, program: &mut Program<'ast, TypedAst>) {
         self.output.push_str(HEADER);
 
-        for fundef in program.fundefs.iter_mut() {
+        for (_, fundef) in program.fundefs.iter_mut() {
             self.trav_fundef(fundef);
         }
     }

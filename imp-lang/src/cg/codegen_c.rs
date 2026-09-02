@@ -203,7 +203,7 @@ impl<'ast> Traverse<'ast> for CompileC {
             for (_sig, fundef_ids) in overloads {
                 for fundef_id in fundef_ids {
                     self.output.push('\n');
-                    self.emit_function_prototype(&program.fundefs[fundef_id.0]);
+                    self.emit_function_prototype(program.fundef(*fundef_id));
                 }
             }
         }
@@ -212,13 +212,13 @@ impl<'ast> Traverse<'ast> for CompileC {
             for (sig, fundef_ids) in overloads {
                 if overloads.len() > 1 || fundef_ids.len() > 1 {
                     self.output.push('\n');
-                    let first = &program.fundefs[fundef_ids[0].0];
+                    let first = program.fundef(fundef_ids[0]);
                     self.emit_wrapper_prototype(&name, sig, &first.ret_type.ty);
                 }
             }
         }
 
-        for fundef in program.fundefs.iter_mut() {
+        for (_, fundef) in program.fundefs.iter_mut() {
             self.trav_fundef(fundef);
         }
 
@@ -226,7 +226,7 @@ impl<'ast> Traverse<'ast> for CompileC {
             for (sig, fundef_ids) in overloads {
                 if overloads.len() > 1 || fundef_ids.len() > 1 {
                     self.output.push('\n');
-                    let family: Vec<&Fundef<TypedAst>> = fundef_ids.iter().map(|id| &program.fundefs[id.0]).collect();
+                    let family: Vec<&Fundef<TypedAst>> = fundef_ids.iter().map(|&id| program.fundef(id)).collect();
                     self.emit_wrapper_function(&name, sig, &family);
                 }
             }
@@ -496,11 +496,11 @@ impl<'ast> Traverse<'ast> for CompileC {
 
         let (fold_name, call_args) = match &fold.foldfun {
             FoldFun::Name(id) => {
-                let name = self.fundef_names[id.0].clone();
+                let name = self.fundef_names[id.index()].clone();
                 (name, vec![target_name.clone(), sel_expr])
             }
             FoldFun::Apply { id, args } => {
-                let name = self.fundef_names[id.0].clone();
+                let name = self.fundef_names[id.index()].clone();
                 let mut hole = 0usize;
                 let mut out = Vec::with_capacity(args.len());
                 for arg in args {
@@ -535,7 +535,7 @@ impl<'ast> Traverse<'ast> for CompileC {
     }
 
     fn trav_call(&mut self, call: &mut Call<'ast, TypedAst>) {
-        let name = self.fundef_names[call.id.0].clone();
+        let name = self.fundef_names[call.id.index()].clone();
 
         let args: Vec<String> = call.args.iter()
             .map(|arg| self.render_id(*arg))

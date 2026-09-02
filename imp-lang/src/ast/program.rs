@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use id_arena::Arena;
+
 use super::*;
 
 pub struct Program<'ast, Ast: AstConfig> {
@@ -24,19 +26,19 @@ pub struct Program<'ast, Ast: AstConfig> {
     ///   }
     /// }
     /// ```
-    pub overloads: HashMap<String, HashMap<BaseSignature, Vec<FundefId>>>,
+    pub overloads: HashMap<String, HashMap<BaseSignature, Vec<FundefId<'ast, Ast>>>>,
     /// Owns every `Fundef` in the program; cross-references use `FundefId` rather
-    /// than raw pointers, so this `Vec` can be freely mutated (`iter_mut`) without
+    /// than raw pointers, so this arena can be freely mutated (`iter_mut`) without
     /// invalidating anything that references a fundef by id.
-    pub fundefs: Vec<Fundef<'ast, Ast>>,
+    pub fundefs: Arena<Fundef<'ast, Ast>>,
 }
 
 impl<'ast, Ast: AstConfig> Program<'ast, Ast> {
-    pub fn fundef(&self, id: FundefId) -> &Fundef<'ast, Ast> {
-        &self.fundefs[id.0]
+    pub fn fundef(&self, id: FundefId<'ast, Ast>) -> &Fundef<'ast, Ast> {
+        &self.fundefs[id]
     }
 
     pub fn fundef_names(&self) -> Vec<String> {
-        self.fundefs.iter().map(|f| f.name.clone()).collect()
+        self.fundefs.iter().map(|(_, f)| f.name.clone()).collect()
     }
 }
