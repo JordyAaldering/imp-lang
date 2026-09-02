@@ -164,12 +164,10 @@ impl CompileC {
         let name = self.render_id(ret);
         let declared_ty = self.ret_type.clone().unwrap_or_else(|| self.id_type(&ret));
 
-        if declared_ty.is_array() {
-            self.push_line(&format!(
-                "return imp_clone_array_raw({}, sizeof({}));",
-                name,
-                declared_ty.basetype.ctype()
-            ));
+        if declared_ty.is_array() && false {
+            // The array is already allocated, I don't see why we would need to clone it
+            let elem_type = declared_ty.basetype.ctype();
+            self.push_line(&format!("return imp_clone_array_raw({name}, sizeof({elem_type}));"));
         } else {
             self.push_line(&format!("return {};", name));
         }
