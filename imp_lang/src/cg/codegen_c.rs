@@ -31,9 +31,9 @@ static ImpArrayRaw imp_clone_array_raw(ImpArrayRaw src, size_t elem_size) {
 */
 "#;
 
-pub fn emit_c(ast: &mut Program<'_, TypedAst>, module_name: String) -> String {
+pub fn emit_c(ast: &mut Program<'_, TypedAst>, module_name: &str) -> String {
     let mut cg = CompileC::default();
-    cg.module_name = module_name;
+    cg.module_name = module_name.to_string();
     cg.trav_program(ast);
     cg.output
 }

@@ -1,16 +1,13 @@
-use std::path::PathBuf;
+use std::{env, path::PathBuf};
 
 fn main() {
     let infile = "src/simple.imp";
 
-    let outdir = std::env::var("OUT_DIR").unwrap();
-    let outdir = PathBuf::from(&outdir);//.join("src");
+    let outdir = env::var("OUT_DIR").unwrap();
+    let outdir = PathBuf::from(&outdir);
 
-    let options = imp_lang::Options::new(PathBuf::from(infile), outdir.clone());
-    let cpath = options.c_path().unwrap();
+    let cpath = imp_lang::compile(None, &infile.into(), Some(&outdir)).unwrap();
     let opath = cpath.file_stem().unwrap().to_str().unwrap();
-
-    imp_lang::compile(options);
 
     cc::Build::new()
         .file(&cpath)
