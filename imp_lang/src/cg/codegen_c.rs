@@ -564,7 +564,7 @@ impl<'ast> Traverse<'ast> for CompileC {
             SelVxA(idx, arr) => {
                 let arr_name = self.render_id(*arr);
                 let idx_name = self.render_id(*idx);
-                let elem_base = elem_ctype_of_id(arr);
+                let elem_base = elem_ctype_of_id(arr, &self.arg_types);
                 format!("(({elem_base} *){arr_name}.data)[imp_flat_index({arr_name}, {idx_name})]")
             }
             AddSxS(a, b) => format!("{} + {}", self.render_id(*a), self.render_id(*b)),
@@ -647,9 +647,9 @@ fn wrapper_call_arg(shape: &TypePattern, arg: &str, base: &BaseType) -> String {
     }
 }
 
-fn elem_ctype_of_id(id: &Id<'_, TypedAst>) -> String {
+fn elem_ctype_of_id(id: &Id<'_, TypedAst>, args: &[Type]) -> String {
     match id {
-        Id::Arg(_) => "uint32_t".to_string(),
+        Id::Arg(i) => args[*i].basetype.ctype(),
         Id::Var(v) => v.ty.basetype.ctype(),
     }
 }
