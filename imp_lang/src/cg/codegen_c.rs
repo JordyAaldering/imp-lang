@@ -73,11 +73,11 @@ impl CompileC {
         let args: Vec<String> = fundef
             .args
             .iter()
-            .map(|arg| format!("{} {}", full_ctype(&arg.ty), arg.id))
+            .map(|arg| format!("{} {}", arg.ty.rstype(), arg.id))
             .collect();
         self.output.push_str(&format!(
             "{} IMP_{}({});\n",
-            full_ctype(&fundef.ret_type),
+            fundef.ret_type.rstype(),
             fundef.name,
             args.join(", ")
         ));
@@ -218,12 +218,12 @@ impl<'ast> Traverse<'ast> for CompileC {
         self.arg_types = fundef.args.iter().map(|arg| arg.ty.clone()).collect();
         self.ret_type = Some(fundef.ret_type.clone());
         let args: Vec<String> = fundef.args.iter()
-            .map(|arg| format!("{} {}", full_ctype(&arg.ty), arg.id))
+            .map(|arg| format!("{} {}", arg.ty.rstype(), arg.id))
             .collect();
 
         self.push_line(&format!(
             "{} IMP_{}({}) {{",
-            full_ctype(&fundef.ret_type), fundef.name, args.join(", ")
+            fundef.ret_type.rstype(), fundef.name, args.join(", ")
         ));
 
         self.indent += 1;
@@ -254,7 +254,7 @@ impl<'ast> Traverse<'ast> for CompileC {
         self.trav_expr(assign.expr);
         if !matches!(&*assign.expr.borrow(), Expr::Tensor(_) | Expr::Fold(_) | Expr::Array(_)) {
             let rhs = self.expr_stack.pop().expect("expression stack underflow");
-            self.push_line(&format!("{} {} = {};", full_ctype(&ty), name, rhs));
+            self.push_line(&format!("{} {} = {};", ty.rstype(), name, rhs));
         }
 
         self.lhs_target = prev_lhs_target;
@@ -272,7 +272,7 @@ impl<'ast> Traverse<'ast> for CompileC {
             let f = self.nameof(&cond.else_branch.ret);
             self.expr_stack.push(format!("{} ? {} : {}", c, t, f));
         } else {
-            self.push_line(&format!("{} cond_ret;", full_ctype(&self.id_type(&cond.then_branch.ret))));
+            self.push_line(&format!("{} cond_ret;", self.id_type(&cond.then_branch.ret).rstype()));
 
             let c = self.nameof(&cond.cond);
             self.push_line(&format!("if ({}) {{", c));
@@ -435,7 +435,7 @@ impl<'ast> Traverse<'ast> for CompileC {
         let t_uid = self.tensor_uid;
 
         let neutral_expr = self.render_id(fold.neutral);
-        self.push_line(&format!("{} {} = {};", full_ctype(&target_ty), target_name, neutral_expr));
+        self.push_line(&format!("{} {} = {};", target_ty.rstype(), target_name, neutral_expr));
 
         for d in 0..rank {
             if let Some(lb) = &fold.selection.lb {
@@ -601,14 +601,6 @@ impl<'ast> Traverse<'ast> for CompileC {
 
     fn trav_const(&mut self, c: &mut Const) {
         self.expr_stack.push(c.to_string())
-    }
-}
-
-fn full_ctype(ty: &Type) -> String {
-    if ty.is_array() {
-        "ImpArrayRaw".to_string()
-    } else {
-        ty.basetype.ctype()
     }
 }
 

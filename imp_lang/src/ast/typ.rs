@@ -71,6 +71,22 @@ pub struct RankCapture {
 }
 
 impl Type {
+    pub fn ctype(&self) -> String {
+        if self.is_array() {
+            "ImpArrayRaw".to_string()
+        } else {
+            self.basetype.ctype()
+        }
+    }
+
+    pub fn rstype(&self) -> String {
+        if self.is_array() {
+            "ImpArrayRaw".to_string()
+        } else {
+            self.basetype.rstype()
+        }
+    }
+
     pub const fn scalar(basetype: BaseType) -> Self {
         Self { basetype, shape: TypePattern::Scalar }
     }

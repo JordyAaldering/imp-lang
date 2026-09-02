@@ -41,22 +41,14 @@ impl<'ast> Traverse<'ast> for CompileHeader {
     fn trav_fundef(&mut self, fundef: &mut Fundef<'ast, TypedAst>) {
         let args: Vec<String> = fundef.args
             .iter()
-            .map(|arg| format!("{} {}", dyn_ctype(&arg.ty), arg.id))
+            .map(|arg| format!("{} {}", &arg.ty.ctype(), arg.id))
             .collect();
 
         self.output.push_str(&format!(
             "{} IMP_{}({});\n",
-            dyn_ctype(&fundef.ret_type),
+            fundef.ret_type.rstype(),
             fundef.name,
             args.join(", "),
         ));
-    }
-}
-
-fn dyn_ctype(ty: &Type) -> String {
-    if ty.is_array() {
-        "ImpArrayRaw".to_string()
-    } else {
-        ty.basetype.ctype()
     }
 }

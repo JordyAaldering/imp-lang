@@ -9,7 +9,7 @@ path = "src/lib.rs"
 
 [[bin]]
 name = "imp_lang"
-path = "src/bin.rs"
+path = "src/main.rs"
 
 [dependencies]
 clap = { version = "4.6.6", features = ["derive"] }

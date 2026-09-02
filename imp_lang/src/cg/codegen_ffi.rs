@@ -33,8 +33,8 @@ impl<'ast> Traverse<'ast> for CompileFfi {
                 for fundef_id in fundef_ids {
                     let fundef = program.fundef(*fundef_id);
                     self.push(&format!("    fn IMP_{}(", fundef.name));
-                    self.push(&join_args(&fundef.args, rust_ffi_type));
-                    self.push(&format!(") -> {};\n", rust_ffi_type(&fundef.ret_type)));
+                    self.push(&join_args(&fundef.args, Type::rstype));
+                    self.push(&format!(") -> {};\n", fundef.ret_type.rstype()));
                 }
             }
         }
@@ -179,15 +179,6 @@ fn join_args(args: &[Farg], map_ty: fn(&Type) -> String) -> String {
 fn rust_wrapper_type(ty: &Type) -> String {
     if ty.is_array() {
         format!("ImpArray<{}>", ty.basetype.rstype())
-    } else {
-        ty.basetype.rstype()
-    }
-}
-
-/// Rust type used in `extern "C"` FFI declarations: arrays -> `ImpArrayRaw`, scalars -> `T`.
-fn rust_ffi_type(ty: &Type) -> String {
-    if ty.is_array() {
-        "ImpArrayRaw".to_string()
     } else {
         ty.basetype.rstype()
     }
