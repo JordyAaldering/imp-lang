@@ -227,9 +227,7 @@ fn emit_marshaled_branch_args(
             call_args.push(branch_name.clone());
         } else {
             // wrapper takes ImpArray<T>, variant expects scalar -> extract element
-            out.push_str(&format!(
-                "{pad}let {branch_name}_val = {branch_name}.data[0];\n"
-            ));
+            out.push_str(&format!("{pad}let {branch_name}_val = {branch_name}.unwrap_scalar();\n"));
             call_args.push(format!("{branch_name}_val"));
         }
     }
@@ -270,11 +268,8 @@ fn emit_family_return_expr(
         )
     } else {
         // variant returns scalar but wrapper return type is ImpArray<T>
-        format!(
-            "let __res_val = unsafe {{ IMP_{}({}) }};\nImpArray {{ shp: vec![], data: vec![__res_val] }}",
-            symbol_name,
-            call_args.join(", "),
-        )
+        let args = call_args.join(", ");
+        format!("let __res_val = unsafe {{ IMP_{symbol_name}({args}) }};\nImpArray::scalar(__res_val)")
     }
 }
 
@@ -295,21 +290,21 @@ fn build_variant_condition(args: &[Farg], all_scalar_args: &[bool]) -> String {
         }
         match &arg.ty.shape {
             TypePattern::Scalar => {
-                checks.push(format!("arg{arg_index}.shp.is_empty()"));
+                checks.push(format!("arg{arg_index}.is_scalar()"));
             }
             TypePattern::Axes(axes) => {
                 if axes.iter().any(|ax| matches!(ax, AxisPattern::Rank(_))) {
-                    checks.push(format!("!arg{arg_index}.shp.is_empty()"));
+                    checks.push(format!("!arg{arg_index}.is_scalar()"));
                 } else {
-                    checks.push(format!("arg{arg_index}.shp.len() == {}", axes.len()));
+                    checks.push(format!("arg{arg_index}.dim() == {}", axes.len()));
                 }
                 for (axis_index, axis) in axes.iter().enumerate() {
                     match axis {
                         AxisPattern::Dim(DimCapture::Known(v)) => {
-                            checks.push(format!("arg{arg_index}.shp[{axis_index}] == {v}"));
+                            checks.push(format!("arg{arg_index}.extent({axis_index}) == {v}"));
                         }
                         AxisPattern::Dim(DimCapture::Var(extent)) => {
-                            let expr = format!("arg{arg_index}.shp[{axis_index}]");
+                            let expr = format!("arg{arg_index}.extent({axis_index})");
                             if let Some((_, bound_expr)) =
                                 bound_dims.iter().find(|(name, _)| name == extent)
                             {
@@ -319,7 +314,7 @@ fn build_variant_condition(args: &[Farg], all_scalar_args: &[bool]) -> String {
                             }
                         }
                         AxisPattern::Rank(RankCapture { dim: DimCapture::Var(dim), shp: _ }) => {
-                            let expr = format!("arg{arg_index}.shp.len()");
+                            let expr = format!("arg{arg_index}.dim()");
                             if let Some((_, bound_expr)) = bound_ranks.iter().find(|(name, _)| name == dim)
                             {
                                 checks.push(format!("{expr} == {bound_expr}"));
@@ -355,7 +350,7 @@ fn generate_shape_checks(args: &[Farg]) -> String {
 
         if !axes.iter().any(|axis| matches!(axis, AxisPattern::Rank(_))) {
             out.push_str(&format!(
-                "    assert_eq!({}.shp.len(), {}, \"{} rank mismatch\");\n",
+                "    assert_eq!({}.dim(), {}, \"{} rank mismatch\");\n",
                 arg.id,
                 axes.len(),
                 arg.id,
@@ -366,7 +361,7 @@ fn generate_shape_checks(args: &[Farg]) -> String {
             match axis {
                 AxisPattern::Dim(DimCapture::Known(v)) => {
                     out.push_str(&format!(
-                        "    assert_eq!({}.shp[{}], {}, \"{} extent mismatch at axis {}\");\n",
+                        "    assert_eq!({}.extent({}), {}, \"{} extent mismatch at axis {}\");\n",
                         arg.id, idx, v, arg.id, idx,
                     ));
                 }
@@ -374,12 +369,12 @@ fn generate_shape_checks(args: &[Farg]) -> String {
                     let binding = format!("_imp_extent_{}", extent);
                     if bound_dims.iter().any(|existing| existing == &binding) {
                         out.push_str(&format!(
-                            "    assert_eq!({}.shp[{}], {}, \"extent {} mismatch\");\n",
+                            "    assert_eq!({}.extent({}), {}, \"extent {} mismatch\");\n",
                             arg.id, idx, binding, extent
                         ));
                     } else {
                         out.push_str(&format!(
-                            "    let {} = {}.shp[{}];\n",
+                            "    let {} = {}.extent({});\n",
                             binding, arg.id, idx
                         ));
                         bound_dims.push(binding);
@@ -388,10 +383,10 @@ fn generate_shape_checks(args: &[Farg]) -> String {
                 AxisPattern::Rank(RankCapture { dim: DimCapture::Var(dim), shp: _ }) => {
                     let binding = format!("_imp_rank_{}", dim);
                     if bound_ranks.iter().any(|existing| existing == &binding) {
-                        out.push_str(&format!("    assert_eq!({}.shp.len(), {}, \"rank {} mismatch\");\n",
+                        out.push_str(&format!("    assert_eq!({}.dim(), {}, \"rank {} mismatch\");\n",
                             arg.id, binding, dim));
                     } else {
-                        out.push_str(&format!("    let {} = {}.shp.len();\n",
+                        out.push_str(&format!("    let {} = {}.dim();\n",
                             binding, arg.id
                         ));
                         bound_ranks.push(binding);

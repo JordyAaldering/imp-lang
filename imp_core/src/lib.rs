@@ -5,17 +5,17 @@ pub struct ImpArray<T>
 where
     T: Copy,
 {
-    pub shp: Vec<usize>,
-    pub data: Vec<T>,
+    shp: Vec<usize>,
+    data: Vec<T>,
 }
 
 #[repr(C)]
 #[derive(Clone, Debug)]
 pub struct ImpArrayRaw {
-    pub len: usize,
-    pub dim: usize,
-    pub shp_ptr: *mut usize,
-    pub data_ptr: *mut c_void,
+    len: usize,
+    dim: usize,
+    shp_ptr: *mut usize,
+    data_ptr: *mut c_void,
 }
 
 unsafe extern "C" {
@@ -26,7 +26,23 @@ impl<T> ImpArray<T>
 where
     T: Copy,
 {
-    /// Create a zero-dimensional (scalar) array holding a single value.
+    /// Create a new array with the given shape and data.
+    ///
+    /// The length of the data must match the product of the shape dimensions.
+    pub fn new(shp: Vec<usize>, data: Vec<T>) -> Self {
+        assert_eq!(shp.iter().product::<usize>(), data.len(), "Shape and data length mismatch");
+        Self { shp, data }
+    }
+
+    /// Create a new vector (1-dimensional array) with the given length and data.
+    ///
+    /// The length of the data must match the specified length.
+    pub fn vector(len: usize, data: Vec<T>) -> Self {
+        assert_eq!(len, data.len(), "Length and data length mismatch");
+        Self { shp: vec![len], data }
+    }
+
+    /// Create a scalar (0-dimensional array) from the given value.
     pub fn scalar(value: T) -> Self {
         Self { shp: vec![], data: vec![value] }
     }
@@ -34,9 +50,34 @@ where
     /// Extract the scalar value from a zero-dimensional array.
     ///
     /// Panics if the array has more than zero dimensions.
-    pub fn scalar_value(&self) -> T {
-        assert!(self.shp.is_empty(), "expected a 0-d (scalar) array");
+    pub fn unwrap_scalar(&self) -> T {
+        assert!(self.is_scalar(), "Expected a 0-dimensional (scalar) array");
         self.data[0]
+    }
+
+    pub fn is_scalar(&self) -> bool {
+        self.shp.is_empty()
+    }
+
+    pub fn len(&self) -> usize {
+        self.data.len()
+    }
+
+    pub fn dim(&self) -> usize {
+        self.shp.len()
+    }
+
+    pub fn shape(&self) -> &[usize] {
+        &self.shp
+    }
+
+    pub fn extent(&self, axis: usize) -> usize {
+        assert!(axis < self.shp.len(), "Axis out of bounds");
+        self.shp[axis]
+    }
+
+    pub fn data(&self) -> &[T] {
+        &self.data
     }
 
     pub fn into_raw(mut self) -> ImpArrayRaw {
