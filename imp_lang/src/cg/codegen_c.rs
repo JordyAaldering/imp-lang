@@ -4,20 +4,28 @@ const HEADER: &str =
 r#"#include <stdio.h>
 #include <string.h>
 
+// Allocate memory for an array's shape vector, for the given dimension.
+#define IMP_ALLOC_SHAPE_VEC(DIM) ((size_t *)malloc((DIM) * sizeof(size_t)))
+
+// Allocate memory to hold the array's data, for the given element type and number of elements.
+#define IMP_ALLOC_DATA(TYPE, LEN) ((TYPE *)malloc((LEN) * sizeof(TYPE)))
+
+#define IMP_MK_ARRAY(LEN, DIM, SHP, DATA) ((ImpArrayRaw){ .len=(LEN), .dim=(DIM), .shp=(SHP), .data=(void *)(DATA) })
+
 static size_t imp_flat_index(ImpArrayRaw arr, ImpArrayRaw idx) {
     size_t flat = 0;
-    for (size_t d = 0; d < idx.len; d += 1) {
+    for (size_t d = 0; d < idx.len; d++) {
         flat = flat * arr.shp[d] + ((size_t *)idx.data)[d];
     }
     return flat;
 }
 
 static ImpArrayRaw imp_clone_array_raw(ImpArrayRaw src, size_t elem_size) {
-    size_t *shp = src.dim == 0 ? NULL : (size_t *)malloc(src.dim * sizeof(size_t));
+    size_t *shp = src.dim == 0 ? NULL : IMP_ALLOC_SHAPE_VEC(src.dim);
     if (src.dim > 0) { memcpy(shp, src.shp, src.dim * sizeof(size_t)); }
     void *data = src.len == 0 ? NULL : malloc(src.len * elem_size);
     if (src.len > 0) { memcpy(data, src.data, src.len * elem_size); }
-    return (ImpArrayRaw){ .len = src.len, .dim = src.dim, .shp = shp, .data = data };
+    return IMP_MK_ARRAY(src.len, src.dim, shp, data);
 }
 "#;
 
@@ -134,9 +142,9 @@ impl CompileC {
                 // Scalar return: wrap in a 0-d ImpArrayRaw (dim=0, len=1, shp=NULL)
                 let base = fundef.ret_type.basetype.ctype();
                 self.push_line(&format!("{base} __ret_val = {call_expr};"));
-                self.push_line(&format!("{base} *__ret_data = ({base} *)malloc(sizeof({base}));"));
+                self.push_line(&format!("{base} *__ret_data = IMP_ALLOC_DATA({base}, 1);"));
                 self.push_line("*__ret_data = __ret_val;");
-                self.push_line("return (ImpArrayRaw) { .len = 1, .dim = 0, .shp = NULL, .data = (void *)__ret_data };");
+                self.push_line("return IMP_MK_ARRAY(1, 0, NULL, __ret_data);");
             }
 
             self.indent -= 1;
@@ -353,10 +361,9 @@ impl<'ast> Traverse<'ast> for CompileC {
             .collect();
         let total_len = if extents.is_empty() { "1".to_owned() } else { extents.join(" * ") };
         self.push_line(&format!("size_t {len_name} = {total_len};"));
-        self.push_line(&format!("{base} *{data_name} = ({base} *)malloc({len_name} * sizeof({base}));"));
 
         // Heap-allocate the result shape array.
-        self.push_line(&format!("size_t *{shp_name} = (size_t *)malloc({rank} * sizeof(size_t));"));
+        self.push_line(&format!("size_t *{shp_name} = IMP_ALLOC_SHAPE_VEC({rank});"));
         for d in 0..rank {
             if tensor.lb.is_some() {
                 self.push_line(&format!("{shp_name}[{d}] = {iv_name}_ub{d}_{t_uid} - {iv_name}_lb{d}_{t_uid};"));
@@ -365,12 +372,14 @@ impl<'ast> Traverse<'ast> for CompileC {
             }
         }
 
+        self.push_line(&format!("{base} *{data_name} = IMP_ALLOC_DATA({base}, {len_name});"));
+
         // Generate k nested for-loops.
         for d in 0..rank {
             if tensor.lb.is_some() {
-                self.push_line(&format!("for (size_t {iv_name}_{d}_{t_uid} = {iv_name}_lb{d}_{t_uid}; {iv_name}_{d}_{t_uid} < {iv_name}_ub{d}_{t_uid}; {iv_name}_{d}_{t_uid} += 1) {{"));
+                self.push_line(&format!("for (size_t {iv_name}_{d}_{t_uid} = {iv_name}_lb{d}_{t_uid}; {iv_name}_{d}_{t_uid} < {iv_name}_ub{d}_{t_uid}; {iv_name}_{d}_{t_uid}++) {{"));
             } else {
-                self.push_line(&format!("for (size_t {iv_name}_{d}_{t_uid} = 0; {iv_name}_{d}_{t_uid} < {iv_name}_ub{d}_{t_uid}; {iv_name}_{d}_{t_uid} += 1) {{"));
+                self.push_line(&format!("for (size_t {iv_name}_{d}_{t_uid} = 0; {iv_name}_{d}_{t_uid} < {iv_name}_ub{d}_{t_uid}; {iv_name}_{d}_{t_uid}++) {{"));
             }
             self.indent += 1;
         }
@@ -385,9 +394,7 @@ impl<'ast> Traverse<'ast> for CompileC {
             iv_components.join(", ")
         ));
         self.push_line(&format!("size_t {iv_name}_shp_arr_{t_uid}[1] = {{ {rank} }};"));
-        self.push_line(&format!(
-            "ImpArrayRaw {iv_name} = (ImpArrayRaw) {{ .len = {rank}, .shp = {iv_name}_shp_arr_{t_uid}, .dim = 1, .data = (void *){iv_name}_data_{t_uid} }};"
-        ));
+        self.push_line(&format!("ImpArrayRaw {iv_name} = IMP_MK_ARRAY({rank}, 1, {iv_name}_shp_arr_{t_uid}, {iv_name}_data_{t_uid});"));
 
         // Row-major flat index: Σ (iv_d - lb_d) * stride_d
         let flat_terms: Vec<String> = (0..rank).map(|d| {
@@ -430,9 +437,7 @@ impl<'ast> Traverse<'ast> for CompileC {
             self.push_line("}");
         }
 
-        self.push_line(&format!(
-            "ImpArrayRaw {target_name} = (ImpArrayRaw) {{ .len = {len_name}, .shp = {shp_name}, .dim = {rank}, .data = (void *){data_name} }};"
-        ));
+        self.push_line(&format!("ImpArrayRaw {target_name} = IMP_MK_ARRAY({len_name}, {rank}, {shp_name}, {data_name});"));
     }
 
     fn trav_fold(&mut self, fold: &mut Fold<'ast, Self::Ast>) {
@@ -464,9 +469,9 @@ impl<'ast> Traverse<'ast> for CompileC {
 
         for d in 0..rank {
             if fold.selection.lb.is_some() {
-                self.push_line(&format!("for (size_t {iv_name}_{d}_{t_uid} = {iv_name}_lb{d}_{t_uid}; {iv_name}_{d}_{t_uid} < {iv_name}_ub{d}_{t_uid}; {iv_name}_{d}_{t_uid} += 1) {{"));
+                self.push_line(&format!("for (size_t {iv_name}_{d}_{t_uid} = {iv_name}_lb{d}_{t_uid}; {iv_name}_{d}_{t_uid} < {iv_name}_ub{d}_{t_uid}; {iv_name}_{d}_{t_uid}++) {{"));
             } else {
-                self.push_line(&format!("for (size_t {iv_name}_{d}_{t_uid} = 0; {iv_name}_{d}_{t_uid} < {iv_name}_ub{d}_{t_uid}; {iv_name}_{d}_{t_uid} += 1) {{"));
+                self.push_line(&format!("for (size_t {iv_name}_{d}_{t_uid} = 0; {iv_name}_{d}_{t_uid} < {iv_name}_ub{d}_{t_uid}; {iv_name}_{d}_{t_uid}++) {{"));
             }
             self.indent += 1;
         }
@@ -480,9 +485,7 @@ impl<'ast> Traverse<'ast> for CompileC {
             iv_components.join(", ")
         ));
         self.push_line(&format!("size_t {iv_name}_shp_arr_{t_uid}[1] = {{ {rank} }};"));
-        self.push_line(&format!(
-            "ImpArrayRaw {iv_name} = (ImpArrayRaw) {{ .len = {rank}, .shp = {iv_name}_shp_arr_{t_uid}, .dim = 1, .data = (void *){iv_name}_data_{t_uid} }};"
-        ));
+        self.push_line(&format!("ImpArrayRaw {iv_name} = IMP_MK_ARRAY({rank}, 1, {iv_name}_shp_arr_{t_uid}, {iv_name}_data_{t_uid});"));
 
         for stmt in &mut fold.selection.body.stmts {
             self.trav_stmt(stmt);
@@ -555,11 +558,9 @@ impl<'ast> Traverse<'ast> for CompileC {
                 let wrap = format!("_shp{uid}");
                 self.push_line(&format!("size_t *{meta} = (size_t *)malloc(sizeof(size_t));"));
                 self.push_line(&format!("*{meta} = {arg}.dim;"));
-                self.push_line(&format!("size_t *{data} = (size_t *)malloc({arg}.dim * sizeof(size_t));"));
-                self.push_line(&format!("for (size_t _i = 0; _i < {arg}.dim; _i += 1) {{ {data}[_i] = {arg}.shp[_i]; }}"));
-                self.push_line(&format!(
-                    "ImpArrayRaw {wrap} = (ImpArrayRaw) {{ .len = {arg}.dim, .dim = 1, .shp = {meta}, .data = (void *){data} }};",
-                ));
+                self.push_line(&format!("size_t *{data} = IMP_ALLOC_SHAPE_VEC({arg}.dim);"));
+                self.push_line(&format!("for (size_t _i = 0; _i < {arg}.dim; _i++) {{ {data}[_i] = {arg}.shp[_i]; }}"));
+                self.push_line(&format!("ImpArrayRaw {wrap} = IMP_MK_ARRAY({arg}.dim, 1, {meta}, {data});"));
                 wrap
             }
             SelVxA(idx, arr) => {
@@ -593,19 +594,16 @@ impl<'ast> Traverse<'ast> for CompileC {
         let base = target_ty.basetype.ctype();
 
         self.push_line(&format!("size_t {} = {};", len_name, array.elems.len()));
-        self.push_line(&format!("{} *{} = ({} *)malloc({} * sizeof({}));", base, data_name, base, len_name, base));
+        self.push_line(&format!("{base} *{data_name} = IMP_ALLOC_DATA({base}, {len_name});"));
 
         for (i, value) in array.elems.iter().enumerate() {
             let rendered = self.render_id(*value);
-            self.push_line(&format!("{}[{}] = {};", data_name, i, rendered));
+            self.push_line(&format!("{data_name}[{i}] = {rendered};"));
         }
 
-        self.push_line(&format!("size_t *{} = (size_t *)malloc(sizeof(size_t));", shp_name));
-        self.push_line(&format!("{}[0] = {};", shp_name, len_name));
-        self.push_line(&format!(
-            "ImpArrayRaw {} = (ImpArrayRaw) {{ .len = {}, .shp = {}, .dim = 1, .data = (void *){} }};",
-            target_name, len_name, shp_name, data_name
-        ));
+        self.push_line(&format!("size_t *{shp_name} = IMP_ALLOC_SHAPE_VEC(1);"));
+        self.push_line(&format!("{shp_name}[0] = {len_name};"));
+        self.push_line(&format!("ImpArrayRaw {target_name} = IMP_MK_ARRAY({len_name}, 1, {shp_name}, {data_name});"));
     }
 
     fn trav_id(&mut self, id: &mut Id<'ast, Self::Ast>) {
