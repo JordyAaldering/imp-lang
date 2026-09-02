@@ -2,7 +2,7 @@ use super::*;
 
 /// Identifier occurring in an expression position.
 #[derive(Clone, Copy, Debug)]
-pub enum Id<'ast, Ast: AstConfig> {
+pub enum Id<'ast, Ast: Invariant> {
     /// Formal function argument
     Arg(usize),
     /// Local variable
@@ -10,7 +10,7 @@ pub enum Id<'ast, Ast: AstConfig> {
 }
 
 #[derive(Clone, Debug)]
-pub struct VarInfo<'ast, Ast: AstConfig> {
+pub struct VarInfo<'ast, Ast: Invariant> {
     pub name: String,
     pub ty: Ast::VarType,
     pub ssa: Ast::SsaLink<'ast>,

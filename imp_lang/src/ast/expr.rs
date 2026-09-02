@@ -1,7 +1,7 @@
 use super::*;
 
 #[derive(Clone, Debug)]
-pub enum Expr<'ast, Ast: AstConfig> {
+pub enum Expr<'ast, Ast: Invariant> {
     Cond(Cond<'ast, Ast>),
     Call(Call<'ast, Ast>),
     Prf(Prf<'ast, Ast>),

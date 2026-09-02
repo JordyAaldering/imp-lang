@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use super::*;
 
-pub struct Program<'ast, Ast: AstConfig> {
+pub struct Program<'ast, Ast: Invariant> {
     /// Contains all fundefs in the program, grouped by overload.
     ///
     /// A mapping from potentially overloaded function name,
@@ -31,7 +31,7 @@ pub struct Program<'ast, Ast: AstConfig> {
     pub fundefs: id_arena::Arena<Fundef<'ast, Ast>>,
 }
 
-impl<'ast, Ast: AstConfig> Program<'ast, Ast> {
+impl<'ast, Ast: Invariant> Program<'ast, Ast> {
     pub fn fundef(&self, id: FundefId<'ast, Ast>) -> &Fundef<'ast, Ast> {
         &self.fundefs[id]
     }

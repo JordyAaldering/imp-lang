@@ -1,7 +1,7 @@
 use crate::ast::*;
 
 pub trait Traverse<'ast> {
-    type Ast: AstConfig + 'ast;
+    type Ast: Invariant + 'ast;
 
     /// Additional output type for expression traversals, allowing a traversal to produce a value for each expression it visits.
     type ExprOut: Default;

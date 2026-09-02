@@ -10,7 +10,7 @@ use super::*;
 /// The shape of the result is shape(<expr>) ++ <ub>.
 /// Note that <lb> has no effect on the result shape. Any values below <lb> are zeros.
 #[derive(Clone, Debug)]
-pub struct Tensor<'ast, Ast: AstConfig> {
+pub struct Tensor<'ast, Ast: Invariant> {
     pub body: Body<'ast, Ast>,
     pub iv: &'ast VarInfo<'ast, Ast>,
     pub lb: Option<Ast::Operand<'ast>>,

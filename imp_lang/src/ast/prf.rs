@@ -2,7 +2,7 @@ use super::*;
 
 /// Primitive function call
 #[derive(Clone, Debug)]
-pub enum Prf<'ast, Ast: AstConfig> {
+pub enum Prf<'ast, Ast: Invariant> {
     /// @dimA
     ///
     /// Rank (dimension count) of an array.
@@ -73,7 +73,7 @@ pub enum Prf<'ast, Ast: AstConfig> {
     NotS(Ast::Operand<'ast>),
 }
 
-impl<'ast, Ast: AstConfig> Prf<'ast, Ast> {
+impl<'ast, Ast: Invariant> Prf<'ast, Ast> {
     pub fn nameof(&self) -> &'static str {
         use Prf::*;
         match self {

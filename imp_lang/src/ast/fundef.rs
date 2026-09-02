@@ -1,6 +1,6 @@
 use super::*;
 
-pub struct Fundef<'ast, Ast: AstConfig> {
+pub struct Fundef<'ast, Ast: Invariant> {
     pub name: String,
     pub ret_type: Type,
     pub args: Vec<Farg>,
@@ -13,7 +13,7 @@ pub struct Fundef<'ast, Ast: AstConfig> {
     pub body: Body<'ast, Ast>,
 }
 
-impl<'ast, Ast: AstConfig> Clone for Fundef<'ast, Ast> {
+impl<'ast, Ast: Invariant> Clone for Fundef<'ast, Ast> {
     fn clone(&self) -> Self {
         Self {
             name: self.name.clone(),
@@ -38,7 +38,7 @@ pub struct BaseSignature {
     pub base_types: Vec<BaseType>,
 }
 
-impl<'ast, Ast: AstConfig> Fundef<'ast, Ast> {
+impl<'ast, Ast: Invariant> Fundef<'ast, Ast> {
     pub fn signature(&self) -> BaseSignature {
         BaseSignature {
             base_types: self.args.iter().map(|arg| arg.ty.basetype.clone()).collect(),

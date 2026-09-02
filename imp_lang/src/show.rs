@@ -1,12 +1,12 @@
 use crate::ast::*;
 
-pub fn show<'ast, Ast: AstConfig + 'ast>(program: &mut Program<'ast, Ast>) -> String {
+pub fn show<'ast, Ast: Invariant + 'ast>(program: &mut Program<'ast, Ast>) -> String {
     let mut show: Show<'ast, Ast> = Show::new(program.fundef_names());
     show.trav_program(program);
     show.output
 }
 
-struct Show<'ast, Ast: AstConfig> {
+struct Show<'ast, Ast: Invariant> {
     args: Vec<Farg>,
     fundef_names: Vec<String>,
     depth: usize,
@@ -14,7 +14,7 @@ struct Show<'ast, Ast: AstConfig> {
     _phantom: std::marker::PhantomData<&'ast Ast>,
 }
 
-impl<'ast, Ast: AstConfig> Show<'ast, Ast> {
+impl<'ast, Ast: Invariant> Show<'ast, Ast> {
     fn new(fundef_names: Vec<String>) -> Self {
         Self {
             args: Vec::new(),
@@ -34,7 +34,7 @@ impl<'ast, Ast: AstConfig> Show<'ast, Ast> {
     }
 }
 
-impl<'ast, Ast: AstConfig + 'ast> Traverse<'ast> for Show<'ast, Ast> {
+impl<'ast, Ast: Invariant + 'ast> Traverse<'ast> for Show<'ast, Ast> {
     type Ast = Ast;
 
     type ExprOut = ();
@@ -198,7 +198,7 @@ impl<'ast, Ast: AstConfig + 'ast> Traverse<'ast> for Show<'ast, Ast> {
     fn trav_id(&mut self, id: &mut Id<'ast, Self::Ast>) {
         match id {
             Id::Arg(i) => self.write(&self.args[*i].id.clone()),
-            Id::Var(v) => self.write(&<Ast as AstConfig>::var_name(v)),
+            Id::Var(v) => self.write(&<Ast as Invariant>::var_name(v)),
         }
     }
 

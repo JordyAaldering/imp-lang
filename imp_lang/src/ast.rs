@@ -56,7 +56,10 @@ pub type FundefId<'ast, Ast> = id_arena::Id<Fundef<'ast, Ast>>;
 /// Multiple parts of the AST can hold a reference to the same ExprCell.
 pub type ExprCell<'ast, Ast> = RefCell<Expr<'ast, Ast>>;
 
-pub trait AstConfig: Clone + fmt::Debug {
+/// A trait that defines the configuration of an AST.
+///
+/// This trait ensures that certain invariants are maintained across the AST, such types, links, and dispatches.
+pub trait Invariant: Clone + fmt::Debug {
     type VarType: Clone + fmt::Debug;
 
     type VarLink<'ast>: Clone + fmt::Debug;
@@ -83,7 +86,7 @@ pub trait AstConfig: Clone + fmt::Debug {
 #[derive(Clone, Copy, Debug)]
 pub struct ParsedAst;
 
-impl AstConfig for ParsedAst {
+impl Invariant for ParsedAst {
     type VarType = Option<Type>;
 
     type VarLink<'ast> = String;
@@ -122,7 +125,7 @@ impl AstConfig for ParsedAst {
 #[derive(Clone, Copy, Debug)]
 pub struct UntypedAst;
 
-impl AstConfig for UntypedAst {
+impl Invariant for UntypedAst {
     type VarType = RefCell<Option<Type>>;
 
     type VarLink<'ast> = &'ast VarInfo<'ast, UntypedAst>;
@@ -161,7 +164,7 @@ impl AstConfig for UntypedAst {
 #[derive(Clone, Copy, Debug)]
 pub struct TypedAst;
 
-impl AstConfig for TypedAst {
+impl Invariant for TypedAst {
     type VarType = Type;
 
     type VarLink<'ast> = &'ast VarInfo<'ast, TypedAst>;
