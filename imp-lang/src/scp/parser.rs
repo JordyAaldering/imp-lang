@@ -6,7 +6,7 @@ use crate::ast::*;
 
 pub struct Parser<'src, 'ast> {
     lexer: Peekable<Lexer<'src>>,
-    arenas: &'ast Arenas<'ast, ParsedAst>,
+    arenas: &'ast Scope<'ast, ParsedAst>,
     current_decs: Vec<&'ast VarInfo<'ast, ParsedAst>>,
 }
 
@@ -25,7 +25,7 @@ pub enum ParseError {
 type ParseResult<T> = Result<T, ParseError>;
 
 impl<'src, 'ast> Parser<'src, 'ast> {
-    pub fn new(lexer: Lexer<'src>, arenas: &'ast Arenas<'ast, ParsedAst>) -> Self {
+    pub fn new(lexer: Lexer<'src>, arenas: &'ast Scope<'ast, ParsedAst>) -> Self {
         Self {
             lexer: lexer.peekable(),
             arenas,

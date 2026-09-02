@@ -2,12 +2,12 @@ use std::collections::{HashMap, HashSet};
 
 use crate::ast::*;
 
-pub fn analyse_tp<'ast>(program: &mut Program<'ast, ParsedAst>, arenas: &'ast Arenas<'ast, ParsedAst>) {
+pub fn analyse_tp<'ast>(program: &mut Program<'ast, ParsedAst>, arenas: &'ast Scope<'ast, ParsedAst>) {
     AnalyseTp::new(arenas).trav_program(program);
 }
 
 struct AnalyseTp<'ast> {
-    arenas: &'ast Arenas<'ast, ParsedAst>,
+    arenas: &'ast Scope<'ast, ParsedAst>,
     /// Symbols that have been defined so far in the current fundef,
     /// accumulated left-to-right across arguments and their type patterns.
     defined: HashSet<String>,
@@ -15,7 +15,7 @@ struct AnalyseTp<'ast> {
 }
 
 impl<'ast> AnalyseTp<'ast> {
-    fn new(arenas: &'ast Arenas<'ast, ParsedAst>) -> Self {
+    fn new(arenas: &'ast Scope<'ast, ParsedAst>) -> Self {
         Self {
             arenas,
             defined: HashSet::new(),

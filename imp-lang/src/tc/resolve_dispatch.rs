@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::ast::*;
 
-pub fn resolve_dispatch<'ast>(program: Program<'ast, UntypedAst>, arenas: &'ast Arenas<'ast, TypedAst>) -> Result<Program<'ast, TypedAst>, DispatchError> {
+pub fn resolve_dispatch<'ast>(program: Program<'ast, UntypedAst>, arenas: &'ast Scope<'ast, TypedAst>) -> Result<Program<'ast, TypedAst>, DispatchError> {
     let mut overloads: HashMap<String, HashMap<BaseSignature, Vec<FundefId<'ast, TypedAst>>>> = HashMap::new();
     let mut stubs: id_arena::Arena<Fundef<'ast, TypedAst>> = id_arena::Arena::new();
     let mut work_items: Vec<(FundefId<'ast, TypedAst>, FundefId<'ast, UntypedAst>)> = Vec::new();
@@ -59,7 +59,7 @@ pub enum DispatchError {
 }
 
 struct DispatchResolver<'ast, 'stubs> {
-    arenas: &'ast Arenas<'ast, TypedAst>,
+    arenas: &'ast Scope<'ast, TypedAst>,
     stubs: &'stubs id_arena::Arena<Fundef<'ast, TypedAst>>,
     args: Vec<Farg>,
     idmap: HashMap<*const VarInfo<'ast, UntypedAst>, &'ast VarInfo<'ast, TypedAst>>,
@@ -70,7 +70,7 @@ struct DispatchResolver<'ast, 'stubs> {
 
 impl<'ast, 'stubs> DispatchResolver<'ast, 'stubs> {
     fn new(
-        arenas: &'ast Arenas<'ast, TypedAst>,
+        arenas: &'ast Scope<'ast, TypedAst>,
         stubs: &'stubs id_arena::Arena<Fundef<'ast, TypedAst>>,
         overloads: HashMap<String, HashMap<BaseSignature, Vec<FundefId<'ast, TypedAst>>>>,
     ) -> Self {
