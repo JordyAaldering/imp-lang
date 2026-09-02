@@ -2,8 +2,8 @@ use std::collections::HashSet;
 
 use crate::ast::*;
 
-pub fn rename_fundefs<'ast>(program: &mut Program<'ast, TypedAst>) {
-    RenameFundefs::new().trav_program(program);
+pub fn rename_fundefs(program: &mut Program<'_, TypedAst>) {
+    RenameFundefs::default().trav_program(program);
 }
 
 /// Functions may be overloaded, e.g.
@@ -46,18 +46,10 @@ pub fn rename_fundefs<'ast>(program: &mut Program<'ast, TypedAst>) {
 /// For example, this is not allowed for bar(u32[o:oshp,i:ishp] a, u32[o:oshp] b) and bar(u32[o:oshp] a, u32[o:osho,i:ishp] b).
 /// As, in the case where the shapes of a and b are the same, and thus i == 0, both overloads would be equally specific.
 /// Namely, there must be a clear ordering
-pub struct RenameFundefs {
+#[derive(Default)]
+struct RenameFundefs {
     #[cfg(debug_assertions)]
     used_names: HashSet<String>,
-}
-
-impl RenameFundefs {
-    pub fn new() -> Self {
-        Self {
-            #[cfg(debug_assertions)]
-            used_names: HashSet::new(),
-        }
-    }
 }
 
 impl<'ast> Traverse<'ast> for RenameFundefs {
@@ -66,59 +58,49 @@ impl<'ast> Traverse<'ast> for RenameFundefs {
     type ExprOut = ();
 
     fn trav_fundef(&mut self, fundef: &mut Fundef<'ast, Self::Ast>) {
-        fundef.name = mangle_fundef_name(&fundef.name, &fundef.args);
+        let arg_suffix = mangle_args(&fundef.args);
 
-        #[cfg(debug_assertions)]
-        if !self.used_names.insert(fundef.name.clone()) {
-            panic!("name collision: {}", fundef.name);
-        }
+        debug_assert!(!fundef.name.ends_with(&arg_suffix), "It seems we tried to mangle function `{}' twice", fundef.name);
+
+        fundef.name.push_str("__");
+        fundef.name.push_str(&arg_suffix);
+
+        debug_assert!(self.used_names.insert(fundef.name.clone()), "Name collision: {}", fundef.name);
+    }
+
+    fn trav_farg(&mut self, _arg: &mut Farg) {
+
     }
 }
 
-pub fn mangle_fundef_name(base_name: &str, args: &[Farg]) -> String {
-    let arg_suffix = mangle_arg_types(args.iter().map(|arg| &arg.ty));
-    if base_name.ends_with(&format!("__{arg_suffix}")) {
-        return base_name.to_owned();
-    }
-    format!("{}__{}", base_name, arg_suffix)
-}
-
-fn mangle_arg_types<'a, I>(arg_types: I) -> String
-where
-    I: Iterator<Item = &'a Type>,
+fn mangle_args<'a>(args: &[Farg]) -> String
 {
-    let parts: Vec<String> = arg_types.map(mangle_type).collect();
-    if parts.is_empty() {
-        "void".to_owned()
+    if args.is_empty() {
+        "void".to_string()
     } else {
-        parts.join("__")
+        args.iter()
+            .map(|arg| mangle_type(&arg.ty))
+            .collect::<Vec<String>>()
+            .join("__")
     }
 }
 
 pub fn mangle_type(ty: &Type) -> String {
-    use BaseType::*;
-    let base = match &ty.basetype {
-        Bool => "bool",
-        I32 => "i32",
-        I64 => "i64",
-        U32 => "u32",
-        U64 => "u64",
-        Usize => "usize",
-        F32 => "f32",
-        F64 => "f64",
-        Udf(udf) => udf,
-    };
-    format!("{}_{}", base, mangle_shape(&ty.shape))
+    format!("{}_{}", ty.basetype.rstype(), mangle_shape(&ty.shape))
 }
 
 fn mangle_shape(shape: &TypePattern) -> String {
     match shape {
-        TypePattern::Scalar => "0".to_owned(),
+        TypePattern::Scalar => "0".to_string(),
         TypePattern::Axes(axes) => {
             if axes.is_empty() {
-                return "0".to_owned();
+                "0".to_string()
+            } else {
+                axes.iter()
+                    .map(mangle_axis)
+                    .collect::<Vec<String>>()
+                    .join("_")
             }
-            axes.iter().map(mangle_axis).collect::<Vec<_>>().join("_")
         }
     }
 }

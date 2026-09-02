@@ -86,15 +86,15 @@ pub fn compile(options: Options) {
         return;
     }
 
-    let c_str = cg::emit_c(&mut ast, options.module_name());
-    if matches!(options.b, Some(Phase::CGC)) {
-        print!("{}", c_str);
-        return;
-    }
-
     let h_str = cg::emit_h(&mut ast);
     if matches!(options.b, Some(Phase::CGH)) {
         print!("{}", h_str);
+        return;
+    }
+
+    let c_str = cg::emit_c(&mut ast, options.module_name());
+    if matches!(options.b, Some(Phase::CGC)) {
+        print!("{}", c_str);
         return;
     }
 
@@ -182,10 +182,10 @@ pub enum Phase {
     DCR,
     /// Rename fundefs
     RNF,
-    /// C code generation
-    CGC,
     /// C header code generation
     CGH,
+    /// C code generation
+    CGC,
     /// Rust FFI code generation
     CGRS,
 }

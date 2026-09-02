@@ -32,6 +32,7 @@ impl<'ast> Traverse<'ast> for CompileHeader {
 
     fn trav_program(&mut self, program: &mut Program<'ast, TypedAst>) {
         self.output.push_str(HEADER);
+        self.output.push('\n');
 
         for (_, fundef) in program.fundefs.iter_mut() {
             self.trav_fundef(fundef);
@@ -46,7 +47,7 @@ impl<'ast> Traverse<'ast> for CompileHeader {
 
         self.output.push_str(&format!(
             "{} IMP_{}({});\n",
-            fundef.ret_type.rstype(),
+            fundef.ret_type.ctype(),
             fundef.name,
             args.join(", "),
         ));

@@ -17,7 +17,7 @@ static ImpArrayRaw imp_clone_array_raw(ImpArrayRaw src, size_t elem_size) {
     if (src.dim > 0) { memcpy(shp, src.shp, src.dim * sizeof(size_t)); }
     void *data = src.len == 0 ? NULL : malloc(src.len * elem_size);
     if (src.len > 0) { memcpy(data, src.data, src.len * elem_size); }
-    return (ImpArrayRaw) { .len = src.len, .dim = src.dim, .shp = shp, .data = data };
+    return (ImpArrayRaw){ .len = src.len, .dim = src.dim, .shp = shp, .data = data };
 }
 "#;
 
@@ -73,11 +73,11 @@ impl CompileC {
         let args: Vec<String> = fundef
             .args
             .iter()
-            .map(|arg| format!("{} {}", arg.ty.rstype(), arg.id))
+            .map(|arg| format!("{} {}", arg.ty.ctype(), arg.id))
             .collect();
         self.output.push_str(&format!(
             "{} IMP_{}({});\n",
-            fundef.ret_type.rstype(),
+            fundef.ret_type.ctype(),
             fundef.name,
             args.join(", ")
         ));
@@ -179,6 +179,11 @@ impl<'ast> Traverse<'ast> for CompileC {
         self.output.push_str(&format!("#include \"{}.h\"\n\n", self.module_name));
         self.output.push_str(HEADER);
 
+        self.output.push('\n');
+        self.output.push_str("//\n");
+        self.output.push_str("// Forward declarations\n");
+        self.output.push_str("//\n");
+
         for (_name, overloads) in &program.overloads {
             for (_sig, fundef_ids) in overloads {
                 for fundef_id in fundef_ids {
@@ -187,6 +192,11 @@ impl<'ast> Traverse<'ast> for CompileC {
                 }
             }
         }
+
+        self.output.push('\n');
+        self.output.push_str("//\n");
+        self.output.push_str("// Wrappers\n");
+        self.output.push_str("//\n");
 
         for (name, overloads) in &program.overloads {
             for (sig, fundef_ids) in overloads {
@@ -198,7 +208,13 @@ impl<'ast> Traverse<'ast> for CompileC {
             }
         }
 
+        self.output.push('\n');
+        self.output.push_str("//\n");
+        self.output.push_str("// Implementations\n");
+        self.output.push_str("//\n");
+
         for (_, fundef) in program.fundefs.iter_mut() {
+            self.output.push('\n');
             self.trav_fundef(fundef);
         }
 
@@ -218,12 +234,12 @@ impl<'ast> Traverse<'ast> for CompileC {
         self.arg_types = fundef.args.iter().map(|arg| arg.ty.clone()).collect();
         self.ret_type = Some(fundef.ret_type.clone());
         let args: Vec<String> = fundef.args.iter()
-            .map(|arg| format!("{} {}", arg.ty.rstype(), arg.id))
+            .map(|arg| format!("{} {}", arg.ty.ctype(), arg.id))
             .collect();
 
         self.push_line(&format!(
             "{} IMP_{}({}) {{",
-            fundef.ret_type.rstype(), fundef.name, args.join(", ")
+            fundef.ret_type.ctype(), fundef.name, args.join(", ")
         ));
 
         self.indent += 1;
@@ -254,7 +270,7 @@ impl<'ast> Traverse<'ast> for CompileC {
         self.trav_expr(assign.expr);
         if !matches!(&*assign.expr.borrow(), Expr::Tensor(_) | Expr::Fold(_) | Expr::Array(_)) {
             let rhs = self.expr_stack.pop().expect("expression stack underflow");
-            self.push_line(&format!("{} {} = {};", ty.rstype(), name, rhs));
+            self.push_line(&format!("{} {} = {};", ty.ctype(), name, rhs));
         }
 
         self.lhs_target = prev_lhs_target;
@@ -272,7 +288,7 @@ impl<'ast> Traverse<'ast> for CompileC {
             let f = self.nameof(&cond.else_branch.ret);
             self.expr_stack.push(format!("{} ? {} : {}", c, t, f));
         } else {
-            self.push_line(&format!("{} cond_ret;", self.id_type(&cond.then_branch.ret).rstype()));
+            self.push_line(&format!("{} cond_ret;", self.id_type(&cond.then_branch.ret).ctype()));
 
             let c = self.nameof(&cond.cond);
             self.push_line(&format!("if ({}) {{", c));
@@ -435,7 +451,7 @@ impl<'ast> Traverse<'ast> for CompileC {
         let t_uid = self.tensor_uid;
 
         let neutral_expr = self.render_id(fold.neutral);
-        self.push_line(&format!("{} {} = {};", target_ty.rstype(), target_name, neutral_expr));
+        self.push_line(&format!("{} {} = {};", target_ty.ctype(), target_name, neutral_expr));
 
         for d in 0..rank {
             if let Some(lb) = &fold.selection.lb {
