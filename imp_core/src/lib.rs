@@ -30,7 +30,7 @@ where
     ///
     /// The length of the data must match the product of the shape dimensions.
     pub fn new(shp: Vec<usize>, data: Vec<T>) -> Self {
-        assert_eq!(shp.iter().product::<usize>(), data.len(), "Shape and data length mismatch");
+        debug_assert_eq!(shp.iter().product::<usize>(), data.len(), "Shape and data length mismatch");
         Self { shp, data }
     }
 
@@ -38,7 +38,7 @@ where
     ///
     /// The length of the data must match the specified length.
     pub fn vector(len: usize, data: Vec<T>) -> Self {
-        assert_eq!(len, data.len(), "Length and data length mismatch");
+        debug_assert_eq!(len, data.len(), "Length and data length mismatch");
         Self { shp: vec![len], data }
     }
 
@@ -51,7 +51,7 @@ where
     ///
     /// Panics if the array has more than zero dimensions.
     pub fn unwrap_scalar(&self) -> T {
-        assert!(self.is_scalar(), "Expected a 0-dimensional (scalar) array");
+        debug_assert!(self.is_scalar(), "Expected a 0-dimensional (scalar) array");
         self.data[0]
     }
 
@@ -72,7 +72,7 @@ where
     }
 
     pub fn extent(&self, axis: usize) -> usize {
-        assert!(axis < self.shp.len(), "Axis out of bounds");
+        debug_assert!(axis < self.shp.len(), "Axis out of bounds");
         self.shp[axis]
     }
 
