@@ -46,7 +46,16 @@ pub use typ::*;
 
 pub use crate::trav::Traverse;
 
+use std::cell::RefCell;
 use std::fmt;
+
+/// Shared, in-place-rewritable storage for an expression node.
+///
+/// Multiple parts of the AST (e.g. an `Assign` and the `VarInfo` it defines) can
+/// hold a reference to the same `ExprCell`; rewriting passes replace its contents
+/// via `RefCell::replace`, so every alias observes the update and no unsafe
+/// aliasing of `&mut` is required.
+pub type ExprCell<'ast, Ast> = RefCell<Expr<'ast, Ast>>;
 
 pub trait AstConfig: Clone + fmt::Debug {
     type VarType: Clone + fmt::Debug;
@@ -84,7 +93,7 @@ impl AstConfig for ParsedAst {
 
     type Dispatch<'ast> = String;
 
-    type Operand<'ast> = &'ast Expr<'ast, ParsedAst>;
+    type Operand<'ast> = &'ast ExprCell<'ast, ParsedAst>;
 
     fn var_name<'ast>(link: &Self::VarLink<'ast>) -> String {
         link.clone()
@@ -115,11 +124,11 @@ impl AstConfig for ParsedAst {
 pub struct UntypedAst;
 
 impl AstConfig for UntypedAst {
-    type VarType = Option<Type>;
+    type VarType = RefCell<Option<Type>>;
 
     type VarLink<'ast> = &'ast VarInfo<'ast, UntypedAst>;
 
-    type SsaLink<'ast> = Option<&'ast Expr<'ast, UntypedAst>>;
+    type SsaLink<'ast> = Option<&'ast ExprCell<'ast, UntypedAst>>;
 
     type Dispatch<'ast> = String;
 
@@ -137,7 +146,7 @@ impl AstConfig for UntypedAst {
     where
         V: Traverse<'ast, Ast = Self> + ?Sized
     {
-        if let Some(ty) = ty {
+        if let Some(ty) = ty.get_mut() {
             trav.trav_type(ty);
         }
     }
@@ -158,7 +167,7 @@ impl AstConfig for TypedAst {
 
     type VarLink<'ast> = &'ast VarInfo<'ast, TypedAst>;
 
-    type SsaLink<'ast> = Option<&'ast Expr<'ast, TypedAst>>;
+    type SsaLink<'ast> = Option<&'ast ExprCell<'ast, TypedAst>>;
 
     type Dispatch<'ast> = CallTarget<'ast, TypedAst>;
 

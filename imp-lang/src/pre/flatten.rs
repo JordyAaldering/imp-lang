@@ -11,7 +11,7 @@ pub fn flatten<'ast>(program: &mut Program<'ast, ParsedAst>) {
 struct Flatten<'ast> {
     trav_name: TravName,
     decs: Arena<VarInfo<'ast, ParsedAst>>,
-    exprs: Arena<Expr<'ast, ParsedAst>>,
+    exprs: Arena<ExprCell<'ast, ParsedAst>>,
     new_assigns: Vec<Assign<'ast, ParsedAst>>,
 }
 
@@ -29,8 +29,8 @@ impl<'ast> Flatten<'ast> {
         unsafe { std::mem::transmute(self.decs.alloc(VarInfo { name, ty, ssa: () })) }
     }
 
-    fn alloc_expr(&self, expr: Expr<'ast, ParsedAst>) -> &'ast Expr<'ast, ParsedAst> {
-        unsafe { std::mem::transmute(self.exprs.alloc(expr)) }
+    fn alloc_expr(&self, expr: Expr<'ast, ParsedAst>) -> &'ast ExprCell<'ast, ParsedAst> {
+        unsafe { std::mem::transmute(self.exprs.alloc(ExprCell::new(expr))) }
     }
 
     fn emit_expr(&mut self, expr: Expr<'ast, ParsedAst>) -> Expr<'ast, ParsedAst> {
@@ -47,7 +47,7 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
 
     type ExprOut = ();
 
-    const EXPR_DEFAULT: Self::ExprOut = ();
+    fn expr_default(&self) -> Self::ExprOut { () }
 
     fn trav_fundef(&mut self, fundef: &mut Fundef<'ast, ParsedAst>) {
         debug_assert!(self.decs.len() == 0);
@@ -93,7 +93,7 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
         use Expr::*;
         let (expr, _) = match expr {
             Id(n) => {
-                return (Id(n), Self::EXPR_DEFAULT);
+                return (Id(n), self.expr_default());
             }
             Cond(n) => self.trav_cond_expr(n),
             Call(n) => self.trav_call_expr(n),
@@ -105,6 +105,6 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
         };
 
         let id = self.emit_expr(expr);
-        (id, Self::EXPR_DEFAULT)
+        (id, self.expr_default())
     }
 }

@@ -34,12 +34,12 @@ impl<'ast> Traverse<'ast> for ConstantFold {
 
     type ExprOut = ();
 
-    const EXPR_DEFAULT: Self::ExprOut = ();
+    fn expr_default(&self) -> Self::ExprOut { () }
 
     fn trav_assign(&mut self, assign: &mut Assign<'ast, Self::Ast>) {
         self.trav_expr(assign.expr);
 
-        match assign.expr {
+        match &*assign.expr.borrow() {
             Expr::Const(Const::U32(v)) => {
                 self.known.insert(Self::ptr(assign.lhs), *v);
             }
@@ -54,27 +54,27 @@ impl<'ast> Traverse<'ast> for ConstantFold {
         match &prf {
             AddSxS(l, r) => {
                 if let (Some(l), Some(r)) = (self.const_u32(l), self.const_u32(r)) {
-                    return (Expr::Const(Const::U32(l + r)), Self::EXPR_DEFAULT);
+                    return (Expr::Const(Const::U32(l + r)), self.expr_default());
                 }
             }
             SubSxS(l, r) => {
                 if let (Some(l), Some(r)) = (self.const_u32(l), self.const_u32(r)) {
-                    return (Expr::Const(Const::U32(l - r)), Self::EXPR_DEFAULT);
+                    return (Expr::Const(Const::U32(l - r)), self.expr_default());
                 }
             }
             MulSxS(l, r) => {
                 if let (Some(l), Some(r)) = (self.const_u32(l), self.const_u32(r)) {
-                    return (Expr::Const(Const::U32(l * r)), Self::EXPR_DEFAULT);
+                    return (Expr::Const(Const::U32(l * r)), self.expr_default());
                 }
             }
             DivSxS(l, r) => {
                 if let (Some(l), Some(r)) = (self.const_u32(l), self.const_u32(r)) && r != 0 {
-                    return (Expr::Const(Const::U32(l / r)), Self::EXPR_DEFAULT);
+                    return (Expr::Const(Const::U32(l / r)), self.expr_default());
                 }
             }
             _ => (),
         }
 
-        (Expr::Prf(prf), Self::EXPR_DEFAULT)
+        (Expr::Prf(prf), self.expr_default())
     }
 }

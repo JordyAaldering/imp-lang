@@ -8,7 +8,7 @@ pub struct Fundef<'ast, Ast: AstConfig> {
     pub shape_prelude: Vec<Assign<'ast, Ast>>,
     pub shape_facts: ShapeFacts,
     pub decs: Arena<VarInfo<'ast, Ast>>,
-    pub exprs: Arena<Expr<'ast, Ast>>,
+    pub exprs: Arena<ExprCell<'ast, Ast>>,
     pub body: Body<'ast, Ast>,
 }
 

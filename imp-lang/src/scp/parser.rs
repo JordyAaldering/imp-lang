@@ -9,7 +9,7 @@ use crate::ast::*;
 pub struct Parser<'src, 'ast> {
     lexer: Peekable<Lexer<'src>>,
     decs_arena: Arena<VarInfo<'ast, ParsedAst>>,
-    expr_arena: Arena<Expr<'ast, ParsedAst>>,
+    expr_arena: Arena<ExprCell<'ast, ParsedAst>>,
 }
 
 #[derive(Debug)]
@@ -39,8 +39,8 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         unsafe { mem::transmute(self.decs_arena.alloc(VarInfo { name, ty, ssa: () })) }
     }
 
-    fn alloc_expr(&self, expr: Expr<'ast, ParsedAst>) -> &'ast Expr<'ast, ParsedAst> {
-        unsafe { mem::transmute(self.expr_arena.alloc(expr)) }
+    fn alloc_expr(&self, expr: Expr<'ast, ParsedAst>) -> &'ast ExprCell<'ast, ParsedAst> {
+        unsafe { mem::transmute(self.expr_arena.alloc(ExprCell::new(expr))) }
     }
 
     fn matches(&mut self, expected: &Token) -> Option<Span> {
@@ -231,7 +231,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         Ok(stmts)
     }
 
-    fn parse_expr(&mut self, prev_op: Option<impl Operator>) -> ParseResult<(&'ast Expr<'ast, ParsedAst>, Span)> {
+    fn parse_expr(&mut self, prev_op: Option<impl Operator>) -> ParseResult<(&'ast ExprCell<'ast, ParsedAst>, Span)> {
         if let Some((Token::If, _)) = self.lexer.peek() {
             self.parse_cond()
         } else if let Some((Token::LBrace, _)) = self.lexer.peek() {
@@ -243,7 +243,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         }
     }
 
-    fn parse_cond(&mut self) -> ParseResult<(&'ast Expr<'ast, ParsedAst>, Span)> {
+    fn parse_cond(&mut self) -> ParseResult<(&'ast ExprCell<'ast, ParsedAst>, Span)> {
         let span_from = self.expect(Token::If)?;
 
         let (cond, _) = self.parse_expr(None::<Bop>)?;
@@ -262,7 +262,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         Ok((expr, span_from.to(&span_to)))
     }
 
-    fn parse_tensor(&mut self) -> ParseResult<(&'ast Expr<'ast, ParsedAst>, Span)> {
+    fn parse_tensor(&mut self) -> ParseResult<(&'ast ExprCell<'ast, ParsedAst>, Span)> {
         let span_from = self.expect(Token::LBrace)?;
 
         let body = self.parse_body()?;
@@ -280,11 +280,12 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                 (Some(lb), iv, ub)
             }
             Token::Lt => {
-                let Expr::Id(Id::Var(iv)) = lb else {
+                let Expr::Id(Id::Var(iv)) = &*lb.borrow() else {
                     return Err(ParseError::UnexpectedToken("iteration variable".to_owned(), token, span));
                 };
+                let iv = iv.clone();
                 let (ub, _) = self.parse_expr(Some(PrecedenceFloor(2)))?;
-                (None, iv.clone(), ub)
+                (None, iv, ub)
             }
             _ => {
                 return Err(ParseError::UnexpectedToken("expected '<' or '<='".to_owned(), token, span));
@@ -304,7 +305,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         Ok((tensor, span_from.to(&span_to)))
     }
 
-    fn parse_binary(&mut self, prev_op: Option<impl Operator>) -> ParseResult<(&'ast Expr<'ast, ParsedAst>, Span)> {
+    fn parse_binary(&mut self, prev_op: Option<impl Operator>) -> ParseResult<(&'ast ExprCell<'ast, ParsedAst>, Span)> {
         let (token, span_from) = self.next()?;
 
         let mut left = match token {
@@ -369,7 +370,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         Ok((left, span_from))
     }
 
-    fn parse_postfix(&mut self, operand: &'ast Expr<'ast, ParsedAst>) -> ParseResult<&'ast Expr<'ast, ParsedAst>> {
+    fn parse_postfix(&mut self, operand: &'ast ExprCell<'ast, ParsedAst>) -> ParseResult<&'ast ExprCell<'ast, ParsedAst>> {
         let mut expr = operand;
 
         while let Some((Token::LSquare, _)) = self.lexer.peek() {
@@ -379,7 +380,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         Ok(expr)
     }
 
-    fn parse_unary(&mut self, op: Uop) -> ParseResult<&'ast Expr<'ast, ParsedAst>> {
+    fn parse_unary(&mut self, op: Uop) -> ParseResult<&'ast ExprCell<'ast, ParsedAst>> {
         let (r, _) = self.parse_expr(Some(op))?;
         Ok(self.alloc_expr(Expr::Call(Call {
             id: op.symbol().to_owned(),
@@ -387,14 +388,14 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         })))
     }
 
-    fn parse_call(&mut self, id: String) -> ParseResult<&'ast Expr<'ast, ParsedAst>> {
+    fn parse_call(&mut self, id: String) -> ParseResult<&'ast ExprCell<'ast, ParsedAst>> {
         let (args, _) = self.parse_items_enclosed(
             Token::LParen, Token::RParen, Token::Comma,
             |p| p.parse_expr(None::<Bop>))?;
         Ok(self.alloc_expr(Expr::Call(Call { id, args })))
     }
 
-    fn parse_prf_call(&mut self, id: String, span: Span) -> ParseResult<&'ast Expr<'ast, ParsedAst>> {
+    fn parse_prf_call(&mut self, id: String, span: Span) -> ParseResult<&'ast ExprCell<'ast, ParsedAst>> {
         let (args, _) = self.parse_items_enclosed(
             Token::LParen, Token::RParen, Token::Comma,
             |p| p.parse_expr(None::<Bop>))?;
@@ -444,7 +445,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
 
     fn parse_fold_fun_arg(&mut self) -> ParseResult<(FoldFunArg<'ast, ParsedAst>, Span)> {
         let (expr, span) = self.parse_expr(None::<Bop>)?;
-        if matches!(expr, Expr::Id(Id::Var(name)) if name == "_") {
+        if matches!(&*expr.borrow(), Expr::Id(Id::Var(name)) if name == "_") {
             Ok((FoldFunArg::Placeholder, span))
         } else {
             Ok((FoldFunArg::Bound(expr), span))
@@ -466,7 +467,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         Ok(FoldFun::Apply { id, args })
     }
 
-    fn parse_fold(&mut self) -> ParseResult<&'ast Expr<'ast, ParsedAst>> {
+    fn parse_fold(&mut self) -> ParseResult<&'ast ExprCell<'ast, ParsedAst>> {
         self.expect(Token::LParen)?;
 
         let (neutral, _) = self.parse_expr(None::<Bop>)?;
@@ -476,7 +477,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         self.expect(Token::Comma)?;
 
         let (selection_expr, _) = self.parse_expr(None::<Bop>)?;
-        let selection = match selection_expr {
+        let selection = match &*selection_expr.borrow() {
             Expr::Tensor(tensor) => tensor.clone(),
             _ => return Err(ParseError::FoldSelectionMustBeTensor),
         };
@@ -490,7 +491,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         })))
     }
 
-    fn parse_array(&mut self) -> ParseResult<(&'ast Expr<'ast, ParsedAst>, Span)> {
+    fn parse_array(&mut self) -> ParseResult<(&'ast ExprCell<'ast, ParsedAst>, Span)> {
         let (elems, span) = self.parse_items_enclosed(
             Token::LSquare, Token::RSquare, Token::Comma,
             |p| p.parse_expr(None::<Bop>))?;
@@ -499,7 +500,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         Ok((expr, span))
     }
 
-    fn parse_sel(&mut self, arr: &'ast Expr<'ast, ParsedAst>) -> ParseResult<&'ast Expr<'ast, ParsedAst>> {
+    fn parse_sel(&mut self, arr: &'ast ExprCell<'ast, ParsedAst>) -> ParseResult<&'ast ExprCell<'ast, ParsedAst>> {
         self.expect(Token::LSquare)?;
         let (idx, _) = self.parse_expr(None::<Bop>)?;
         self.expect(Token::RSquare)?;
