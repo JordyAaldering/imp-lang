@@ -20,6 +20,7 @@ static size_t imp_flat_index(ImpArrayRaw arr, ImpArrayRaw idx) {
     return flat;
 }
 
+/* Currently unused
 static ImpArrayRaw imp_clone_array_raw(ImpArrayRaw src, size_t elem_size) {
     size_t *shp = src.dim == 0 ? NULL : IMP_ALLOC_SHAPE_VEC(src.dim);
     if (src.dim > 0) { memcpy(shp, src.shp, src.dim * sizeof(size_t)); }
@@ -27,6 +28,7 @@ static ImpArrayRaw imp_clone_array_raw(ImpArrayRaw src, size_t elem_size) {
     if (src.len > 0) { memcpy(data, src.data, src.len * elem_size); }
     return IMP_MK_ARRAY(src.len, src.dim, shp, data);
 }
+*/
 "#;
 
 pub fn emit_c(ast: &mut Program<'_, TypedAst>, module_name: String) -> String {
