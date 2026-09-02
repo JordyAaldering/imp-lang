@@ -1,5 +1,27 @@
 use super::{lexer::Token, parser::ParseError};
 
+pub(super) trait Operator: Copy {
+    fn associativity(self) -> Associativity;
+
+    fn precedence(self) -> usize;
+
+    fn precedes(self, other: impl Operator) -> Result<bool, ParseError>;
+}
+
+#[derive(Clone, Copy)]
+pub(super) enum Associativity {
+    /// Left-to-right associative (e.g. `+`)
+    LeftToRight,
+    /// Right-to-left associative (e.g. `^`)
+    #[allow(unused)]
+    RightToLeft,
+    /// Non-associative (e.g. `>`)
+    NonAssoc,
+}
+
+#[derive(Clone, Copy)]
+pub(super) struct PrecedenceFloor(pub usize);
+
 #[derive(Clone, Copy)]
 pub(super) enum Bop {
     Add,
@@ -14,17 +36,12 @@ pub(super) enum Bop {
     Ne,
 }
 
-pub(super) struct PrecedenceFloor(pub usize);
-
-impl Operator for PrecedenceFloor {
-    fn precedence(&self) -> usize {
-        self.0
-    }
-
-    fn associativity(&self) -> Assoc {
-        Assoc::LeftToRight
-    }
+#[derive(Clone, Copy)]
+pub(super) enum Uop {
+    Neg,
+    Not,
 }
+
 impl Bop {
     pub(super) fn symbol(self) -> &'static str {
         match self {
@@ -38,6 +55,15 @@ impl Bop {
             Bop::Ge => "ge",
             Bop::Eq => "eq",
             Bop::Ne => "ne",
+        }
+    }
+}
+
+impl Uop {
+    pub(super) fn symbol(self) -> &'static str {
+        match self {
+            Uop::Neg => "neg",
+            Uop::Not => "not",
         }
     }
 }
@@ -62,21 +88,6 @@ impl TryInto<Bop> for &Token {
     }
 }
 
-#[derive(Clone, Copy)]
-pub(super) enum Uop {
-    Neg,
-    Not,
-}
-
-impl Uop {
-    pub(super) fn symbol(self) -> &'static str {
-        match self {
-            Uop::Neg => "neg",
-            Uop::Not => "not",
-        }
-    }
-}
-
 impl TryInto<Uop> for &Token {
     type Error = ();
 
@@ -89,25 +100,33 @@ impl TryInto<Uop> for &Token {
     }
 }
 
-#[derive(Clone, Copy)]
-pub(super) enum Assoc {
-    /// Left-to-right associative (e.g. `+`)
-    LeftToRight,
-    /// Right-to-left associative (e.g. `^`)
-    #[allow(unused)]
-    RightToLeft,
-    /// Non-associative (e.g. `>`)
-    NonAssoc,
-}
+impl Operator for PrecedenceFloor {
+    fn associativity(self) -> Associativity {
+        Associativity::LeftToRight
+    }
 
-pub(super) trait Operator {
-    fn precedence(&self) -> usize;
+    fn precedence(self) -> usize {
+        self.0
+    }
 
-    fn associativity(&self) -> Assoc;
+    fn precedes(self, other: impl Operator) -> Result<bool, ParseError> {
+        match other.associativity() {
+            Associativity::RightToLeft => Ok(self.precedence() <= other.precedence()),
+            _ => Ok(self.precedence() < other.precedence()),
+        }
+    }
 }
 
 impl Operator for Bop {
-    fn precedence(&self) -> usize {
+    fn associativity(self) -> Associativity {
+        use Bop::*;
+        match self {
+            Add | Sub | Mul | Div => Associativity::LeftToRight,
+            Lt | Le | Gt | Ge | Eq | Ne => Associativity::NonAssoc,
+        }
+    }
+
+    fn precedence(self) -> usize {
         use Bop::*;
         match self {
             Lt | Le | Gt | Ge | Eq | Ne => 2,
@@ -116,37 +135,30 @@ impl Operator for Bop {
         }
     }
 
-    fn associativity(&self) -> Assoc {
-        use Bop::*;
-        match self {
-            Add | Sub | Mul | Div => Assoc::LeftToRight,
-            Lt | Le | Gt | Ge | Eq | Ne => Assoc::NonAssoc,
+    fn precedes(self, other: impl Operator) -> Result<bool, ParseError> {
+        match (self.associativity(), other.associativity()) {
+            (Associativity::NonAssoc, Associativity::NonAssoc) => Err(ParseError::NonAssociative),
+            (_, Associativity::RightToLeft) => Ok(self.precedence() <= other.precedence()),
+            _ => Ok(self.precedence() < other.precedence()),
         }
     }
 }
 
 impl Operator for Uop {
     /// Unary operators always have precedence
-    fn precedence(&self) -> usize {
+    fn precedence(self) -> usize {
         256
     }
 
     /// Unary operators are always left-to-right associative
-    fn associativity(&self) -> Assoc {
-        Assoc::LeftToRight
+    fn associativity(self) -> Associativity {
+        Associativity::LeftToRight
     }
-}
 
-pub(super) fn precedes(l: &Option<impl Operator>, r: &impl Operator) -> Result<bool, ParseError> {
-    if let Some(l) = l {
-        use Assoc::*;
-        match (l.associativity(), r.associativity()) {
-            (NonAssoc, NonAssoc) => Err(ParseError::NonAssociative),
-            (_, RightToLeft) => Ok(l.precedence() <= r.precedence()),
-            _ => Ok(l.precedence() < r.precedence()),
+    fn precedes(self, other: impl Operator) -> Result<bool, ParseError> {
+        match other.associativity() {
+            Associativity::RightToLeft => Ok(self.precedence() <= other.precedence()),
+            _ => Ok(self.precedence() < other.precedence()),
         }
-    } else {
-        // `l` is none; this is the first operator we are parsing
-        Ok(true)
     }
 }

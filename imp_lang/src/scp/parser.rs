@@ -6,7 +6,7 @@ use crate::ast::*;
 
 pub struct Parser<'src, 'ast> {
     lexer: Peekable<Lexer<'src>>,
-    arenas: &'ast Scope<'ast, ParsedAst>,
+    scope: &'ast Scope<'ast, ParsedAst>,
     current_decs: Vec<&'ast VarInfo<'ast, ParsedAst>>,
 }
 
@@ -25,22 +25,22 @@ pub enum ParseError {
 type ParseResult<T> = Result<T, ParseError>;
 
 impl<'src, 'ast> Parser<'src, 'ast> {
-    pub fn new(lexer: Lexer<'src>, arenas: &'ast Scope<'ast, ParsedAst>) -> Self {
+    pub fn new(lexer: Lexer<'src>, scope: &'ast Scope<'ast, ParsedAst>) -> Self {
         Self {
             lexer: lexer.peekable(),
-            arenas,
+            scope,
             current_decs: Vec::new(),
         }
     }
 
     fn alloc_lvis(&mut self, name: String, ty: Option<Type>) -> &'ast VarInfo<'ast, ParsedAst> {
-        let lvis = self.arenas.alloc_lvis(name, ty, ());
+        let lvis = self.scope.alloc_lvis(name, ty, ());
         self.current_decs.push(lvis);
         lvis
     }
 
     fn alloc_expr(&self, expr: Expr<'ast, ParsedAst>) -> &'ast ExprCell<'ast, ParsedAst> {
-        self.arenas.alloc_expr(expr)
+        self.scope.alloc_expr(expr)
     }
 
     fn matches(&mut self, expected: &Token) -> Option<Span> {
@@ -352,7 +352,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         // Handle postfix operators (selection, function calls, etc.)
         left = self.parse_postfix(left)?;
 
-        while let Some((op, _loc)) = self.parse_binary_operator(&prev_op)? {
+        while let Some((op, _loc)) = self.parse_binary_operator(prev_op)? {
             let (right, _) = self.parse_expr(Some(op))?;
             left = self.alloc_expr(Expr::Call(Call {
                 id: op.symbol().to_owned(),
@@ -506,13 +506,16 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         })))
     }
 
-    fn parse_binary_operator(&mut self, previous: &Option<impl Operator>) -> ParseResult<Option<(Bop, Span)>> {
+    fn parse_binary_operator(&mut self, previous: Option<impl Operator>) -> ParseResult<Option<(Bop, Span)>> {
         if let Some((token, _)) = self.lexer.peek()
             && let Ok(op) = token.try_into()
-            && precedes(previous, &op)?
         {
-            let (_, span) = self.lexer.next().unwrap();
-            Ok(Some((op, span)))
+            if previous.is_none() || previous.unwrap().precedes(op)? {
+                let (_, span) = self.lexer.next().unwrap();
+                Ok(Some((op, span)))
+            } else {
+                Ok(None)
+            }
         } else {
             Ok(None)
         }
