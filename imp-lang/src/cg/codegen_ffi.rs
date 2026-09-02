@@ -1,6 +1,6 @@
 use crate::ast::*;
 
-pub fn emit_ffi(ast: &mut Program<'static, TypedAst>) -> String {
+pub fn emit_ffi<'ast>(ast: &mut Program<'ast, TypedAst>) -> String {
     let mut cg = CompileFfi::new();
     cg.trav_program(ast);
     cg.finish()
@@ -40,8 +40,9 @@ impl<'ast> Traverse<'ast> for CompileFfi {
 
         self.push("unsafe extern \"C\" {\n");
         for (_name, overloads) in &program.overloads {
-            for (_sig, fundefs) in overloads {
-                for fundef in fundefs {
+            for (_sig, fundef_ids) in overloads {
+                for fundef_id in fundef_ids {
+                    let fundef = &program.fundefs[fundef_id.0];
                     self.push(&format!("    fn IMP_{}(", fundef.name));
                     self.push(&join_args(&fundef.args, rust_ffi_type));
                     self.push(&format!(") -> {};\n", rust_ffi_type(&fundef.ret_type)));
@@ -51,10 +52,11 @@ impl<'ast> Traverse<'ast> for CompileFfi {
         self.push("}\n");
 
         for (name, overloads) in &program.overloads {
-            for (sig, fundefs) in overloads {
+            for (sig, fundef_ids) in overloads {
                 self.push("\n");
+                let fundefs: Vec<&Fundef<TypedAst>> = fundef_ids.iter().map(|id| &program.fundefs[id.0]).collect();
                 if overloads.len() > 1 || fundefs.len() > 1 {
-                    self.emit_family_wrapper(&name, sig, fundefs);
+                    self.emit_family_wrapper(&name, sig, &fundefs);
                 } else {
                     let fundef = fundefs[0];
                     self.emit_direct_wrapper(&name, fundef);

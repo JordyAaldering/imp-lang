@@ -1,7 +1,9 @@
 // Declarations
 mod program;
 mod fundef;
+mod fundef_id;
 mod shapefact;
+mod arenas;
 // Statements
 mod body;
 mod stmt;
@@ -10,7 +12,6 @@ mod printf;
 // Expressions
 mod expr;
 mod cond;
-mod calltarget;
 mod call;
 mod prf;
 mod tensor;
@@ -24,7 +25,9 @@ mod typ;
 // Declarations
 pub use program::*;
 pub use fundef::*;
+pub use fundef_id::*;
 pub use shapefact::*;
+pub use arenas::*;
 // Statements
 pub use body::*;
 pub use stmt::*;
@@ -33,7 +36,6 @@ pub use printf::*;
 // Expressions
 pub use expr::*;
 pub use cond::*;
-pub use calltarget::*;
 pub use call::*;
 pub use prf::*;
 pub use tensor::*;
@@ -70,9 +72,11 @@ pub trait AstConfig: Clone + fmt::Debug {
 
     fn var_name<'ast>(link: &Self::VarLink<'ast>) -> String;
 
-    fn dispatch_name<'ast>(dispatch: &Self::Dispatch<'ast>) -> String;
+    /// `fundef_names` maps a `FundefId` to its (current) mangled name; unused by
+    /// phases whose `Dispatch` is already a plain name.
+    fn dispatch_name<'ast>(dispatch: &Self::Dispatch<'ast>, fundef_names: &[String]) -> String;
 
-    fn trav_type<'ast, V>(trav: &mut V, ty: &mut Self::VarType)
+    fn trav_type<'ast, V>(trav: &mut V, ty: &Self::VarType)
     where
         V: Traverse<'ast, Ast = Self> + ?Sized;
 
@@ -99,11 +103,11 @@ impl AstConfig for ParsedAst {
         link.clone()
     }
 
-    fn dispatch_name<'ast>(dispatch: &Self::Dispatch<'ast>) -> String {
+    fn dispatch_name<'ast>(dispatch: &Self::Dispatch<'ast>, _fundef_names: &[String]) -> String {
         dispatch.clone()
     }
 
-    fn trav_type<'ast, V>(trav: &mut V, ty: &mut Self::VarType)
+    fn trav_type<'ast, V>(trav: &mut V, ty: &Self::VarType)
     where
         V: Traverse<'ast, Ast = Self> + ?Sized
     {
@@ -138,15 +142,15 @@ impl AstConfig for UntypedAst {
         link.name.clone()
     }
 
-    fn dispatch_name<'ast>(dispatch: &Self::Dispatch<'ast>) -> String {
+    fn dispatch_name<'ast>(dispatch: &Self::Dispatch<'ast>, _fundef_names: &[String]) -> String {
         dispatch.clone()
     }
 
-    fn trav_type<'ast, V>(trav: &mut V, ty: &mut Self::VarType)
+    fn trav_type<'ast, V>(trav: &mut V, ty: &Self::VarType)
     where
         V: Traverse<'ast, Ast = Self> + ?Sized
     {
-        if let Some(ty) = ty.get_mut() {
+        if let Some(ty) = &*ty.borrow() {
             trav.trav_type(ty);
         }
     }
@@ -169,7 +173,7 @@ impl AstConfig for TypedAst {
 
     type SsaLink<'ast> = Option<&'ast ExprCell<'ast, TypedAst>>;
 
-    type Dispatch<'ast> = CallTarget<'ast, TypedAst>;
+    type Dispatch<'ast> = FundefId;
 
     type Operand<'ast> = Id<'ast, TypedAst>;
 
@@ -177,11 +181,11 @@ impl AstConfig for TypedAst {
         link.name.clone()
     }
 
-    fn dispatch_name<'ast>(dispatch: &Self::Dispatch<'ast>) -> String {
-        dispatch.name()
+    fn dispatch_name<'ast>(dispatch: &Self::Dispatch<'ast>, fundef_names: &[String]) -> String {
+        fundef_names[dispatch.0].clone()
     }
 
-    fn trav_type<'ast, V>(trav: &mut V, ty: &mut Self::VarType)
+    fn trav_type<'ast, V>(trav: &mut V, ty: &Self::VarType)
     where
         V: Traverse<'ast, Ast = Self> + ?Sized
     {

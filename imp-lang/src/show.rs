@@ -1,22 +1,24 @@
 use crate::ast::*;
 
 pub fn show<'ast, Ast: AstConfig + 'ast>(program: &mut Program<'ast, Ast>) -> String {
-    let mut show: Show<'ast, Ast> = Show::new();
+    let mut show: Show<'ast, Ast> = Show::new(program.fundef_names());
     show.trav_program(program);
     show.output
 }
 
 struct Show<'ast, Ast: AstConfig> {
     args: Vec<Farg>,
+    fundef_names: Vec<String>,
     depth: usize,
     output: String,
     _phantom: std::marker::PhantomData<&'ast Ast>,
 }
 
 impl<'ast, Ast: AstConfig> Show<'ast, Ast> {
-    fn new() -> Self {
+    fn new(fundef_names: Vec<String>) -> Self {
         Self {
             args: Vec::new(),
+            fundef_names,
             output: String::new(),
             depth: 0,
             _phantom: std::marker::PhantomData,
@@ -45,14 +47,14 @@ impl<'ast, Ast: AstConfig + 'ast> Traverse<'ast> for Show<'ast, Ast> {
         self.write(&format!("fn {}(", fundef.name));
         self.trav_fargs(&mut fundef.args);
         self.write(") -> ");
-        self.trav_type(&mut fundef.ret_type);
+        self.trav_type(&fundef.ret_type);
         self.write(" {\n");
 
         self.depth += 1;
 
         self.indent();
         self.write("// Variable declarations\n");
-        for vardec in fundef.decs.iter_mut() {
+        for vardec in &fundef.decs {
             self.trav_vardec(vardec);
         }
 
@@ -73,16 +75,16 @@ impl<'ast, Ast: AstConfig + 'ast> Traverse<'ast> for Show<'ast, Ast> {
         self.write("}\n");
     }
 
-    fn trav_vardec(&mut self, vardec: &mut VarInfo<'ast, Self::Ast>) {
+    fn trav_vardec(&mut self, vardec: &VarInfo<'ast, Self::Ast>) {
         self.indent();
-        Self::Ast::trav_type(self, &mut vardec.ty);
+        Self::Ast::trav_type(self, &vardec.ty);
         self.write(" ");
         self.write(&vardec.name);
         self.write(";\n");
     }
 
     fn trav_farg(&mut self, arg: &mut Farg) {
-        self.trav_type(&mut arg.ty);
+        self.trav_type(&arg.ty);
         self.write(&format!(" {}, ", arg.id));
     }
 
@@ -120,7 +122,7 @@ impl<'ast, Ast: AstConfig + 'ast> Traverse<'ast> for Show<'ast, Ast> {
     }
 
     fn trav_call(&mut self, call: &mut Call<'ast, Self::Ast>) {
-        self.write(&Self::Ast::dispatch_name(&call.id));
+        self.write(&Self::Ast::dispatch_name(&call.id, &self.fundef_names));
 
         self.write("(");
         for arg in &mut call.args {
@@ -148,9 +150,9 @@ impl<'ast, Ast: AstConfig + 'ast> Traverse<'ast> for Show<'ast, Ast> {
 
         self.write(", ");
         match &mut fold.foldfun {
-            FoldFun::Name(id) => self.write(&Self::Ast::dispatch_name(id)),
+            FoldFun::Name(id) => self.write(&Self::Ast::dispatch_name(id, &self.fundef_names)),
             FoldFun::Apply { id, args } => {
-                self.write(&Self::Ast::dispatch_name(id));
+                self.write(&Self::Ast::dispatch_name(id, &self.fundef_names));
                 self.write("(");
                 for arg in args {
                     match arg {
@@ -216,7 +218,7 @@ impl<'ast, Ast: AstConfig + 'ast> Traverse<'ast> for Show<'ast, Ast> {
         }
     }
 
-    fn trav_type(&mut self, ty: &mut Type) {
+    fn trav_type(&mut self, ty: &Type) {
         use BaseType::*;
         let ty_str = match &ty.ty {
             Bool => "bool",

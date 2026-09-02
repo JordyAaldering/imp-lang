@@ -4,7 +4,7 @@ use crate::ast::*;
 
 /// Not all patterns that can be constructed from the grammar are actually resolvable.
 /// This pass rejects unresolved variable-rank patterns (`d:shp`) at compile time.
-pub fn check_tp(program: Program<'static, ParsedAst>) -> Result<Program<'static, ParsedAst>, String> {
+pub fn check_tp<'ast>(program: Program<'ast, ParsedAst>) -> Result<Program<'ast, ParsedAst>, String> {
 	CheckTypePatterns::new().run(program)
 }
 
@@ -17,11 +17,11 @@ impl CheckTypePatterns {
 		Self { errors: Vec::new() }
 	}
 
-	fn run(mut self, program: Program<'static, ParsedAst>) -> Result<Program<'static, ParsedAst>, String> {
+	fn run<'ast>(mut self, program: Program<'ast, ParsedAst>) -> Result<Program<'ast, ParsedAst>, String> {
         for (_, groups) in &program.overloads {
-            for (_, fundefs) in groups {
-                for fundef in fundefs {
-					self.check_fundef(fundef);
+            for (_, fundef_ids) in groups {
+                for fundef_id in fundef_ids {
+					self.check_fundef(&program.fundefs[fundef_id.0]);
                 }
             }
         }
@@ -33,7 +33,7 @@ impl CheckTypePatterns {
 		}
 	}
 
-	fn check_fundef(&mut self, fundef: &Fundef<'static, ParsedAst>) {
+	fn check_fundef(&mut self, fundef: &Fundef<'_, ParsedAst>) {
 		let mut defined_symbols: HashSet<String> = HashSet::new();
 
 		// Scalar argument names are valid symbolic constraints for later type patterns.

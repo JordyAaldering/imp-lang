@@ -1,59 +1,53 @@
-use std::{collections::HashMap, mem};
-
-use typed_arena::Arena;
+use std::collections::HashMap;
 
 use crate::ast::*;
 
-pub fn resolve_dispatch<'ast>(program: Program<'ast, UntypedAst>) -> Result<Program<'ast, TypedAst>, DispatchError> {
-    let mut out_program = Program {
-        overloads: HashMap::new(),
-        fundefs: Arena::new(),
-    };
-
-    let mut overloads: HashMap<String, HashMap<BaseSignature, Vec<&'ast Fundef<'ast, TypedAst>>>> = HashMap::new();
-    let mut work_items: Vec<(*mut Fundef<'ast, TypedAst>, &'ast Fundef<'ast, UntypedAst>)> = Vec::new();
+pub fn resolve_dispatch<'ast>(program: Program<'ast, UntypedAst>, arenas: &'ast Arenas<'ast, TypedAst>) -> Result<Program<'ast, TypedAst>, DispatchError> {
+    let mut overloads: HashMap<String, HashMap<BaseSignature, Vec<FundefId>>> = HashMap::new();
+    let mut stubs: Vec<Fundef<'ast, TypedAst>> = Vec::new();
+    let mut work_items: Vec<(FundefId, FundefId)> = Vec::new();
 
     for (name, groups) in &program.overloads {
         let mut out_groups = HashMap::new();
-        for (sig, fundefs) in groups {
-            let mut out_fundefs = Vec::new();
-            for fundef in fundefs {
-                let stub = out_program.fundefs.alloc(Fundef {
+        for (sig, fundef_ids) in groups {
+            let mut out_ids = Vec::new();
+            for fundef_id in fundef_ids {
+                let fundef = &program.fundefs[fundef_id.0];
+                let id = FundefId(stubs.len());
+                stubs.push(Fundef {
                     name: fundef.name.clone(),
                     ret_type: fundef.ret_type.clone(),
                     args: fundef.args.clone(),
                     shape_prelude: Vec::new(),
                     shape_facts: fundef.shape_facts.clone(),
-                    decs: Arena::new(),
-                    exprs: Arena::new(),
+                    decs: Vec::new(),
                     body: Body {
                         stmts: Vec::new(),
                         ret: Id::Arg(usize::MAX),
                     },
                 });
-                let stub_ptr = stub as *mut Fundef<'ast, TypedAst>;
-                let stub_ref: &'ast Fundef<'ast, TypedAst> = unsafe { std::mem::transmute(stub) };
-                out_fundefs.push(stub_ref);
-                work_items.push((stub_ptr, *fundef));
+                out_ids.push(id);
+                work_items.push((id, *fundef_id));
             }
-            out_groups.insert(sig.clone(), out_fundefs);
+            out_groups.insert(sig.clone(), out_ids);
         }
         overloads.insert(name.clone(), out_groups);
     }
 
-    for (slot_ptr, src_fundef) in work_items {
-        let mut lower = DispatchResolver::new(overloads.clone());
+    for (id, src_id) in work_items {
+        let src_fundef = &program.fundefs[src_id.0];
+        let mut lower = DispatchResolver::new(arenas, &stubs, overloads.clone());
         let lowered = lower.lower_fundef(src_fundef);
         if let Some(err) = lower.errors.into_iter().next() {
             return Err(err);
         }
-        unsafe {
-            std::ptr::replace(slot_ptr, lowered);
-        }
+        stubs[id.0] = lowered;
     }
 
-    out_program.overloads = overloads;
-    Ok(out_program)
+    Ok(Program {
+        overloads,
+        fundefs: stubs,
+    })
 }
 
 #[allow(unused)]
@@ -65,33 +59,41 @@ pub enum DispatchError {
     AmbiguousOverload { name: String, arg_bases: BaseSignature },
 }
 
-struct DispatchResolver<'ast> {
+struct DispatchResolver<'ast, 'stubs> {
+    arenas: &'ast Arenas<'ast, TypedAst>,
+    stubs: &'stubs [Fundef<'ast, TypedAst>],
     args: Vec<Farg>,
     idmap: HashMap<*const VarInfo<'ast, UntypedAst>, &'ast VarInfo<'ast, TypedAst>>,
-    decs_arena: Arena<VarInfo<'ast, TypedAst>>,
-    expr_arena: Arena<ExprCell<'ast, TypedAst>>,
+    new_decs: Vec<&'ast VarInfo<'ast, TypedAst>>,
     errors: Vec<DispatchError>,
-    overloads: HashMap<String, HashMap<BaseSignature, Vec<&'ast Fundef<'ast, TypedAst>>>>,
+    overloads: HashMap<String, HashMap<BaseSignature, Vec<FundefId>>>,
 }
 
-impl<'ast> DispatchResolver<'ast> {
-    fn new(overloads: HashMap<String, HashMap<BaseSignature, Vec<&'ast Fundef<'ast, TypedAst>>>>) -> Self {
+impl<'ast, 'stubs> DispatchResolver<'ast, 'stubs> {
+    fn new(
+        arenas: &'ast Arenas<'ast, TypedAst>,
+        stubs: &'stubs [Fundef<'ast, TypedAst>],
+        overloads: HashMap<String, HashMap<BaseSignature, Vec<FundefId>>>,
+    ) -> Self {
         Self {
+            arenas,
+            stubs,
             args: Vec::new(),
             idmap: HashMap::new(),
-            decs_arena: Arena::new(),
-            expr_arena: Arena::new(),
+            new_decs: Vec::new(),
             errors: Vec::new(),
             overloads,
         }
     }
 
-    fn alloc_lvis(&self, name: String, ty: Type, ssa: Option<&'ast ExprCell<'ast, TypedAst>>) -> &'ast VarInfo<'ast, TypedAst> {
-        unsafe { std::mem::transmute(self.decs_arena.alloc(VarInfo { name, ty, ssa })) }
+    fn alloc_lvis(&mut self, name: String, ty: Type, ssa: Option<&'ast ExprCell<'ast, TypedAst>>) -> &'ast VarInfo<'ast, TypedAst> {
+        let lvis = self.arenas.alloc_lvis(name, ty, ssa);
+        self.new_decs.push(lvis);
+        lvis
     }
 
     fn alloc_expr(&self, expr: Expr<'ast, TypedAst>) -> &'ast ExprCell<'ast, TypedAst> {
-        unsafe { std::mem::transmute(self.expr_arena.alloc(ExprCell::new(expr))) }
+        self.arenas.alloc_expr(expr)
     }
 
     fn require_ty(&mut self, name: &str, ty: &Option<Type>) -> Type {
@@ -113,7 +115,7 @@ impl<'ast> DispatchResolver<'ast> {
         }
     }
 
-    fn resolve_target(&mut self, func_name: &str, arg_types: &[Type]) -> &'ast Fundef<'ast, TypedAst> {
+    fn resolve_target(&mut self, func_name: &str, arg_types: &[Type]) -> FundefId {
         let Some(group) = self.overloads.get(func_name) else {
             self.errors.push(DispatchError::UndefinedFunction {
                 name: func_name.to_owned(),
@@ -134,16 +136,16 @@ impl<'ast> DispatchResolver<'ast> {
         };
 
         let mut matches = Vec::new();
-        for target in candidates {
+        for &target in candidates {
             let mut ok = true;
-            for (expected, provided) in target.args.iter().zip(arg_types.iter()) {
+            for (expected, provided) in self.stubs[target.0].args.iter().zip(arg_types.iter()) {
                 if !types_compatible(&expected.ty, provided) {
                     ok = false;
                     break;
                 }
             }
             if ok {
-                matches.push(*target);
+                matches.push(target);
             }
         }
 
@@ -155,7 +157,7 @@ impl<'ast> DispatchResolver<'ast> {
             panic!("no compatible overload during dispatch resolution: {}", func_name);
         }
 
-        let best = maximal_candidates(&matches);
+        let best = maximal_candidates(self.stubs, &matches);
         if best.len() > 1 && !arg_types.iter().any(type_requires_runtime_dispatch) {
             self.errors.push(DispatchError::AmbiguousOverload {
                 name: func_name.to_owned(),
@@ -169,8 +171,7 @@ impl<'ast> DispatchResolver<'ast> {
     fn lower_fundef(&mut self, fundef: &Fundef<'ast, UntypedAst>) -> Fundef<'ast, TypedAst> {
         self.args = fundef.args.clone();
         self.idmap.clear();
-        self.decs_arena = Arena::new();
-        self.expr_arena = Arena::new();
+        debug_assert!(self.new_decs.is_empty());
 
         let mut shape_prelude = Vec::new();
         for assign in &fundef.shape_prelude {
@@ -179,8 +180,7 @@ impl<'ast> DispatchResolver<'ast> {
 
         let body = self.lower_body(fundef.body.clone());
 
-        let decs = mem::take(&mut self.decs_arena);
-        let exprs = mem::take(&mut self.expr_arena);
+        let decs = std::mem::take(&mut self.new_decs);
 
         Fundef {
             name: fundef.name.clone(),
@@ -189,7 +189,6 @@ impl<'ast> DispatchResolver<'ast> {
             shape_prelude,
             shape_facts: fundef.shape_facts.clone(),
             decs,
-            exprs,
             body,
         }
     }
@@ -254,7 +253,7 @@ impl<'ast> DispatchResolver<'ast> {
         let arg_types = args.iter().map(|arg| self.id_type(arg)).collect::<Vec<_>>();
         let target = self.resolve_target(&call.id, &arg_types);
         Call {
-            id: CallTarget::Function(target),
+            id: target,
             args,
         }
     }
@@ -288,7 +287,7 @@ impl<'ast> DispatchResolver<'ast> {
             FoldFun::Name(name) => {
                 let arg_types = vec![self.id_type(&neutral), self.id_type(&selection.body.ret)];
                 let target = self.resolve_target(&name, &arg_types);
-                FoldFun::Name(CallTarget::Function(target))
+                FoldFun::Name(target)
             }
             FoldFun::Apply { .. } => {
                 unimplemented!("dispatch resolution for partial-application fold is not implemented")
@@ -335,19 +334,19 @@ impl<'ast> DispatchResolver<'ast> {
     }
 }
 
-fn maximal_candidates<'ast>(candidates: &[&'ast Fundef<'ast, TypedAst>]) -> Vec<&'ast Fundef<'ast, TypedAst>> {
-    let mut maximal: Vec<&Fundef<'_, TypedAst>> = Vec::new();
+fn maximal_candidates(stubs: &[Fundef<'_, TypedAst>], candidates: &[FundefId]) -> Vec<FundefId> {
+    let mut maximal: Vec<FundefId> = Vec::new();
 
-    'outer: for a in candidates {
-        for b in candidates {
-            if std::ptr::eq(*a, *b) {
+    'outer: for &a in candidates {
+        for &b in candidates {
+            if a == b {
                 continue;
             }
-            if overload_more_specific(&b.args, &a.args) {
+            if overload_more_specific(&stubs[b.0].args, &stubs[a.0].args) {
                 continue 'outer;
             }
         }
-        maximal.push(*a);
+        maximal.push(a);
     }
 
     maximal

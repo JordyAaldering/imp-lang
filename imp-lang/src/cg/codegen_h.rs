@@ -1,6 +1,6 @@
 use crate::ast::*;
 
-pub fn emit_h(ast: &mut Program<'static, TypedAst>) -> String {
+pub fn emit_h<'ast>(ast: &mut Program<'ast, TypedAst>) -> String {
     let mut cg = CompileH::new();
     cg.trav_program(ast);
     cg.finish()

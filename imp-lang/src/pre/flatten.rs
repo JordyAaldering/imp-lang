@@ -1,36 +1,36 @@
 use std::mem;
 
-use typed_arena::Arena;
-
 use crate::{ast::*, trav_name::TravName};
 
-pub fn flatten<'ast>(program: &mut Program<'ast, ParsedAst>) {
-    Flatten::new().trav_program(program);
+pub fn flatten<'ast>(program: &mut Program<'ast, ParsedAst>, arenas: &'ast Arenas<'ast, ParsedAst>) {
+    Flatten::new(arenas).trav_program(program);
 }
 
 struct Flatten<'ast> {
+    arenas: &'ast Arenas<'ast, ParsedAst>,
     trav_name: TravName,
-    decs: Arena<VarInfo<'ast, ParsedAst>>,
-    exprs: Arena<ExprCell<'ast, ParsedAst>>,
+    new_decs: Vec<&'ast VarInfo<'ast, ParsedAst>>,
     new_assigns: Vec<Assign<'ast, ParsedAst>>,
 }
 
 impl<'ast> Flatten<'ast> {
-    fn new() -> Self {
+    fn new(arenas: &'ast Arenas<'ast, ParsedAst>) -> Self {
         Self {
+            arenas,
             trav_name: TravName::new(crate::Phase::FLT),
-            decs: Arena::new(),
-            exprs: Arena::new(),
+            new_decs: Vec::new(),
             new_assigns: Vec::new(),
         }
     }
 
-    fn alloc_lvis(&self, name: String, ty: Option<Type>) -> &'ast VarInfo<'ast, ParsedAst> {
-        unsafe { std::mem::transmute(self.decs.alloc(VarInfo { name, ty, ssa: () })) }
+    fn alloc_lvis(&mut self, name: String, ty: Option<Type>) -> &'ast VarInfo<'ast, ParsedAst> {
+        let lvis = self.arenas.alloc_lvis(name, ty, ());
+        self.new_decs.push(lvis);
+        lvis
     }
 
     fn alloc_expr(&self, expr: Expr<'ast, ParsedAst>) -> &'ast ExprCell<'ast, ParsedAst> {
-        unsafe { std::mem::transmute(self.exprs.alloc(ExprCell::new(expr))) }
+        self.arenas.alloc_expr(expr)
     }
 
     fn emit_expr(&mut self, expr: Expr<'ast, ParsedAst>) -> Expr<'ast, ParsedAst> {
@@ -50,12 +50,8 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
     fn expr_default(&self) -> Self::ExprOut { () }
 
     fn trav_fundef(&mut self, fundef: &mut Fundef<'ast, ParsedAst>) {
-        debug_assert!(self.decs.len() == 0);
-        debug_assert!(self.exprs.len() == 0);
+        debug_assert!(self.new_decs.is_empty());
         debug_assert!(self.new_assigns.is_empty());
-
-        self.decs = mem::take(&mut fundef.decs);
-        self.exprs = mem::take(&mut fundef.exprs);
 
         let mut shape_prelude = Vec::new();
         for mut assign in fundef.shape_prelude.drain(..) {
@@ -67,8 +63,7 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
 
         self.trav_body(&mut fundef.body);
 
-        fundef.decs = mem::take(&mut self.decs);
-        fundef.exprs = mem::take(&mut self.exprs);
+        fundef.decs.extend(mem::take(&mut self.new_decs));
     }
 
     fn trav_body(&mut self, body: &mut Body<'ast, ParsedAst>) {

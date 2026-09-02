@@ -1,6 +1,4 @@
-use std::{collections::HashMap, iter::Peekable, mem};
-
-use typed_arena::Arena;
+use std::{collections::HashMap, iter::Peekable};
 
 use super::{lexer::*, operator::*, span::*};
 
@@ -8,8 +6,8 @@ use crate::ast::*;
 
 pub struct Parser<'src, 'ast> {
     lexer: Peekable<Lexer<'src>>,
-    decs_arena: Arena<VarInfo<'ast, ParsedAst>>,
-    expr_arena: Arena<ExprCell<'ast, ParsedAst>>,
+    arenas: &'ast Arenas<'ast, ParsedAst>,
+    current_decs: Vec<&'ast VarInfo<'ast, ParsedAst>>,
 }
 
 #[derive(Debug)]
@@ -27,20 +25,22 @@ pub enum ParseError {
 type ParseResult<T> = Result<T, ParseError>;
 
 impl<'src, 'ast> Parser<'src, 'ast> {
-    pub fn new(lexer: Lexer<'src>) -> Self {
+    pub fn new(lexer: Lexer<'src>, arenas: &'ast Arenas<'ast, ParsedAst>) -> Self {
         Self {
             lexer: lexer.peekable(),
-            decs_arena: Arena::new(),
-            expr_arena: Arena::new(),
+            arenas,
+            current_decs: Vec::new(),
         }
     }
 
-    fn alloc_lvis(&self, name: String, ty: Option<Type>) -> &'ast VarInfo<'ast, ParsedAst> {
-        unsafe { mem::transmute(self.decs_arena.alloc(VarInfo { name, ty, ssa: () })) }
+    fn alloc_lvis(&mut self, name: String, ty: Option<Type>) -> &'ast VarInfo<'ast, ParsedAst> {
+        let lvis = self.arenas.alloc_lvis(name, ty, ());
+        self.current_decs.push(lvis);
+        lvis
     }
 
     fn alloc_expr(&self, expr: Expr<'ast, ParsedAst>) -> &'ast ExprCell<'ast, ParsedAst> {
-        unsafe { mem::transmute(self.expr_arena.alloc(ExprCell::new(expr))) }
+        self.arenas.alloc_expr(expr)
     }
 
     fn matches(&mut self, expected: &Token) -> Option<Span> {
@@ -107,7 +107,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
     /// ```
     pub fn parse_program(&mut self) -> ParseResult<Program<'ast, ParsedAst>> {
         let mut overloads = HashMap::new();
-        let fundefs_arena: Arena<Fundef<'ast, ParsedAst>> = Arena::new();
+        let mut fundefs = Vec::new();
 
         while let Some((token, _)) = self.lexer.peek() {
             match token {
@@ -115,12 +115,11 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                     let (fundef, _) = self.parse_fundef()?;
                     let name = fundef.name.clone();
                     let sig = fundef.signature();
-                    let fundef_ref = fundefs_arena.alloc(fundef);
-                    // SAFETY: fundefs_arena is moved into Program before return.
-                    let fundef_ref: &'ast Fundef<'ast, ParsedAst> = unsafe { mem::transmute(fundef_ref) };
+                    let id = FundefId(fundefs.len());
+                    fundefs.push(fundef);
                     let group = overloads.entry(name).or_insert(HashMap::new());
-                    let fundefs = group.entry(sig).or_insert(Vec::new());
-                    fundefs.push(fundef_ref);
+                    let ids = group.entry(sig).or_insert(Vec::new());
+                    ids.push(id);
                 }
                 _ => {
                     let (token, span) = self.next()?;
@@ -131,7 +130,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
 
         Ok(Program {
             overloads,
-            fundefs: fundefs_arena,
+            fundefs,
         })
     }
 
@@ -139,8 +138,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
     /// <fundef> = "fn" <id> "(" <fargs>? ")" "->" <type> "{" <body> "}"
     /// ```
     fn parse_fundef(&mut self) -> ParseResult<(Fundef<'ast, ParsedAst>, Span)> {
-        self.decs_arena = Arena::new();
-        self.expr_arena = Arena::new();
+        debug_assert!(self.current_decs.is_empty());
 
         let span_from = self.expect(Token::Fn)?;
         let (name, _) = self.parse_id()?;
@@ -157,8 +155,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         let body = self.parse_body()?;
         let span_to = self.expect(Token::RBrace)?;
 
-        let decs = mem::take(&mut self.decs_arena);
-        let exprs = mem::take(&mut self.expr_arena);
+        let decs = std::mem::take(&mut self.current_decs);
 
         Ok((Fundef {
             name,
@@ -166,7 +163,6 @@ impl<'src, 'ast> Parser<'src, 'ast> {
             shape_prelude: Vec::new(),
             shape_facts: ShapeFacts::default(),
             decs,
-            exprs,
             body,
             ret_type,
         }, span_from.to(&span_to)))

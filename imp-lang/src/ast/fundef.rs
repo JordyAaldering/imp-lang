@@ -1,5 +1,4 @@
 use super::*;
-use typed_arena::Arena;
 
 pub struct Fundef<'ast, Ast: AstConfig> {
     pub name: String,
@@ -7,8 +6,10 @@ pub struct Fundef<'ast, Ast: AstConfig> {
     pub args: Vec<Farg>,
     pub shape_prelude: Vec<Assign<'ast, Ast>>,
     pub shape_facts: ShapeFacts,
-    pub decs: Arena<VarInfo<'ast, Ast>>,
-    pub exprs: Arena<ExprCell<'ast, Ast>>,
+    /// Variables declared in this function, for diagnostics/pretty-printing.
+    ///
+    /// Non-owning: the `VarInfo` values themselves live in the phase's `Arenas`.
+    pub decs: Vec<&'ast VarInfo<'ast, Ast>>,
     pub body: Body<'ast, Ast>,
 }
 
@@ -20,8 +21,7 @@ impl<'ast, Ast: AstConfig> Clone for Fundef<'ast, Ast> {
             args: self.args.clone(),
             shape_prelude: self.shape_prelude.clone(),
             shape_facts: self.shape_facts.clone(),
-            decs: Arena::new(),
-            exprs: Arena::new(),
+            decs: self.decs.clone(),
             body: self.body.clone(),
         }
     }
