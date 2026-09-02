@@ -1,8 +1,8 @@
 [workspace]
 resolver = "3"
 members = [
-    "imp-lang",
-    "imp-core",
+    "imp_lang",
+    "imp_core",
     "example",
     "stdlib",
 ]
