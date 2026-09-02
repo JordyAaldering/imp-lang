@@ -1,3 +1,4 @@
+mod phase;
 mod trav_name;
 mod ast;
 mod trav;
@@ -11,7 +12,8 @@ mod cg;
 
 use std::{fs, path::PathBuf};
 
-use crate::ast::{Scope, ParsedAst, TypedAst, UntypedAst};
+use ast::{Scope, ParsedAst, TypedAst, UntypedAst};
+pub use phase::Phase;
 
 macro_rules! breakpoint {
     ($breakpoint:ident, $phase:pat, $ast:ident) => {
@@ -91,37 +93,4 @@ pub fn compile(breakpoint: Option<Phase>, infile: &PathBuf, outdir: Option<&Path
     } else {
         None
     }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[derive(clap::ValueEnum)]
-pub enum Phase {
-    /// Read input
-    RD,
-    /// Scanning/parsing
-    SCP,
-    /// Check type pattern
-    CTP,
-    /// Analyse type pattern
-    ATP,
-    /// Flatten
-    FLT,
-    /// Convert to SSA
-    SSA,
-    /// Type inference
-    TI,
-    /// Function dispatch resolution
-    DR,
-    /// Constant folding
-    CF,
-    /// Dead code removal
-    DCR,
-    /// Rename fundefs
-    RNF,
-    /// C header code generation
-    CGH,
-    /// C code generation
-    CGC,
-    /// Rust FFI code generation
-    CGRS,
 }
