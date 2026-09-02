@@ -1,5 +1,4 @@
 #![allow(dead_code)]
-#![allow(unused_parens)]
 include!(concat!(env!("OUT_DIR"), "/IMPsimple.rs"));
 
 use imp_core::*;
