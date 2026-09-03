@@ -88,9 +88,9 @@ impl CompileFfi {
         // Per-position: is this arg scalar for ALL variants?
         let n_args = sig.base_types.len();
         let all_scalar_args: Vec<bool> = (0..n_args)
-            .map(|i| fundefs.iter().all(|f| f.args[i].ty.is_scalar()))
+            .map(|i| fundefs.iter().all(|f| f.args[i].ty.is_scalar().unwrap_or(false)))
             .collect();
-        let all_scalar_ret = fundefs.iter().all(|f| f.ret_type.is_scalar());
+        let all_scalar_ret = fundefs.iter().all(|f| f.ret_type.is_scalar().unwrap_or(false));
 
         let fargs = sig
             .base_types
@@ -164,10 +164,6 @@ impl CompileFfi {
 // Helper functions
 // ---------------------------------------------------------------------------
 
-fn is_static_array(ty: &Type) -> bool {
-    ty.is_array()
-}
-
 fn join_args(args: &[Farg], map_ty: fn(&Type) -> String) -> String {
     args.iter()
         .map(|arg| format!("{}: {}", arg.id, map_ty(&arg.ty)))
@@ -177,7 +173,7 @@ fn join_args(args: &[Farg], map_ty: fn(&Type) -> String) -> String {
 
 /// Rust type used in wrapper signatures: arrays -> `ImpArray<T>`, scalars -> `T`.
 fn rust_wrapper_type(ty: &Type) -> String {
-    if ty.is_array() {
+    if ty.is_array().unwrap_or(true) {
         format!("ImpArray<{}>", ty.basetype.rstype())
     } else {
         ty.basetype.rstype()
@@ -189,7 +185,7 @@ fn rust_wrapper_type(ty: &Type) -> String {
 fn emit_marshaled_call_args(out: &mut String, args: &[Farg]) -> Vec<String> {
     let mut call_args = Vec::with_capacity(args.len());
     for arg in args {
-        if is_static_array(&arg.ty) {
+        if arg.ty.is_array().unwrap_or(true) {
             out.push_str(&format!("    let {}_raw = {}.into_raw();\n", arg.id, arg.id));
             call_args.push(format!("{}_raw", arg.id));
         } else {
@@ -217,7 +213,7 @@ fn emit_marshaled_branch_args(
     for ((arg, branch_name), &exposed_as_scalar) in
         args.iter().zip(branch_names.iter()).zip(all_scalar_args.iter())
     {
-        if is_static_array(&arg.ty) {
+        if arg.ty.is_array().unwrap_or(true) {
             out.push_str(&format!(
                 "{pad}let {branch_name}_raw = {branch_name}.into_raw();\n"
             ));
@@ -236,7 +232,7 @@ fn emit_marshaled_branch_args(
 
 /// Return expression for a direct (single-overload) wrapper.
 fn emit_return_expr(symbol_name: &str, ret_type: &Type, call_args: &[String]) -> String {
-    if is_static_array(ret_type) {
+    if ret_type.is_array().unwrap_or(true) {
         format!(
             "let __res_raw = unsafe {{ IMP_{}({}) }};\nunsafe {{ ImpArray::<{}>::from_raw(__res_raw) }}",
             symbol_name,
@@ -259,7 +255,7 @@ fn emit_family_return_expr(
 ) -> String {
     if all_scalar_ret {
         format!("unsafe {{ IMP_{}({}) }}", symbol_name, call_args.join(", "))
-    } else if is_static_array(ret_type) {
+    } else if ret_type.is_array().unwrap_or(true) {
         format!(
             "let __res_raw = unsafe {{ IMP_{}({}) }};\nunsafe {{ ImpArray::<{}>::from_raw(__res_raw) }}",
             symbol_name,
@@ -288,46 +284,45 @@ fn build_variant_condition(args: &[Farg], all_scalar_args: &[bool]) -> String {
         if exposed_as_scalar {
             continue;
         }
-        match &arg.ty.shape {
-            TypePattern::Scalar => {
-                checks.push(format!("arg{arg_index}.is_scalar()"));
-            }
-            TypePattern::Axes(axes) => {
-                if axes.iter().any(|ax| matches!(ax, AxisPattern::Rank(_))) {
-                    checks.push(format!("!arg{arg_index}.is_scalar()"));
-                } else {
-                    checks.push(format!("arg{arg_index}.dim() == {}", axes.len()));
-                }
-                for (axis_index, axis) in axes.iter().enumerate() {
-                    match axis {
-                        AxisPattern::Dim(DimCapture::Known(v)) => {
-                            checks.push(format!("arg{arg_index}.extent({axis_index}) == {v}"));
+
+        if let Some(axes) = arg.ty.type_pattern() {
+            // if axes.iter().any(|ax| matches!(ax, AxisPattern::Rank(_))) {
+            //     checks.push(format!("!arg{arg_index}.is_scalar()"));
+            // } else {
+            //     checks.push(format!("arg{arg_index}.dim() == {}", axes.len()));
+            // }
+
+            for (axis_index, axis) in axes.iter().enumerate() {
+                match axis {
+                    AxisPattern::VariableRank { dim, shp } => {
+                        let expr = format!("arg{arg_index}.dim()");
+                        if let Some((_, bound_expr)) = bound_ranks.iter().find(|(name, _)| name == dim)
+                        {
+                            checks.push(format!("{expr} == {bound_expr}"));
+                        } else {
+                            bound_ranks.push((dim.clone(), expr));
                         }
-                        AxisPattern::Dim(DimCapture::Var(extent)) => {
-                            let expr = format!("arg{arg_index}.extent({axis_index})");
-                            if let Some((_, bound_expr)) =
-                                bound_dims.iter().find(|(name, _)| name == extent)
-                            {
-                                checks.push(format!("{expr} == {bound_expr}"));
-                            } else {
-                                bound_dims.push((extent.clone(), expr));
-                            }
+                    },
+                    AxisPattern::FixedRank { .. } => {
+                        todo!()
+                    },
+                    AxisPattern::VariableLength { len } => {
+                        let expr = format!("arg{arg_index}.extent({axis_index})");
+                        if let Some((_, bound_expr)) =
+                            bound_dims.iter().find(|(name, _)| name == len)
+                        {
+                            checks.push(format!("{expr} == {bound_expr}"));
+                        } else {
+                            bound_dims.push((len.clone(), expr));
                         }
-                        AxisPattern::Rank(RankCapture { dim: DimCapture::Var(dim), shp: _ }) => {
-                            let expr = format!("arg{arg_index}.dim()");
-                            if let Some((_, bound_expr)) = bound_ranks.iter().find(|(name, _)| name == dim)
-                            {
-                                checks.push(format!("{expr} == {bound_expr}"));
-                            } else {
-                                bound_ranks.push((dim.clone(), expr));
-                            }
-                        }
-                        AxisPattern::Rank(_capture) => {
-                            todo!()
-                        }
-                    }
+                    },
+                    AxisPattern::FixedLength { len } => {
+                        checks.push(format!("arg{arg_index}.extent({axis_index}) == {len}"));
+                    },
                 }
             }
+        } else {
+            checks.push(format!("arg{arg_index}.is_scalar()"));
         }
     }
 
@@ -344,43 +339,22 @@ fn generate_shape_checks(args: &[Farg]) -> String {
     let mut bound_ranks: Vec<String> = Vec::new();
 
     for arg in args {
-        let TypePattern::Axes(axes) = &arg.ty.shape else {
+        let Some(axes) = &arg.ty.type_pattern() else {
             continue;
         };
 
-        if !axes.iter().any(|axis| matches!(axis, AxisPattern::Rank(_))) {
-            out.push_str(&format!(
-                "    assert_eq!({}.dim(), {}, \"{} rank mismatch\");\n",
-                arg.id,
-                axes.len(),
-                arg.id,
-            ));
-        }
+        // if !axes.iter().any(|axis| matches!(axis, AxisPattern::Rank(_))) {
+        //     out.push_str(&format!(
+        //         "    assert_eq!({}.dim(), {}, \"{} rank mismatch\");\n",
+        //         arg.id,
+        //         axes.len(),
+        //         arg.id,
+        //     ));
+        // }
 
         for (idx, axis) in axes.iter().enumerate() {
             match axis {
-                AxisPattern::Dim(DimCapture::Known(v)) => {
-                    out.push_str(&format!(
-                        "    assert_eq!({}.extent({}), {}, \"{} extent mismatch at axis {}\");\n",
-                        arg.id, idx, v, arg.id, idx,
-                    ));
-                }
-                AxisPattern::Dim(DimCapture::Var(extent)) => {
-                    let binding = format!("_imp_extent_{}", extent);
-                    if bound_dims.iter().any(|existing| existing == &binding) {
-                        out.push_str(&format!(
-                            "    assert_eq!({}.extent({}), {}, \"extent {} mismatch\");\n",
-                            arg.id, idx, binding, extent
-                        ));
-                    } else {
-                        out.push_str(&format!(
-                            "    let {} = {}.extent({});\n",
-                            binding, arg.id, idx
-                        ));
-                        bound_dims.push(binding);
-                    }
-                }
-                AxisPattern::Rank(RankCapture { dim: DimCapture::Var(dim), shp: _ }) => {
+                AxisPattern::VariableRank { dim, shp } => {
                     let binding = format!("_imp_rank_{}", dim);
                     if bound_ranks.iter().any(|existing| existing == &binding) {
                         out.push_str(&format!("    assert_eq!({}.dim(), {}, \"rank {} mismatch\");\n",
@@ -391,10 +365,31 @@ fn generate_shape_checks(args: &[Farg]) -> String {
                         ));
                         bound_ranks.push(binding);
                     }
-                }
-                AxisPattern::Rank(_capture) => {
+                },
+                AxisPattern::FixedRank { dim, shp } => {
                     todo!()
-                }
+                },
+                AxisPattern::VariableLength { len } => {
+                    let binding = format!("_imp_extent_{}", len);
+                    if bound_dims.iter().any(|existing| existing == &binding) {
+                        out.push_str(&format!(
+                            "    assert_eq!({}.extent({}), {}, \"extent {} mismatch\");\n",
+                            arg.id, idx, binding, len
+                        ));
+                    } else {
+                        out.push_str(&format!(
+                            "    let {} = {}.extent({});\n",
+                            binding, arg.id, idx
+                        ));
+                        bound_dims.push(binding);
+                    }
+                },
+                AxisPattern::FixedLength { len } => {
+                    out.push_str(&format!(
+                        "    assert_eq!({}.extent({}), {}, \"{} extent mismatch at axis {}\");\n",
+                        arg.id, idx, len, arg.id, idx,
+                    ));
+                },
             }
         }
     }

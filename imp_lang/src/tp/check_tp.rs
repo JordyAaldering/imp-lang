@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::ast::*;
+use crate::ast::{AxisPattern::VariableRank, *};
 
 /// Not all patterns that can be constructed from the grammar are actually resolvable.
 /// This pass rejects unresolved variable-rank patterns (`d:shp`) at compile time.
@@ -54,7 +54,7 @@ impl CheckTypePatterns {
 			));
 		}
 
-		self.check_return_pattern(&fundef.name, &fundef.ret_type.shape, &defined_symbols);
+		self.check_return_pattern(&fundef.name, &fundef.ret_type, &defined_symbols);
 	}
 
 	fn collect_arg_symbols(
@@ -63,38 +63,38 @@ impl CheckTypePatterns {
 		defined_symbols: &mut HashSet<String>,
 		unconstrained_rank_captures: &mut usize,
 	) {
-		let TypePattern::Axes(axes) = &arg.ty.shape else {
+		let Some(axes) = arg.ty.type_pattern() else {
 			return;
 		};
 
 		for axis in axes {
 			match axis {
-				AxisPattern::Dim(DimCapture::Var(var)) => {
-					defined_symbols.insert(var.clone());
-				}
-				AxisPattern::Rank(RankCapture { dim: DimCapture::Var(dim), shp }) => {
+				AxisPattern::VariableRank { dim, shp } => {
 					if !defined_symbols.contains(dim) {
 						*unconstrained_rank_captures += 1;
 					}
 
 					defined_symbols.insert(dim.clone());
 					defined_symbols.insert(shp.clone());
-				}
-				AxisPattern::Rank(_) => {
+				},
+				AxisPattern::FixedRank { dim: _, shp: _ } => {
 					todo!()
-				}
-				AxisPattern::Dim(DimCapture::Known(_)) => {}
+				},
+				AxisPattern::VariableLength { len } => {
+					defined_symbols.insert(len.clone());
+				},
+				AxisPattern::FixedLength { len: _ } => {},
 			}
 		}
 	}
 
-	fn check_return_pattern(&mut self, fundef_name: &str, ret_shape: &TypePattern, defined_symbols: &HashSet<String>) {
-		let TypePattern::Axes(axes) = ret_shape else {
+	fn check_return_pattern(&mut self, fundef_name: &str, ret_shape: &Type, defined_symbols: &HashSet<String>) {
+		let Some(axes) = ret_shape.type_pattern() else {
 			return;
 		};
 
 		for axis in axes {
-			if let AxisPattern::Rank(RankCapture { dim: DimCapture::Var(dim), shp: _ }) = axis
+			if let VariableRank { dim, shp: _ } = axis
 				&& !defined_symbols.contains(dim)
 			{
 				self.errors.push(format!(

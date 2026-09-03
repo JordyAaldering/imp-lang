@@ -82,18 +82,13 @@ impl<'ast> AnalyseTp<'ast> {
         let mut pending: Vec<(String, ShapeTerm, Expr<'ast, ParsedAst>, Type)> = Vec::new();
 
         for (arg_index, arg) in fundef.args.iter().enumerate() {
-            let TypePattern::Axes(axes) = &arg.ty.shape else {
+            let Some(axes) = arg.ty.type_pattern() else {
                 continue;
             };
 
             for (axis_index, axis) in axes.iter().enumerate() {
                 match axis {
-                    AxisPattern::Dim(DimCapture::Var(var)) => {
-                        let term = ShapeTerm::ArgDim { arg_index, axis_index };
-                        let expr = self.dim_at_expr(arg_index, axis_index);
-                        pending.push((var.clone(), term, expr, Type::scalar(BaseType::Usize)));
-                    }
-                    AxisPattern::Rank(RankCapture { dim: DimCapture::Var(dim), shp }) => {
+                    AxisPattern::VariableRank { dim, shp } => {
                         let dim_term = ShapeTerm::ArgRank {
                             arg_index,
                             axis_index,
@@ -117,14 +112,19 @@ impl<'ast> AnalyseTp<'ast> {
                             shp_expr,
                             Type {
                                 basetype: BaseType::Usize,
-                                shape: TypePattern::any(),
+                                shape: TypePattern::scalar(),
                             },
                         ));
-                    }
-                    AxisPattern::Rank(_) => {
+                    },
+                    AxisPattern::FixedRank { dim: _, shp: _ } => {
                         todo!()
-                    }
-                    AxisPattern::Dim(DimCapture::Known(_)) => {}
+                    },
+                    AxisPattern::VariableLength { len } => {
+                        let term = ShapeTerm::ArgDim { arg_index, axis_index };
+                        let expr = self.dim_at_expr(arg_index, axis_index);
+                        pending.push((len.clone(), term, expr, Type::scalar(BaseType::Usize)));
+                    },
+                    AxisPattern::FixedLength { len: _ } => {},
                 }
             }
         }
@@ -135,7 +135,7 @@ impl<'ast> AnalyseTp<'ast> {
     }
 
     fn analyse_ret_constraints(&mut self, fundef: &mut Fundef<'ast, ParsedAst>) {
-        let TypePattern::Axes(axes) = &fundef.ret_type.shape else {
+        let Some(axes) = fundef.ret_type.type_pattern() else {
             return;
         };
 
@@ -143,19 +143,7 @@ impl<'ast> AnalyseTp<'ast> {
 
         for (axis_index, axis) in axes.iter().enumerate() {
             match axis {
-                AxisPattern::Dim(DimCapture::Var(var)) => {
-                    let constrained_by = if self.defined.contains(var) {
-                        vec![ShapeTerm::Symbol(var.clone())]
-                    } else {
-                        Vec::new()
-                    };
-
-                    fundef.shape_facts.output_constraints.push(OutputShapeConstraint {
-                        output: ShapeTerm::RetDim { axis_index },
-                        constrained_by,
-                    });
-                }
-                AxisPattern::Rank(RankCapture { dim: DimCapture::Var(dim), shp: _ }) => {
+                AxisPattern::VariableRank { dim, shp } => {
                     let constrained_by = if self.defined.contains(dim) {
                         vec![ShapeTerm::Symbol(dim.clone())]
                     } else {
@@ -167,11 +155,23 @@ impl<'ast> AnalyseTp<'ast> {
                         output: ShapeTerm::RetRank { axis_index },
                         constrained_by,
                     });
-                }
-                AxisPattern::Rank(_) => {
+                },
+                AxisPattern::FixedRank { dim, shp } => {
                     todo!()
-                }
-                AxisPattern::Dim(DimCapture::Known(_)) => {}
+                },
+                AxisPattern::VariableLength { len } => {
+                    let constrained_by = if self.defined.contains(len) {
+                        vec![ShapeTerm::Symbol(len.clone())]
+                    } else {
+                        Vec::new()
+                    };
+
+                    fundef.shape_facts.output_constraints.push(OutputShapeConstraint {
+                        output: ShapeTerm::RetDim { axis_index },
+                        constrained_by,
+                    });
+                },
+                AxisPattern::FixedLength { len: _ } => {},
             }
         }
 

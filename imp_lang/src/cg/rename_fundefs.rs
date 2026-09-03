@@ -86,35 +86,25 @@ fn mangle_args<'a>(args: &[Farg]) -> String
 }
 
 pub fn mangle_type(ty: &Type) -> String {
-    format!("{}_{}", ty.basetype.rstype(), mangle_shape(&ty.shape))
+    format!("{}_{}", ty.basetype.rstype(), mangle_shape(&ty))
 }
 
-fn mangle_shape(shape: &TypePattern) -> String {
-    match shape {
-        TypePattern::Scalar => "0".to_string(),
-        TypePattern::Axes(axes) => {
-            if axes.is_empty() {
-                "0".to_string()
-            } else {
-                axes.iter()
-                    .map(mangle_axis)
-                    .collect::<Vec<String>>()
-                    .join("_")
-            }
-        }
+fn mangle_shape(ty: &Type) -> String {
+    if let Some(axes) = ty.type_pattern() {
+        axes.iter()
+            .map(mangle_axis)
+            .collect::<Vec<String>>()
+            .join("_")
+    } else {
+        "0".to_string()
     }
 }
 
 fn mangle_axis(axis: &AxisPattern) -> String {
     match axis {
-        AxisPattern::Dim(dim) => mangle_axis_dim(dim),
-        AxisPattern::Rank(capture) => format!("{}_{}", mangle_axis_dim(&capture.dim), capture.shp),
-    }
-}
-
-fn mangle_axis_dim(axis: &DimCapture) -> String {
-    match axis {
-        DimCapture::Known(v) => v.to_string(),
-        DimCapture::Var(ext) => ext.clone(),
+        AxisPattern::VariableRank { dim, shp } => format!("{dim}_{shp}"),
+        AxisPattern::FixedRank { dim, shp } => format!("{dim}_{shp}"),
+        AxisPattern::VariableLength { len } => format!("{len}"),
+        AxisPattern::FixedLength { len } => format!("{len}"),
     }
 }

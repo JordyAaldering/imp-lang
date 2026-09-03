@@ -217,41 +217,6 @@ impl<'ast, Ast: Invariant + 'ast> Traverse<'ast> for Show<'ast, Ast> {
     }
 
     fn trav_type(&mut self, ty: &Type) {
-        use BaseType::*;
-        let ty_str = match &ty.basetype {
-            Bool => "bool",
-            Usize => "usize",
-            U32 => "u32",
-            U64 => "u64",
-            I32 => "i32",
-            I64 => "i64",
-            F32 => "f32",
-            F64 => "f64",
-            Udf(udf) => udf,
-        };
-        self.write(ty_str);
-
-        match &ty.shape {
-            TypePattern::Scalar => {}
-            TypePattern::Axes(axes) => {
-                self.write("[");
-                for axis in axes {
-                    match axis {
-                        AxisPattern::Dim(DimCapture::Known(n)) => self.write(&n.to_string()),
-                        AxisPattern::Dim(DimCapture::Var(var)) => self.write(&var),
-                        AxisPattern::Rank(capture) => {
-                            match &capture.dim {
-                                DimCapture::Known(n) => self.write(&n.to_string()),
-                                DimCapture::Var(var) => self.write(&var),
-                            }
-                            self.write(":");
-                            self.write(&capture.shp);
-                        }
-                    }
-                    self.write(",")
-                }
-                self.write("]");
-            }
-        }
+        self.write(&ty.to_string());
     }
 }

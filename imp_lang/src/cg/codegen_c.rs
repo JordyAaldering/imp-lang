@@ -134,11 +134,11 @@ impl CompileC {
             let call_args: Vec<String> = fundef.args
                 .iter()
                 .enumerate()
-                .map(|(i, arg)| wrapper_call_arg(&arg.ty.shape, &format!("arg{i}"), &arg.ty.basetype))
+                .map(|(i, arg)| wrapper_call_arg(&arg.ty, &format!("arg{i}"), &arg.ty.basetype))
                 .collect();
             let call_expr = format!("IMP_{}({})", fundef.name, call_args.join(", "));
 
-            if fundef.ret_type.is_array() {
+            if fundef.ret_type.is_array().unwrap_or(true) {
                 self.push_line(&format!("return {call_expr};"));
             } else {
                 // Scalar return: wrap in a 0-d ImpArrayRaw (dim=0, len=1, shp=NULL)
@@ -618,12 +618,12 @@ impl<'ast> Traverse<'ast> for CompileC {
     }
 }
 
-fn shape_match_condition(shape: &TypePattern, arg: &str) -> String {
+fn shape_match_condition(shape: &AxisPattern, arg: &str) -> String {
     match shape {
-        TypePattern::Scalar => {
+        AxisPattern::Scalar => {
             format!("{arg}.dim == 0")
         }
-        TypePattern::Axes(axes) => {
+        AxisPattern::Axes(axes) => {
             if axes.iter().any(|ax| matches!(ax, AxisPattern::Rank(_))) {
                 // rank-polymorphic array: any non-zero dim
                 return format!("{arg}.dim > 0");
@@ -642,10 +642,11 @@ fn shape_match_condition(shape: &TypePattern, arg: &str) -> String {
     }
 }
 
-fn wrapper_call_arg(shape: &TypePattern, arg: &str, base: &BaseType) -> String {
-    match shape {
-        TypePattern::Scalar => format!("(*({}*){}.data)", base.ctype(), arg),
-        TypePattern::Axes(_) => arg.to_owned(),
+fn wrapper_call_arg(ty: &Type, arg: &str, base: &BaseType) -> String {
+    if let Some(_) = ty.type_pattern() {
+        format!("(*({}*){}.data)", base.ctype(), arg)
+    } else {
+        arg.to_owned()
     }
 }
 

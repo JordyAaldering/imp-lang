@@ -76,7 +76,7 @@ pub struct TypeInfer {
 pub enum InferenceError {
     SelectionIndexNotVector { ty: Type },
     SelectionIndexNotInteger { ty: Type },
-    SelectionRankTooSmall { needed: usize, known_min_rank: Option<usize>, shape: TypePattern },
+    SelectionRankTooSmall { needed: usize, known_min_rank: Option<usize>, shape: AxisPattern },
     InhomogeneousArray { element: usize, expected: Type, found: Type },
     UndefinedFunction { name: String },
     NoMatchingOverload { name: String, arg_bases: BaseSignature },
@@ -121,14 +121,14 @@ impl TypeInfer {
 
         let leading = AxisPattern::Dim(DimCapture::Known(count));
         let result_shape = match &elem_shape {
-            TypePattern::Scalar => {
-                TypePattern::Axes(vec![leading])
+            AxisPattern::Scalar => {
+                AxisPattern::Axes(vec![leading])
             }
-            TypePattern::Axes(axes) => {
+            AxisPattern::Axes(axes) => {
                 let mut new_axes = Vec::with_capacity(1 + axes.len());
                 new_axes.push(leading);
                 new_axes.extend_from_slice(axes);
-                TypePattern::Axes(new_axes)
+                AxisPattern::Axes(new_axes)
             }
         };
 
@@ -137,15 +137,15 @@ impl TypeInfer {
 
     fn tensor_iv_and_dims(ub_ty: &Type) -> (Type, Option<usize>) {
         match &ub_ty.shape {
-            TypePattern::Scalar => unreachable!("cannot iterate over scalar ub"),
-            TypePattern::Axes(axes) if axes.len() == 1 && matches!(axes[0], AxisPattern::Dim(_)) => {
+            AxisPattern::Scalar => unreachable!("cannot iterate over scalar ub"),
+            AxisPattern::Axes(axes) if axes.len() == 1 && matches!(axes[0], AxisPattern::Dim(_)) => {
                 match &axes[0] {
                     AxisPattern::Dim(DimCapture::Known(k)) => (Type::vector_dim(ub_ty.basetype.clone(), DimCapture::Known(*k)), Some(*k)),
                     AxisPattern::Dim(DimCapture::Var(name)) => (Type::vector_dim(ub_ty.basetype.clone(), DimCapture::Var(name.clone())), None),
                     _ => unreachable!("unexpected axis pattern inside Dim guard"),
                 }
             }
-            _ => (Type { basetype: ub_ty.basetype.clone(), shape: TypePattern::any() }, None),
+            _ => (Type { basetype: ub_ty.basetype.clone(), shape: AxisPattern::any() }, None),
         }
     }
 
@@ -154,13 +154,13 @@ impl TypeInfer {
             return elem_ty;
         }
         let result_shape = match elem_ty.shape {
-            TypePattern::Scalar => {
-                TypePattern::Axes(leading_axes)
+            AxisPattern::Scalar => {
+                AxisPattern::Axes(leading_axes)
             }
-            TypePattern::Axes(elem_axes) => {
+            AxisPattern::Axes(elem_axes) => {
                 let mut new_axes = leading_axes;
                 new_axes.extend(elem_axes);
-                TypePattern::Axes(new_axes)
+                AxisPattern::Axes(new_axes)
             }
         };
         Type { basetype: elem_ty.basetype, shape: result_shape }
@@ -312,7 +312,7 @@ impl<'ast> Traverse<'ast> for TypeInfer {
 
         let (target, runtime_dispatch) = self.resolve_overload(&call.id, &arg_types);
         let out_ty = if runtime_dispatch {
-            Type { basetype: target.ret_type.basetype.clone(), shape: TypePattern::any() }
+            Type { basetype: target.ret_type.basetype.clone(), shape: AxisPattern::any() }
         } else {
             target.ret_type.clone()
         };
@@ -411,7 +411,7 @@ impl<'ast> Traverse<'ast> for TypeInfer {
             Some(axes) => Self::tensor_result_type(ret_ty, axes),
             None => Type {
                 basetype: ret_ty.basetype,
-                shape: TypePattern::any(),
+                shape: AxisPattern::any(),
             },
         };
 
@@ -435,7 +435,7 @@ impl<'ast> Traverse<'ast> for TypeInfer {
                 let arg_types = vec![neutral_ty.clone(), neutral_ty.clone()];
                 let (target, runtime_dispatch) = self.resolve_overload(&id, &arg_types);
                 let out_ty = if runtime_dispatch {
-                    Type { basetype: target.ret_type.basetype.clone(), shape: TypePattern::any() }
+                    Type { basetype: target.ret_type.basetype.clone(), shape: AxisPattern::any() }
                 } else {
                     target.ret_type.clone()
                 };
@@ -493,11 +493,11 @@ fn types_compatible(expected: &Type, provided: &Type) -> bool {
     expected.basetype == provided.basetype && shapes_compatible(&expected.shape, &provided.shape)
 }
 
-fn shapes_compatible(expected: &TypePattern, provided: &TypePattern) -> bool {
+fn shapes_compatible(expected: &AxisPattern, provided: &AxisPattern) -> bool {
     let has_rank = |axes: &[AxisPattern]| axes.iter().any(|a| matches!(a, AxisPattern::Rank(_)));
     match (expected, provided) {
-        (TypePattern::Scalar, TypePattern::Scalar) => true,
-        (TypePattern::Axes(exp_axes), TypePattern::Axes(prov_axes)) => {
+        (AxisPattern::Scalar, AxisPattern::Scalar) => true,
+        (AxisPattern::Axes(exp_axes), AxisPattern::Axes(prov_axes)) => {
             if has_rank(exp_axes) || has_rank(prov_axes) {
                 return true;
             }
@@ -571,7 +571,7 @@ enum ShapeRel {
     Incomparable,
 }
 
-fn shape_relation(a: &TypePattern, b: &TypePattern) -> ShapeRel {
+fn shape_relation(a: &AxisPattern, b: &AxisPattern) -> ShapeRel {
     if shape_more_or_equal(a, b) {
         if shape_more_or_equal(b, a) {
             ShapeRel::Equal
@@ -585,12 +585,12 @@ fn shape_relation(a: &TypePattern, b: &TypePattern) -> ShapeRel {
     }
 }
 
-fn shape_more_or_equal(a: &TypePattern, b: &TypePattern) -> bool {
+fn shape_more_or_equal(a: &AxisPattern, b: &AxisPattern) -> bool {
     match (a, b) {
-        (TypePattern::Scalar, TypePattern::Scalar) => true,
-        (TypePattern::Scalar, TypePattern::Axes(axes)) => axes.iter().any(|axis| matches!(axis, AxisPattern::Rank(_))),
-        (TypePattern::Axes(a_axes), TypePattern::Scalar) => a_axes.iter().any(|axis| matches!(axis, AxisPattern::Rank(_))),
-        (TypePattern::Axes(a_axes), TypePattern::Axes(b_axes)) => axes_more_or_equal(a_axes, b_axes),
+        (AxisPattern::Scalar, AxisPattern::Scalar) => true,
+        (AxisPattern::Scalar, AxisPattern::Axes(axes)) => axes.iter().any(|axis| matches!(axis, AxisPattern::Rank(_))),
+        (AxisPattern::Axes(a_axes), AxisPattern::Scalar) => a_axes.iter().any(|axis| matches!(axis, AxisPattern::Rank(_))),
+        (AxisPattern::Axes(a_axes), AxisPattern::Axes(b_axes)) => axes_more_or_equal(a_axes, b_axes),
     }
 }
 
@@ -632,8 +632,8 @@ fn dim_more_or_equal(a: &DimCapture, b: &DimCapture) -> bool {
 
 fn type_requires_runtime_dispatch(ty: &Type) -> bool {
     match &ty.shape {
-        TypePattern::Axes(axes) => axes.iter().any(axis_requires_runtime_dispatch),
-        TypePattern::Scalar => false,
+        AxisPattern::Axes(axes) => axes.iter().any(axis_requires_runtime_dispatch),
+        AxisPattern::Scalar => false,
     }
 }
 

@@ -377,7 +377,7 @@ enum ShapeRel {
     Incomparable,
 }
 
-fn shape_relation(a: &TypePattern, b: &TypePattern) -> ShapeRel {
+fn shape_relation(a: &AxisPattern, b: &AxisPattern) -> ShapeRel {
     if shape_more_or_equal(a, b) {
         if shape_more_or_equal(b, a) {
             ShapeRel::Equal
@@ -391,12 +391,12 @@ fn shape_relation(a: &TypePattern, b: &TypePattern) -> ShapeRel {
     }
 }
 
-fn shape_more_or_equal(a: &TypePattern, b: &TypePattern) -> bool {
+fn shape_more_or_equal(a: &AxisPattern, b: &AxisPattern) -> bool {
     match (a, b) {
-        (TypePattern::Scalar, TypePattern::Scalar) => true,
-        (TypePattern::Scalar, TypePattern::Axes(axes)) => axes.iter().any(|axis| matches!(axis, AxisPattern::Rank(_))),
-        (TypePattern::Axes(a_axes), TypePattern::Scalar) => a_axes.iter().any(|axis| matches!(axis, AxisPattern::Rank(_))),
-        (TypePattern::Axes(a_axes), TypePattern::Axes(b_axes)) => axes_more_or_equal(a_axes, b_axes),
+        (AxisPattern::Scalar, AxisPattern::Scalar) => true,
+        (AxisPattern::Scalar, AxisPattern::Axes(axes)) => axes.iter().any(|axis| matches!(axis, AxisPattern::Rank(_))),
+        (AxisPattern::Axes(a_axes), AxisPattern::Scalar) => a_axes.iter().any(|axis| matches!(axis, AxisPattern::Rank(_))),
+        (AxisPattern::Axes(a_axes), AxisPattern::Axes(b_axes)) => axes_more_or_equal(a_axes, b_axes),
     }
 }
 
@@ -440,11 +440,11 @@ fn types_compatible(expected: &Type, provided: &Type) -> bool {
     expected.basetype == provided.basetype && shapes_compatible(&expected.shape, &provided.shape)
 }
 
-fn shapes_compatible(expected: &TypePattern, provided: &TypePattern) -> bool {
+fn shapes_compatible(expected: &AxisPattern, provided: &AxisPattern) -> bool {
     let has_rank = |axes: &[AxisPattern]| axes.iter().any(|a| matches!(a, AxisPattern::Rank(_)));
     match (expected, provided) {
-        (TypePattern::Scalar, TypePattern::Scalar) => true,
-        (TypePattern::Axes(exp_axes), TypePattern::Axes(prov_axes)) => {
+        (AxisPattern::Scalar, AxisPattern::Scalar) => true,
+        (AxisPattern::Axes(exp_axes), AxisPattern::Axes(prov_axes)) => {
             if has_rank(exp_axes) || has_rank(prov_axes) {
                 return true;
             }
@@ -476,8 +476,8 @@ fn dims_compatible(expected: &DimCapture, provided: &DimCapture) -> bool {
 
 fn type_requires_runtime_dispatch(ty: &Type) -> bool {
     match &ty.shape {
-        TypePattern::Axes(axes) => axes.iter().any(axis_requires_runtime_dispatch),
-        TypePattern::Scalar => false,
+        AxisPattern::Axes(axes) => axes.iter().any(axis_requires_runtime_dispatch),
+        AxisPattern::Scalar => false,
     }
 }
 

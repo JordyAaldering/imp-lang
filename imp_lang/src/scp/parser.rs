@@ -522,18 +522,17 @@ impl<'src, 'ast> Parser<'src, 'ast> {
     }
 
     fn parse_type(&mut self) -> ParseResult<(Type, Span)> {
-        let (base, span_from) = self.parse_basetype()?;
+        let (basetype, span_from) = self.parse_basetype()?;
 
         if self.matches(&Token::LSquare).is_none() {
-            let ty = Type::scalar(base);
+            let ty = Type::scalar(basetype);
             return Ok((ty, span_from));
         }
 
         let (axes, _) = self.parse_items(Token::Comma, |p| p.parse_axis())?;
         let span_to = self.expect(Token::RSquare)?;
 
-        let shape = TypePattern::Axes(axes);
-        let ty = Type { basetype: base, shape };
+        let ty = Type::new(basetype, axes);
         Ok((ty, span_from.to(&span_to)))
     }
 
@@ -558,10 +557,10 @@ impl<'src, 'ast> Parser<'src, 'ast> {
     fn parse_axis(&mut self) -> ParseResult<(AxisPattern, Span)> {
         let (token, span) = self.next()?;
         let pattern = match token {
-            Token::NatValue(n) => {
-                AxisPattern::Dim(DimCapture::Known(n as usize))
+            Token::NatValue(len) => {
+                AxisPattern::FixedLength { len }
             }
-            Token::Identifier(name) => {
+            Token::Identifier(id) => {
                 if self.matches(&Token::Gt).is_some() || self.matches(&Token::Ge).is_some() {
                     match self.next()? {
                         (Token::NatValue(_), _) => {}
@@ -574,19 +573,13 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                         }
                     }
                     self.expect(Token::Colon)?;
-                    let (shp_name, _) = self.parse_id()?;
-                    AxisPattern::Rank(RankCapture {
-                        dim: DimCapture::Var(name),
-                        shp: shp_name,
-                    })
+                    let (shp, _) = self.parse_id()?;
+                    AxisPattern::VariableRank { dim: id, shp }
                 } else if self.matches(&Token::Colon).is_some() {
-                    let (shp_name, _) = self.parse_id()?;
-                    AxisPattern::Rank(RankCapture {
-                        dim: DimCapture::Var(name),
-                        shp: shp_name,
-                    })
+                    let (shp, _) = self.parse_id()?;
+                    AxisPattern::VariableRank { dim: id, shp }
                 } else {
-                    AxisPattern::Dim(DimCapture::Var(name))
+                    AxisPattern::VariableLength { len: id }
                 }
             }
             _ => {
