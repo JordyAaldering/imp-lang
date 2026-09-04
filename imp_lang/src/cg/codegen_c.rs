@@ -121,7 +121,7 @@ impl CompileC {
             let condition = fundef.args
                 .iter()
                 .enumerate()
-                .map(|(i, arg)| shape_match_condition(&arg.ty.shape, &format!("arg{i}")))
+                .map(|(i, arg)| shape_match_condition(&arg.ty, &format!("arg{i}")))
                 .collect::<Vec<_>>()
                 .join(" && ");
 
@@ -164,15 +164,7 @@ impl CompileC {
 
     fn emit_return(&mut self, ret: Id<'_, TypedAst>) {
         let name = self.render_id(ret);
-        let declared_ty = self.ret_type.clone().unwrap_or_else(|| self.id_type(&ret));
-
-        if declared_ty.is_array() && false {
-            // The array is already allocated, I don't see why we would need to clone it
-            let elem_type = declared_ty.basetype.ctype();
-            self.push_line(&format!("return imp_clone_array_raw({name}, sizeof({elem_type}));"));
-        } else {
-            self.push_line(&format!("return {};", name));
-        }
+        self.push_line(&format!("return {name};"));
     }
 }
 
@@ -618,27 +610,24 @@ impl<'ast> Traverse<'ast> for CompileC {
     }
 }
 
-fn shape_match_condition(shape: &AxisPattern, arg: &str) -> String {
-    match shape {
-        AxisPattern::Scalar => {
-            format!("{arg}.dim == 0")
-        }
-        AxisPattern::Axes(axes) => {
-            if axes.iter().any(|ax| matches!(ax, AxisPattern::Rank(_))) {
-                // rank-polymorphic array: any non-zero dim
-                return format!("{arg}.dim > 0");
-            }
-
+fn shape_match_condition(ty: &Type, arg: &str) -> String {
+    if let Some(axes) = ty.type_pattern() {
+        if axes.iter().any(|axis| matches!(axis, AxisPattern::VariableRank { .. })) {
+            format!("{arg}.dim > 0")
+        } else {
             let mut checks = vec![
                 format!("{arg}.dim == {}", axes.len()),
             ];
             for (i, axis) in axes.iter().enumerate() {
-                if let AxisPattern::Dim(DimCapture::Known(v)) = axis {
-                    checks.push(format!("{arg}.shp[{i}] == {v}"));
+                match axis {
+                    AxisPattern::FixedLength { len } => checks.push(format!("{arg}.shp[{i}] == {len}")),
+                    _ => {},
                 }
             }
             checks.join(" && ")
         }
+    } else {
+        format!("{arg}.dim == 0")
     }
 }
 
