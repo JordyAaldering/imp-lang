@@ -1,5 +1,7 @@
 use std::fmt;
 
+use crate::either::Either;
+
 #[derive(Clone, Debug)]
 pub struct Type {
     pub basetype: BaseType,
@@ -83,7 +85,7 @@ impl Type {
 
     pub fn get_vector(&self) -> Option<&AxisPattern> {
         match &self.shape.0[..] {
-            [axis] if axis.rank() == Some(1) => Some(axis),
+            [axis] if axis.rank().try_left() == Some(1) => Some(axis),
             _ => None,
         }
     }
@@ -199,7 +201,7 @@ impl TypePattern {
     pub fn min_rank(&self) -> usize {
         self.0
             .iter()
-            .map(|axis| axis.rank().unwrap_or(0))
+            .map(|axis| axis.rank().left_or(0))
             .sum()
     }
 
@@ -208,7 +210,7 @@ impl TypePattern {
         self.0
             .iter()
             .try_fold(0, |acc, axis| {
-                if let Some(dim) = axis.rank() {
+                if let Either::Left(dim) = axis.rank() {
                     Some(acc + dim)
                 } else {
                     None
@@ -218,12 +220,12 @@ impl TypePattern {
 }
 
 impl AxisPattern {
-    pub fn rank(&self) -> Option<usize> {
+    pub fn rank(&self) -> Either<usize, Option<&str>> {
         match self {
-            AxisPattern::VariableRank { .. } => None,
-            AxisPattern::FixedRank { dim, .. } => Some(*dim),
-            AxisPattern::VariableLength { .. } => Some(1),
-            AxisPattern::FixedLength { .. } => Some(1),
+            Self::VariableRank { dim, .. } => Either::Right(dim.as_deref()),
+            Self::FixedRank { dim, .. } => Either::Left(*dim),
+            Self::VariableLength { .. } => Either::Left(1),
+            Self::FixedLength { .. } => Either::Left(1),
         }
     }
 }

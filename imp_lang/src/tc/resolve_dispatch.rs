@@ -440,7 +440,7 @@ fn types_compatible(expected: &Type, provided: &Type) -> bool {
     expected.basetype == provided.basetype && shapes_compatible(&expected.shape, &provided.shape)
 }
 
-fn shapes_compatible(expected: &AxisPattern, provided: &AxisPattern) -> bool {
+fn shapes_compatible(expected: &TypePattern, provided: &TypePattern) -> bool {
     let has_rank = |axes: &[AxisPattern]| axes.iter().any(|a| matches!(a, AxisPattern::Rank(_)));
     match (expected, provided) {
         (AxisPattern::Scalar, AxisPattern::Scalar) => true,
