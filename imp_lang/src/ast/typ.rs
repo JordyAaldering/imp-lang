@@ -9,7 +9,7 @@ pub struct Type {
 }
 
 #[derive(Clone, Debug)]
-pub struct TypePattern(Vec<AxisPattern>);
+pub struct TypePattern(pub Vec<AxisPattern>);
 
 #[derive(Clone, Debug)]
 pub enum AxisPattern {
