@@ -118,7 +118,7 @@ impl TypeInfer {
             }
         }
 
-        let leading = AxisPattern::FixedLength { len: count };
+        let leading = AxisPattern::DimPattern { len: RankCapture::Fixed(count) };
         let result_shape = if let Some(axes) = first.type_pattern() {
             // (Potentially) non-scalar
             let mut new_axes = Vec::with_capacity(1 + axes.len());
@@ -136,18 +136,17 @@ impl TypeInfer {
     fn tensor_iv_and_dims(ub_ty: &Type) -> (Type, Option<usize>) {
         if let Some(axis) = ub_ty.get_vector() {
             match axis {
-                AxisPattern::VariableRank { .. } => unreachable!(),
-                AxisPattern::FixedRank { dim, shp: _ } => {
-                    debug_assert!(*dim == 1);
-                    todo!()
-                }
-                AxisPattern::VariableLength { len } => {
-                    let ty = Type::akd_vector(ub_ty.basetype.clone(), len.as_ref());
-                    (ty, None)
-                }
-                AxisPattern::FixedLength { len } => {
+                RankCapture::Fixed(len) => {
                     let ty = Type::aks_vector(ub_ty.basetype.clone(), *len);
                     (ty, Some(*len))
+                }
+                RankCapture::Var(len) => {
+                    let ty = Type::akd_vector(ub_ty.basetype.clone(), RankCapture::Var(len.clone()));
+                    (ty, None)
+                }
+                RankCapture::Free => {
+                    let ty = Type::akd_vector(ub_ty.basetype.clone(), RankCapture::Free);
+                    (ty, None)
                 }
             }
         } else {
@@ -185,15 +184,15 @@ impl TypeInfer {
         let mut axes = Vec::with_capacity(elems.len());
         for elem in &elems {
             let dp = match elem {
-                Id::Arg(i) => AxisPattern::VariableLength { len: Some(self.args[*i].id.clone()) },
+                Id::Arg(i) => AxisPattern::DimPattern { len: RankCapture::Var(self.args[*i].id.clone()) },
                 Id::Var(v) => {
                     let known_usize = v.ssa.and_then(|cell| match &*cell.borrow() {
                         Expr::Const(Const::Usize(val)) => Some(*val),
                         _ => None,
                     });
                     match known_usize {
-                        Some(val) => AxisPattern::FixedLength { len: val },
-                        None => AxisPattern::VariableLength { len: Some(v.name.clone()) },
+                        Some(val) => AxisPattern::DimPattern { len: RankCapture::Fixed(val) },
+                        None => AxisPattern::DimPattern { len: RankCapture::Var(v.name.clone()) },
                     }
                 }
             };
@@ -338,7 +337,7 @@ impl<'ast> Traverse<'ast> for TypeInfer {
                         provided: arr_ty,
                     });
                 }
-                Type::akd_vector(BaseType::Usize, None)
+                Type::akd_vector(BaseType::Usize, RankCapture::Free)
             }
             DimA(arr) => {
                 let arr_ty = self.trav_id(arr);
@@ -405,7 +404,7 @@ impl<'ast> Traverse<'ast> for TypeInfer {
         let (iv_ty, leading_k) = Self::tensor_iv_and_dims(&ub_ty);
 
         let leading_axes: Option<Vec<AxisPattern>> = ub_named_axes.or_else(|| {
-            leading_k.map(|k| (0..k).map(|_| AxisPattern::VariableLength { len: None }).collect())
+            leading_k.map(|k| (0..k).map(|_| AxisPattern::DimPattern { len: RankCapture::Free }).collect())
         });
 
         *tensor.iv.ty.borrow_mut() = Some(iv_ty);
@@ -505,85 +504,8 @@ fn shapes_compatible(expected: &TypePattern, provided: &TypePattern) -> bool {
         .iter()
         .zip(provided.0.iter())
         .all(|(e, p)| match (e, p) {
-            (
-                AxisPattern::FixedLength { len: el },
-                AxisPattern::FixedLength { len: pl },
-            ) => el == pl,
-
-            (
-                AxisPattern::VariableLength { len: ed },
-                AxisPattern::VariableLength { len: pd },
-            ) => dims_compatible(ed, pd),
-
-            (
-                AxisPattern::VariableLength { .. },
-                AxisPattern::FixedLength { .. },
-            ) => true,
-
-            (
-                AxisPattern::FixedLength { .. },
-                AxisPattern::VariableLength { .. },
-            ) => true,
-
-            (
-                AxisPattern::VariableRank { .. },
-                _,
-            ) => true,
-
-            (
-                _,
-                AxisPattern::VariableRank { .. },
-            ) => true,
-
-            (
-                AxisPattern::FixedRank { dim: ed, shp: es },
-                AxisPattern::FixedRank { dim: pd, shp: ps },
-            ) => {
-                ed == pd
-                    && dims_compatible(es, ps)
-            }
-
             _ => false,
         })
-}
-
-fn axis_compatible(expected: &AxisPattern, provided: &AxisPattern) -> bool {
-    match (expected, provided) {
-        (
-            AxisPattern::FixedLength { len: a },
-            AxisPattern::FixedLength { len: b },
-        ) => a == b,
-
-        (
-            AxisPattern::VariableLength { .. },
-            AxisPattern::FixedLength { .. },
-        ) => true,
-
-        (
-            AxisPattern::FixedLength { .. },
-            AxisPattern::VariableLength { .. },
-        ) => true,
-
-        (
-            AxisPattern::VariableLength { .. },
-            AxisPattern::VariableLength { .. },
-        ) => true,
-
-        (AxisPattern::VariableRank { .. }, _) => true,
-        (_, AxisPattern::VariableRank { .. }) => true,
-
-        (AxisPattern::FixedRank { .. }, _) => true,
-        (_, AxisPattern::FixedRank { .. }) => true,
-    }
-}
-
-fn dims_compatible(a: &Option<String>, b: &Option<String>) -> bool {
-    match (a, b) {
-        // Anonymous matches anything.
-        (None, _) | (_, None) => true,
-        // Named dimensions must match the same capture.
-        (Some(a), Some(b)) => a == b,
-    }
 }
 
 fn maximal_candidates<'a>(candidates: &[&'a DispatchStub]) -> Vec<&'a DispatchStub> {
@@ -630,13 +552,6 @@ enum ShapeRel {
     Incomparable,
 }
 
-fn shape_more_or_equal(a: &TypePattern, b: &TypePattern) -> bool {
-    match shape_relation(a, b) {
-        ShapeRel::Equal | ShapeRel::Greater => true,
-        ShapeRel::Less | ShapeRel::Incomparable => false,
-    }
-}
-
 fn shape_relation(a: &TypePattern, b: &TypePattern) -> ShapeRel {
     let a_axes = &a.0;
     let b_axes = &b.0;
@@ -663,66 +578,9 @@ fn shape_relation(a: &TypePattern, b: &TypePattern) -> ShapeRel {
     }
 }
 
-fn axes_more_or_equal(a: &TypePattern, b: &TypePattern) -> bool {
-    let a_rank = a.rank();
-    let b_rank = b.rank();
-
-    match (a_rank, b_rank) {
-        (Some(a_r), Some(b_r)) => a_r >= b_r,
-        (None, None) => true,
-        _ => false,
-    }
-}
-
 fn axis_more_or_equal(a: &AxisPattern, b: &AxisPattern) -> bool {
     match (a, b) {
-        // Fixed rank is more specific than variable rank.
-        (_, AxisPattern::VariableRank { .. }) => true,
-        (AxisPattern::VariableRank { .. }, _) => false,
-
-        // Fixed-rank vs fixed-rank.
-        (
-            AxisPattern::FixedRank { dim: ad, shp: ashp },
-            AxisPattern::FixedRank { dim: bd, shp: bshp },
-        ) => ad == bd && ashp == bshp,
-
-        // Length patterns.
-        (
-            AxisPattern::VariableLength { len: al },
-            AxisPattern::VariableLength { len: bl },
-        ) => dim_more_or_equal(al, bl),
-
-        (
-            AxisPattern::FixedLength { .. },
-            AxisPattern::VariableLength { .. },
-        ) => true,
-
-        (
-            AxisPattern::FixedLength { len: al },
-            AxisPattern::FixedLength { len: bl },
-        ) => al == bl,
-
-        (
-            AxisPattern::VariableLength { .. },
-            AxisPattern::FixedLength { .. },
-        ) => false,
-
-        // Length and rank patterns are fundamentally different.
         _ => false,
-    }
-}
-
-fn dim_more_or_equal(a: &Option<String>, b: &Option<String>) -> bool {
-    match (a, b) {
-        // Any named capture is more specific than an anonymous one.
-        (Some(_), None) => true,
-        // Anonymous is less specific than a named capture.
-        (None, Some(_)) => false,
-        // Two anonymous dimensions are equally specific.
-        (None, None) => true,
-        // Two named dimensions are comparable only if they are the same
-        // capture variable.
-        (Some(a), Some(b)) => a == b,
     }
 }
 
@@ -735,8 +593,8 @@ fn type_requires_runtime_dispatch(ty: &Type) -> bool {
 
 fn axis_requires_runtime_dispatch(axis: &AxisPattern) -> bool {
     match axis {
-        AxisPattern::VariableRank { .. } => true,
-        AxisPattern::VariableLength { len } => len.is_some(),
-        _ => false,
+        AxisPattern::ShapePattern { .. } => true,
+        AxisPattern::DimPattern { len: RankCapture::Fixed(_) } => false,
+        AxisPattern::DimPattern { len: _ } => true,
     }
 }

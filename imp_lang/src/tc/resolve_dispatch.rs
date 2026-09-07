@@ -402,140 +402,14 @@ fn shape_more_or_equal(a: &TypePattern, b: &TypePattern) -> bool {
         .all(|(a_axis, b_axis)| axis_more_or_equal(a_axis, b_axis))
 }
 
-fn axes_more_or_equal(a: &TypePattern, b: &TypePattern) -> bool {
-    let a_rank = a.rank();
-    let b_rank = b.rank();
-
-    match (a_rank, b_rank) {
-        (Some(a_rank), Some(b_rank)) => a_rank == b_rank,
-        (None, None) => true,
-        _ => false,
-    }
-
-}
-
-fn dim_more_or_equal(a: &Option<String>, b: &Option<String>) -> bool {
-    match (a, b) {
-        // Named capture is more specific than anonymous.
-        (Some(_), None) => true,
-
-        // Anonymous is less specific than named.
-        (None, Some(_)) => false,
-
-        // Two anonymous dimensions are equally specific.
-        (None, None) => true,
-
-        // Two named dimensions are comparable only if they are
-        // the same capture.
-        (Some(a), Some(b)) => a == b,
-    }
-}
-
 fn axis_more_or_equal(a: &AxisPattern, b: &AxisPattern) -> bool {
     match (a, b) {
-        (
-            AxisPattern::FixedLength { len: al },
-            AxisPattern::FixedLength { len: bl },
-        ) => al == bl,
-
-        (
-            AxisPattern::FixedLength { .. },
-            AxisPattern::VariableLength { .. },
-        ) => true,
-
-        (
-            AxisPattern::VariableLength { .. },
-            AxisPattern::FixedLength { .. },
-        ) => false,
-
-        (
-            AxisPattern::VariableLength { len: al },
-            AxisPattern::VariableLength { len: bl },
-        ) => dim_more_or_equal(al, bl),
-
-        (
-            AxisPattern::FixedRank { dim: ad, shp: ashp },
-            AxisPattern::FixedRank { dim: bd, shp: bshp },
-        ) => {
-            ad == bd
-                && dim_more_or_equal(ashp, bshp)
-        }
-
-        (
-            AxisPattern::FixedRank { .. },
-            AxisPattern::VariableRank { .. },
-        ) => true,
-
-        (
-            AxisPattern::VariableRank { .. },
-            AxisPattern::FixedRank { .. },
-        ) => false,
-
-        (
-            AxisPattern::VariableRank { dim: ad, shp: ashp },
-            AxisPattern::VariableRank { dim: bd, shp: bshp },
-        ) => {
-            dim_more_or_equal(ad, bd)
-                && dim_more_or_equal(ashp, bshp)
-        }
-
         _ => false,
     }
 }
 
 fn types_compatible(expected: &Type, provided: &Type) -> bool {
     expected.basetype == provided.basetype && shape_more_or_equal(&expected.shape, &provided.shape)
-}
-
-fn dims_compatible(a: &Option<String>, b: &Option<String>) -> bool {
-    match (a, b) {
-        (None, _) | (_, None) => true,
-        (Some(a), Some(b)) => a == b,
-    }
-}
-
-fn axes_compatible(expected: &AxisPattern, provided: &AxisPattern) -> bool {
-    match (expected, provided) {
-        (
-            AxisPattern::FixedLength { len: e },
-            AxisPattern::FixedLength { len: p },
-        ) => e == p,
-
-        (
-            AxisPattern::VariableLength { len: e },
-            AxisPattern::VariableLength { len: p },
-        ) => dims_compatible(e, p),
-
-        (
-            AxisPattern::VariableLength { .. },
-            AxisPattern::FixedLength { .. },
-        ) => true,
-
-        (
-            AxisPattern::FixedLength { .. },
-            AxisPattern::VariableLength { .. },
-        ) => true,
-
-        (
-            AxisPattern::FixedRank { dim: ed, shp: es },
-            AxisPattern::FixedRank { dim: pd, shp: ps },
-        ) => {
-            ed == pd
-                && dims_compatible(es, ps)
-        }
-
-        (
-            AxisPattern::FixedRank { .. },
-            AxisPattern::VariableRank { .. },
-        ) => true,
-
-        (
-            AxisPattern::VariableRank { .. },
-            AxisPattern::FixedRank { .. },
-        ) => true,
-
-        _ => todo!()
-    }
 }
 
 fn type_requires_runtime_dispatch(ty: &Type) -> bool {
@@ -547,14 +421,7 @@ fn type_requires_runtime_dispatch(ty: &Type) -> bool {
 
 fn axis_requires_runtime_dispatch(axis: &AxisPattern) -> bool {
     match axis {
-        AxisPattern::FixedLength { .. } => false,
-
-        AxisPattern::VariableLength { len } => len.is_some(),
-
-        AxisPattern::FixedRank { dim: _, shp } => {
-            shp.is_some()
-        }
-
-        AxisPattern::VariableRank { .. } => true,
+        AxisPattern::DimPattern { .. } => false,
+        AxisPattern::ShapePattern { .. } => true,
     }
 }

@@ -558,7 +558,8 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         let (token, span) = self.next()?;
         let pattern = match token {
             Token::NatValue(len) => {
-                AxisPattern::FixedLength { len }
+                let len = RankCapture::Fixed(len);
+                AxisPattern::DimPattern { len }
             }
             Token::Identifier(id) => {
                 if self.matches(&Token::Gt).is_some() || self.matches(&Token::Ge).is_some() {
@@ -574,17 +575,17 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                     }
                     self.expect(Token::Colon)?;
                     let (shp, _) = self.parse_id()?;
-                    let dim = if id == "_" { None } else { Some(id) };
+                    let dim = if id == "_" { RankCapture::Free } else { RankCapture::Var(id) };
                     let shp = if shp == "_" { None } else { Some(shp) };
-                    AxisPattern::VariableRank { dim, shp }
+                    AxisPattern::ShapePattern { dim, shp }
                 } else if self.matches(&Token::Colon).is_some() {
                     let (shp, _) = self.parse_id()?;
-                    let dim = if id == "_" { None } else { Some(id) };
+                    let dim = if id == "_" { RankCapture::Free } else { RankCapture::Var(id) };
                     let shp = if shp == "_" { None } else { Some(shp) };
-                    AxisPattern::VariableRank { dim, shp }
+                    AxisPattern::ShapePattern { dim, shp }
                 } else {
-                    let len = if id == "_" { None } else { Some(id) };
-                    AxisPattern::VariableLength { len }
+                    let len = if id == "_" { RankCapture::Free } else { RankCapture::Var(id) };
+                    AxisPattern::DimPattern { len }
                 }
             }
             _ => {

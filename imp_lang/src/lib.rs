@@ -1,6 +1,5 @@
 mod phase;
 mod trav_name;
-mod either;
 mod ast;
 mod trav;
 mod show;

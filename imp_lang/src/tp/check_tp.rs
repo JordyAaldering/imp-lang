@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::ast::{AxisPattern::VariableRank, *};
+use crate::ast::{AxisPattern::ShapePattern, *};
 
 /// Not all patterns that can be constructed from the grammar are actually resolvable.
 /// This pass rejects unresolved variable-rank patterns (`d:shp`) at compile time.
@@ -69,8 +69,8 @@ impl CheckTypePatterns {
 
 		for axis in axes {
 			match axis {
-				AxisPattern::VariableRank { dim, shp } => {
-					if let Some(dim) = dim {
+				AxisPattern::ShapePattern { dim, shp } => {
+					if let RankCapture::Var(dim) = dim {
 						if !defined_symbols.contains(dim) {
 							*unconstrained_rank_captures += 1;
 						}
@@ -81,16 +81,11 @@ impl CheckTypePatterns {
 					if let Some(shp) = shp {
 						defined_symbols.insert(shp.clone());
 					}
-				},
-				AxisPattern::FixedRank { dim: _, shp: _ } => {
-					todo!()
-				},
-				AxisPattern::VariableLength { len } => {
-					if let Some(len) = len {
-						defined_symbols.insert(len.clone());
-					}
-				},
-				AxisPattern::FixedLength { len: _ } => {},
+				}
+				AxisPattern::DimPattern { len: RankCapture::Var(len) } => {
+					defined_symbols.insert(len.clone());
+				}
+				AxisPattern::DimPattern { len: _ } => {}
 			}
 		}
 	}
@@ -101,7 +96,7 @@ impl CheckTypePatterns {
 		};
 
 		for axis in axes {
-			if let VariableRank { dim: Some(dim), shp: _ } = axis
+			if let ShapePattern { dim: RankCapture::Var(dim), shp: _ } = axis
 				&& !defined_symbols.contains(dim)
 			{
 				self.errors.push(format!(

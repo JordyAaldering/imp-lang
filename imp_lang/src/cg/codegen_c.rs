@@ -138,7 +138,7 @@ impl CompileC {
                 .collect();
             let call_expr = format!("IMP_{}({})", fundef.name, call_args.join(", "));
 
-            if fundef.ret_type.is_array().unwrap_or(true) {
+            if fundef.ret_type.is_maybe_array() {
                 self.push_line(&format!("return {call_expr};"));
             } else {
                 // Scalar return: wrap in a 0-d ImpArrayRaw (dim=0, len=1, shp=NULL)
@@ -612,7 +612,7 @@ impl<'ast> Traverse<'ast> for CompileC {
 
 fn shape_match_condition(ty: &Type, arg: &str) -> String {
     if let Some(axes) = ty.type_pattern() {
-        if axes.iter().any(|axis| matches!(axis, AxisPattern::VariableRank { .. })) {
+        if axes.iter().any(|axis| matches!(axis, AxisPattern::ShapePattern { .. })) {
             format!("{arg}.dim > 0")
         } else {
             let mut checks = vec![
@@ -620,7 +620,7 @@ fn shape_match_condition(ty: &Type, arg: &str) -> String {
             ];
             for (i, axis) in axes.iter().enumerate() {
                 match axis {
-                    AxisPattern::FixedLength { len } => checks.push(format!("{arg}.shp[{i}] == {len}")),
+                    AxisPattern::DimPattern { len } => checks.push(format!("{arg}.shp[{i}] == {len}")),
                     _ => {},
                 }
             }

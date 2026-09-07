@@ -1,7 +1,5 @@
 use std::fmt;
 
-use crate::either::Either;
-
 #[derive(Clone, Debug)]
 pub struct Type {
     pub basetype: BaseType,
@@ -13,30 +11,22 @@ pub struct TypePattern(pub Vec<AxisPattern>);
 
 #[derive(Clone, Debug)]
 pub enum AxisPattern {
-    /// Variable-rank-and-shape capture: `d:shp`
-    ///
-    /// None when the variable is unused: `_`
-    VariableRank {
-        dim: Option<String>,
+    /// Shape capture, e.g.: `5:shp`, `d:shp`, or `_:_`.
+    ShapePattern {
+        dim: RankCapture,
         shp: Option<String>,
     },
-    /// Fixed-rank capture: `5:shp`
-    ///
-    /// None when the variable is unused: `_`
-    FixedRank {
-        dim: usize,
-        shp: Option<String>,
+    /// Rank capture, e.g.: `5`, `d`, or `_`.
+    DimPattern {
+        len: RankCapture,
     },
-    /// Variable-length capture: `d`
-    ///
-    /// None when the variable is unused: `_`
-    VariableLength {
-        len: Option<String>,
-    },
-    /// Fixed-length capture: `5`
-    FixedLength {
-        len: usize,
-    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum RankCapture {
+    Fixed(usize),
+    Var(String),
+    Free,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -50,8 +40,6 @@ pub enum BaseType {
     F32,
     F64,
     /// User-defined type
-    ///
-    /// (Not actually supported yet by the syntax or the compiler)
     Udf(String),
 }
 
@@ -75,17 +63,16 @@ impl Type {
     }
 
     pub fn aks_vector(basetype: BaseType, len: usize) -> Self {
-        Self { basetype, shape: TypePattern::new(vec![AxisPattern::FixedLength { len }]) }
+        Self { basetype, shape: TypePattern::new(vec![AxisPattern::DimPattern { len: RankCapture::Fixed(len) }]) }
     }
 
-    pub fn akd_vector(basetype: BaseType, len: Option<&String>) -> Self {
-        let len = len.map(|s| s.to_string());
-        Self { basetype, shape: TypePattern::new(vec![AxisPattern::VariableLength { len }]) }
+    pub fn akd_vector(basetype: BaseType, len: RankCapture) -> Self {
+        Self { basetype, shape: TypePattern::new(vec![AxisPattern::DimPattern { len }]) }
     }
 
-    pub fn get_vector(&self) -> Option<&AxisPattern> {
+    pub fn get_vector(&self) -> Option<&RankCapture> {
         match &self.shape.0[..] {
-            [axis] if axis.rank().try_left() == Some(1) => Some(axis),
+            [AxisPattern::DimPattern { len }] => Some(len),
             _ => None,
         }
     }
@@ -140,11 +127,6 @@ impl Type {
         self.is_array().unwrap_or(true)
     }
 
-    /// The minimum rank of this type. The actual rank may be higher if there is a variable-rank axis.
-    pub fn min_rank(&self) -> usize {
-        self.shape.min_rank()
-    }
-
     /// The rank of this type, if it is fixed. Returns None if the rank is variable.
     pub fn rank(&self) -> Option<usize> {
         self.shape.rank()
@@ -162,7 +144,7 @@ impl TypePattern {
     }
 
     pub fn aud() -> Self {
-        Self(vec![AxisPattern::VariableRank { dim: None, shp: None }])
+        Self(vec![AxisPattern::ShapePattern { dim: RankCapture::Free, shp: None }])
     }
 
     /// Check whether the type pattern is scalar. Returns None if the rank is possibly zero, but variable.
@@ -172,7 +154,7 @@ impl TypePattern {
         } else if self.min_rank() > 0 {
             // Definitely not a scalar
             Some(false)
-        } else if self.0.iter().any(|axis| matches!(axis, AxisPattern::VariableRank { .. })) {
+        } else if self.0.iter().any(|axis| matches!(axis, AxisPattern::ShapePattern { .. })) {
             // Minimum rank is zero, but there might be a variable-rank axis, so this could be a scalar or an array
             None
         } else {
@@ -188,7 +170,7 @@ impl TypePattern {
         } else if self.min_rank() > 0 {
             // Definitely an array
             Some(true)
-        } else if self.0.iter().any(|axis| matches!(axis, AxisPattern::VariableRank { .. })) {
+        } else if self.0.iter().any(|axis| matches!(axis, AxisPattern::ShapePattern { .. })) {
             // Minimum rank is zero, but there might be a variable-rank axis, so this could be a scalar or an array
             None
         } else {
@@ -201,7 +183,12 @@ impl TypePattern {
     pub fn min_rank(&self) -> usize {
         self.0
             .iter()
-            .map(|axis| axis.rank().left_or(0))
+            .map(|axis| {
+                match axis.rank() {
+                    RankCapture::Fixed(len) => *len,
+                    _ => 0,
+                }
+            })
             .sum()
     }
 
@@ -210,22 +197,19 @@ impl TypePattern {
         self.0
             .iter()
             .try_fold(0, |acc, axis| {
-                if let Either::Left(dim) = axis.rank() {
-                    Some(acc + dim)
-                } else {
-                    None
+                match axis.rank() {
+                    RankCapture::Fixed(len) => Some(acc + *len),
+                    _ => None,
                 }
             })
     }
 }
 
 impl AxisPattern {
-    pub fn rank(&self) -> Either<usize, Option<&str>> {
+    pub fn rank(&self) -> &RankCapture {
         match self {
-            Self::VariableRank { dim, .. } => Either::Right(dim.as_deref()),
-            Self::FixedRank { dim, .. } => Either::Left(*dim),
-            Self::VariableLength { .. } => Either::Left(1),
-            Self::FixedLength { .. } => Either::Left(1),
+            Self::ShapePattern { dim, .. } => dim,
+            Self::DimPattern { len } => len,
         }
     }
 }
@@ -286,20 +270,21 @@ impl fmt::Display for TypePattern {
 impl fmt::Display for AxisPattern {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::VariableRank { dim, shp } => {
-                let dim = dim.as_ref().map(|s| s.as_str()).unwrap_or("_");
+            Self::ShapePattern { dim, shp } => {
                 let shp = shp.as_ref().map(|s| s.as_str()).unwrap_or("_");
                 write!(f, "{dim}:{shp}")
             }
-            Self::FixedRank { dim, shp } => {
-                let shp = shp.as_ref().map(|s| s.as_str()).unwrap_or("_");
-                write!(f, "{dim}:{shp}")
-            }
-            Self::VariableLength { len } => {
-                let len = len.as_ref().map(|s| s.as_str()).unwrap_or("_");
-                write!(f, "{len}")
-            }
-            Self::FixedLength { len } => write!(f, "{len}"),
+            Self::DimPattern { len } => write!(f, "{len}"),
+        }
+    }
+}
+
+impl fmt::Display for RankCapture {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Fixed(len) => write!(f, "{len}"),
+            Self::Var(len) => write!(f, "{len}"),
+            Self::Free => write!(f, "_"),
         }
     }
 }
