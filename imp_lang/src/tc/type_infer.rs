@@ -102,7 +102,7 @@ impl TypeInfer {
     fn array_literal_type(&mut self, elem_types: Vec<Type>) -> Type {
         let count = elem_types.len();
         let Some(first) = elem_types.first() else {
-            return Type::vector_dim(BaseType::I32, DimCapture::Known(0));
+            return Type::new(BaseType::I32, Vec::new());
         };
 
         let base_ty = first.basetype.clone();
@@ -119,7 +119,7 @@ impl TypeInfer {
             }
         }
 
-        let leading = AxisPattern::Dim(DimCapture::Known(count));
+        let leading = AxisPattern::FixedLength { len: count };
         let result_shape = match &elem_shape {
             AxisPattern::Scalar => {
                 AxisPattern::Axes(vec![leading])
@@ -279,7 +279,7 @@ impl<'ast> Traverse<'ast> for TypeInfer {
     fn trav_cond(&mut self, cond: &mut Cond<'ast, UntypedAst>) -> Self::ExprOut {
         let cond_ty = self.trav_id(&mut cond.cond);
 
-        if !(cond_ty.is_scalar() && cond_ty.basetype == BaseType::Bool) {
+        if !(cond_ty.is_definitely_scalar() && cond_ty.basetype == BaseType::Bool) {
             self.errors.push(InferenceError::PrimitiveArgumentKindMismatch {
                 primitive: "cond".to_owned(),
                 arg_index: 0,

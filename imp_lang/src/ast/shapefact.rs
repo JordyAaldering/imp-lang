@@ -31,6 +31,7 @@ pub struct OutputShapeConstraint {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum ShapeTerm {
     Known(usize),
+    Any,
     Symbol(String),
     ArgDim { arg_index: usize, axis_index: usize },
     ArgRank { arg_index: usize, axis_index: usize },

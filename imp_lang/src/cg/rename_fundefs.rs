@@ -102,9 +102,19 @@ fn mangle_shape(ty: &Type) -> String {
 
 fn mangle_axis(axis: &AxisPattern) -> String {
     match axis {
-        AxisPattern::VariableRank { dim, shp } => format!("{dim}_{shp}"),
-        AxisPattern::FixedRank { dim, shp } => format!("{dim}_{shp}"),
-        AxisPattern::VariableLength { len } => format!("{len}"),
+        AxisPattern::VariableRank { dim, shp } => {
+            let dim = dim.as_ref().map(|s| s.as_str()).unwrap_or("_");
+            let shp = shp.as_ref().map(|s| s.as_str()).unwrap_or("_");
+            format!("{dim}_{shp}")
+        }
+        AxisPattern::FixedRank { dim, shp } => {
+            let shp = shp.as_ref().map(|s| s.as_str()).unwrap_or("_");
+            format!("{dim}_{shp}")
+        }
+        AxisPattern::VariableLength { len } => {
+            let len = len.as_ref().map(|s| s.as_str()).unwrap_or("_");
+            format!("{len}")
+        }
         AxisPattern::FixedLength { len } => format!("{len}"),
     }
 }

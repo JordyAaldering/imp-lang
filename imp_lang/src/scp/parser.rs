@@ -574,12 +574,17 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                     }
                     self.expect(Token::Colon)?;
                     let (shp, _) = self.parse_id()?;
-                    AxisPattern::VariableRank { dim: id, shp }
+                    let dim = if id == "_" { None } else { Some(id) };
+                    let shp = if shp == "_" { None } else { Some(shp) };
+                    AxisPattern::VariableRank { dim, shp }
                 } else if self.matches(&Token::Colon).is_some() {
                     let (shp, _) = self.parse_id()?;
-                    AxisPattern::VariableRank { dim: id, shp }
+                    let dim = if id == "_" { None } else { Some(id) };
+                    let shp = if shp == "_" { None } else { Some(shp) };
+                    AxisPattern::VariableRank { dim, shp }
                 } else {
-                    AxisPattern::VariableLength { len: id }
+                    let len = if id == "_" { None } else { Some(id) };
+                    AxisPattern::VariableLength { len }
                 }
             }
             _ => {

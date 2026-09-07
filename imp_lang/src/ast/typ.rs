@@ -12,18 +12,24 @@ pub struct TypePattern(Vec<AxisPattern>);
 #[derive(Clone, Debug)]
 pub enum AxisPattern {
     /// Variable-rank-and-shape capture: `d:shp`
+    ///
+    /// None when the variable is unused: `_`
     VariableRank {
-        dim: String,
-        shp: String,
+        dim: Option<String>,
+        shp: Option<String>,
     },
     /// Fixed-rank capture: `5:shp`
+    ///
+    /// None when the variable is unused: `_`
     FixedRank {
         dim: usize,
-        shp: String,
+        shp: Option<String>,
     },
     /// Variable-length capture: `d`
+    ///
+    /// None when the variable is unused: `_`
     VariableLength {
-        len: String,
+        len: Option<String>,
     },
     /// Fixed-length capture: `5`
     FixedLength {
@@ -56,6 +62,10 @@ impl Default for Type {
 impl Type {
     pub fn new(basetype: BaseType, axes: Vec<AxisPattern>) -> Self {
         Self { basetype, shape: TypePattern(axes) }
+    }
+
+    pub fn new_aud(basetype: BaseType) -> Self {
+        Self { basetype, shape: TypePattern::aud() }
     }
 
     pub fn type_pattern(&self) -> Option<&Vec<AxisPattern>> {
@@ -91,9 +101,25 @@ impl Type {
         self.shape.is_scalar()
     }
 
+    pub fn is_definitely_scalar(&self) -> bool {
+        self.is_scalar().unwrap_or(false)
+    }
+
+    pub fn is_maybe_scalar(&self) -> bool {
+        self.is_scalar().unwrap_or(true)
+    }
+
     /// Check whether the type is an array. Returns None if the rank is possibly non-zero, but variable.
     pub fn is_array(&self) -> Option<bool> {
         self.shape.is_array()
+    }
+
+    pub fn is_definitely_array(&self) -> bool {
+        self.is_array().unwrap_or(false)
+    }
+
+    pub fn is_maybe_array(&self) -> bool {
+        self.is_array().unwrap_or(true)
     }
 
     /// The minimum rank of this type. The actual rank may be higher if there is a variable-rank axis.
@@ -110,6 +136,10 @@ impl Type {
 impl TypePattern {
     pub const fn scalar() -> Self {
         Self(Vec::new())
+    }
+
+    pub fn aud() -> Self {
+        Self(vec![AxisPattern::VariableRank { dim: None, shp: None }])
     }
 
     /// Check whether the type pattern is scalar. Returns None if the rank is possibly zero, but variable.
@@ -233,9 +263,19 @@ impl fmt::Display for TypePattern {
 impl fmt::Display for AxisPattern {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::VariableRank { dim, shp } => write!(f, "{dim}:{shp}"),
-            Self::FixedRank { dim, shp } => write!(f, "{dim}:{shp}"),
-            Self::VariableLength { len } => write!(f, "{len}"),
+            Self::VariableRank { dim, shp } => {
+                let dim = dim.as_ref().map(|s| s.as_str()).unwrap_or("_");
+                let shp = shp.as_ref().map(|s| s.as_str()).unwrap_or("_");
+                write!(f, "{dim}:{shp}")
+            }
+            Self::FixedRank { dim, shp } => {
+                let shp = shp.as_ref().map(|s| s.as_str()).unwrap_or("_");
+                write!(f, "{dim}:{shp}")
+            }
+            Self::VariableLength { len } => {
+                let len = len.as_ref().map(|s| s.as_str()).unwrap_or("_");
+                write!(f, "{len}")
+            }
             Self::FixedLength { len } => write!(f, "{len}"),
         }
     }

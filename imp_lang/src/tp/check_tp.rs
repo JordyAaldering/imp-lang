@@ -70,18 +70,25 @@ impl CheckTypePatterns {
 		for axis in axes {
 			match axis {
 				AxisPattern::VariableRank { dim, shp } => {
-					if !defined_symbols.contains(dim) {
-						*unconstrained_rank_captures += 1;
+					if let Some(dim) = dim {
+						if !defined_symbols.contains(dim) {
+							*unconstrained_rank_captures += 1;
+						}
+
+						defined_symbols.insert(dim.clone());
 					}
 
-					defined_symbols.insert(dim.clone());
-					defined_symbols.insert(shp.clone());
+					if let Some(shp) = shp {
+						defined_symbols.insert(shp.clone());
+					}
 				},
 				AxisPattern::FixedRank { dim: _, shp: _ } => {
 					todo!()
 				},
 				AxisPattern::VariableLength { len } => {
-					defined_symbols.insert(len.clone());
+					if let Some(len) = len {
+						defined_symbols.insert(len.clone());
+					}
 				},
 				AxisPattern::FixedLength { len: _ } => {},
 			}
@@ -94,7 +101,7 @@ impl CheckTypePatterns {
 		};
 
 		for axis in axes {
-			if let VariableRank { dim, shp: _ } = axis
+			if let VariableRank { dim: Some(dim), shp: _ } = axis
 				&& !defined_symbols.contains(dim)
 			{
 				self.errors.push(format!(

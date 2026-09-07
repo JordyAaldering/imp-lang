@@ -294,31 +294,36 @@ fn build_variant_condition(args: &[Farg], all_scalar_args: &[bool]) -> String {
 
             for (axis_index, axis) in axes.iter().enumerate() {
                 match axis {
-                    AxisPattern::VariableRank { dim, shp } => {
-                        let expr = format!("arg{arg_index}.dim()");
-                        if let Some((_, bound_expr)) = bound_ranks.iter().find(|(name, _)| name == dim)
-                        {
-                            checks.push(format!("{expr} == {bound_expr}"));
-                        } else {
-                            bound_ranks.push((dim.clone(), expr));
+                    AxisPattern::VariableRank { dim, shp: _ } => {
+                        if let Some(dim) = dim {
+                            let expr = format!("arg{arg_index}.dim()");
+
+                            if let Some((_, bound_expr)) = bound_ranks.iter().find(|(name, _)| name == dim)
+                            {
+                                checks.push(format!("{expr} == {bound_expr}"));
+                            } else {
+                                bound_ranks.push((dim.clone(), expr));
+                            }
                         }
-                    },
+                    }
                     AxisPattern::FixedRank { .. } => {
                         todo!()
-                    },
+                    }
                     AxisPattern::VariableLength { len } => {
-                        let expr = format!("arg{arg_index}.extent({axis_index})");
-                        if let Some((_, bound_expr)) =
-                            bound_dims.iter().find(|(name, _)| name == len)
-                        {
-                            checks.push(format!("{expr} == {bound_expr}"));
-                        } else {
-                            bound_dims.push((len.clone(), expr));
+                        if let Some(len) = len {
+                            let expr = format!("arg{arg_index}.extent({axis_index})");
+                            if let Some((_, bound_expr)) =
+                                bound_dims.iter().find(|(name, _)| name == len)
+                            {
+                                checks.push(format!("{expr} == {bound_expr}"));
+                            } else {
+                                bound_dims.push((len.clone(), expr));
+                            }
                         }
-                    },
+                    }
                     AxisPattern::FixedLength { len } => {
                         checks.push(format!("arg{arg_index}.extent({axis_index}) == {len}"));
-                    },
+                    }
                 }
             }
         } else {
@@ -354,42 +359,46 @@ fn generate_shape_checks(args: &[Farg]) -> String {
 
         for (idx, axis) in axes.iter().enumerate() {
             match axis {
-                AxisPattern::VariableRank { dim, shp } => {
-                    let binding = format!("_imp_rank_{}", dim);
-                    if bound_ranks.iter().any(|existing| existing == &binding) {
-                        out.push_str(&format!("    assert_eq!({}.dim(), {}, \"rank {} mismatch\");\n",
-                            arg.id, binding, dim));
-                    } else {
-                        out.push_str(&format!("    let {} = {}.dim();\n",
-                            binding, arg.id
-                        ));
-                        bound_ranks.push(binding);
+                AxisPattern::VariableRank { dim, shp: _ } => {
+                    if let Some(dim) = dim {
+                        let binding = format!("_imp_rank_{}", dim);
+                        if bound_ranks.iter().any(|existing| existing == &binding) {
+                            out.push_str(&format!("    assert_eq!({}.dim(), {}, \"rank {} mismatch\");\n",
+                                arg.id, binding, dim));
+                        } else {
+                            out.push_str(&format!("    let {} = {}.dim();\n",
+                                binding, arg.id
+                            ));
+                            bound_ranks.push(binding);
+                        }
                     }
-                },
-                AxisPattern::FixedRank { dim, shp } => {
+                }
+                AxisPattern::FixedRank { .. } => {
                     todo!()
-                },
+                }
                 AxisPattern::VariableLength { len } => {
-                    let binding = format!("_imp_extent_{}", len);
-                    if bound_dims.iter().any(|existing| existing == &binding) {
-                        out.push_str(&format!(
-                            "    assert_eq!({}.extent({}), {}, \"extent {} mismatch\");\n",
-                            arg.id, idx, binding, len
-                        ));
-                    } else {
-                        out.push_str(&format!(
-                            "    let {} = {}.extent({});\n",
-                            binding, arg.id, idx
-                        ));
-                        bound_dims.push(binding);
+                    if let Some(len) = len {
+                        let binding = format!("_imp_extent_{}", len);
+                        if bound_dims.iter().any(|existing| existing == &binding) {
+                            out.push_str(&format!(
+                                "    assert_eq!({}.extent({}), {}, \"extent {} mismatch\");\n",
+                                arg.id, idx, binding, len
+                            ));
+                        } else {
+                            out.push_str(&format!(
+                                "    let {} = {}.extent({});\n",
+                                binding, arg.id, idx
+                            ));
+                            bound_dims.push(binding);
+                        }
                     }
-                },
+                }
                 AxisPattern::FixedLength { len } => {
                     out.push_str(&format!(
                         "    assert_eq!({}.extent({}), {}, \"{} extent mismatch at axis {}\");\n",
                         arg.id, idx, len, arg.id, idx,
                     ));
-                },
+                }
             }
         }
     }
