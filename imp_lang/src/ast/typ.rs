@@ -68,6 +68,26 @@ impl Type {
         Self { basetype, shape: TypePattern::aud() }
     }
 
+    pub const fn scalar(basetype: BaseType) -> Self {
+        Self { basetype, shape: TypePattern::scalar() }
+    }
+
+    pub fn aks_vector(basetype: BaseType, len: usize) -> Self {
+        Self { basetype, shape: TypePattern::new(vec![AxisPattern::FixedLength { len }]) }
+    }
+
+    pub fn akd_vector(basetype: BaseType, len: Option<&String>) -> Self {
+        let len = len.map(|s| s.to_string());
+        Self { basetype, shape: TypePattern::new(vec![AxisPattern::VariableLength { len }]) }
+    }
+
+    pub fn get_vector(&self) -> Option<&AxisPattern> {
+        match &self.shape.0[..] {
+            [axis] if axis.rank() == Some(1) => Some(axis),
+            _ => None,
+        }
+    }
+
     pub fn type_pattern(&self) -> Option<&Vec<AxisPattern>> {
         if self.shape.0.is_empty() {
             None
@@ -90,10 +110,6 @@ impl Type {
         } else {
             self.basetype.rstype()
         }
-    }
-
-    pub const fn scalar(basetype: BaseType) -> Self {
-        Self { basetype, shape: TypePattern::scalar() }
     }
 
     /// Check whether the type is scalar. Returns None if the rank is possibly zero, but variable.
@@ -134,6 +150,11 @@ impl Type {
 }
 
 impl TypePattern {
+    pub fn new(axes: Vec<AxisPattern>) -> Self {
+        debug_assert!(!axes.is_empty());
+        Self(axes)
+    }
+
     pub const fn scalar() -> Self {
         Self(Vec::new())
     }

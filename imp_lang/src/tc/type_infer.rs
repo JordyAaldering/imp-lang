@@ -106,7 +106,6 @@ impl TypeInfer {
         };
 
         let base_ty = first.basetype.clone();
-        let elem_shape = first.shape.clone();
         let elem_rank = first.rank();
 
         for (i, ty) in elem_types.iter().enumerate().skip(1) {
@@ -120,32 +119,39 @@ impl TypeInfer {
         }
 
         let leading = AxisPattern::FixedLength { len: count };
-        let result_shape = match &elem_shape {
-            AxisPattern::Scalar => {
-                AxisPattern::Axes(vec![leading])
-            }
-            AxisPattern::Axes(axes) => {
-                let mut new_axes = Vec::with_capacity(1 + axes.len());
-                new_axes.push(leading);
-                new_axes.extend_from_slice(axes);
-                AxisPattern::Axes(new_axes)
-            }
+        let result_shape = if let Some(axes) = first.type_pattern() {
+            // (Potentially) non-scalar
+            let mut new_axes = Vec::with_capacity(1 + axes.len());
+            new_axes.push(leading);
+            new_axes.extend_from_slice(axes);
+            TypePattern::new(new_axes)
+        } else {
+            // Scalar
+            TypePattern::scalar()
         };
 
         Type { basetype: base_ty, shape: result_shape }
     }
 
     fn tensor_iv_and_dims(ub_ty: &Type) -> (Type, Option<usize>) {
-        match &ub_ty.shape {
-            AxisPattern::Scalar => unreachable!("cannot iterate over scalar ub"),
-            AxisPattern::Axes(axes) if axes.len() == 1 && matches!(axes[0], AxisPattern::Dim(_)) => {
-                match &axes[0] {
-                    AxisPattern::Dim(DimCapture::Known(k)) => (Type::vector_dim(ub_ty.basetype.clone(), DimCapture::Known(*k)), Some(*k)),
-                    AxisPattern::Dim(DimCapture::Var(name)) => (Type::vector_dim(ub_ty.basetype.clone(), DimCapture::Var(name.clone())), None),
-                    _ => unreachable!("unexpected axis pattern inside Dim guard"),
+        if let Some(axis) = ub_ty.get_vector() {
+            match axis {
+                AxisPattern::VariableRank { .. } => unreachable!(),
+                AxisPattern::FixedRank { dim, shp: _ } => {
+                    debug_assert!(*dim == 1);
+                    todo!()
+                }
+                AxisPattern::VariableLength { len } => {
+                    let ty = Type::akd_vector(ub_ty.basetype.clone(), len.as_ref());
+                    (ty, None)
+                }
+                AxisPattern::FixedLength { len } => {
+                    let ty = Type::aks_vector(ub_ty.basetype.clone(), *len);
+                    (ty, Some(*len))
                 }
             }
-            _ => (Type { basetype: ub_ty.basetype.clone(), shape: AxisPattern::any() }, None),
+        } else {
+            unreachable!("cannot iterate over scalar ub")
         }
     }
 
@@ -153,17 +159,16 @@ impl TypeInfer {
         if leading_axes.is_empty() {
             return elem_ty;
         }
-        let result_shape = match elem_ty.shape {
-            AxisPattern::Scalar => {
-                AxisPattern::Axes(leading_axes)
-            }
-            AxisPattern::Axes(elem_axes) => {
-                let mut new_axes = leading_axes;
-                new_axes.extend(elem_axes);
-                AxisPattern::Axes(new_axes)
-            }
+
+        let shape = if let Some(axes) = elem_ty.type_pattern() {
+            let mut new_axes = leading_axes;
+            new_axes.extend(axes.clone());
+            TypePattern::new(new_axes)
+        } else {
+            TypePattern::new(leading_axes)
         };
-        Type { basetype: elem_ty.basetype, shape: result_shape }
+
+        Type { basetype: elem_ty.basetype, shape }
     }
 
     fn extract_ub_axes<'ast>(&self, ub: &Id<'ast, UntypedAst>) -> Option<Vec<AxisPattern>> {
@@ -400,7 +405,7 @@ impl<'ast> Traverse<'ast> for TypeInfer {
         let (iv_ty, leading_k) = Self::tensor_iv_and_dims(&ub_ty);
 
         let leading_axes: Option<Vec<AxisPattern>> = ub_named_axes.or_else(|| {
-            leading_k.map(|k| (0..k).map(|_| AxisPattern::Dim(DimCapture::any())).collect())
+            leading_k.map(|k| (0..k).map(|_| AxisPattern::VariableLength { len: None }).collect())
         });
 
         *tensor.iv.ty.borrow_mut() = Some(iv_ty);
@@ -409,10 +414,7 @@ impl<'ast> Traverse<'ast> for TypeInfer {
 
         let result_ty = match leading_axes {
             Some(axes) => Self::tensor_result_type(ret_ty, axes),
-            None => Type {
-                basetype: ret_ty.basetype,
-                shape: AxisPattern::any(),
-            },
+            None => Type::new_aud(ret_ty.basetype),
         };
 
         result_ty
@@ -435,7 +437,7 @@ impl<'ast> Traverse<'ast> for TypeInfer {
                 let arg_types = vec![neutral_ty.clone(), neutral_ty.clone()];
                 let (target, runtime_dispatch) = self.resolve_overload(&id, &arg_types);
                 let out_ty = if runtime_dispatch {
-                    Type { basetype: target.ret_type.basetype.clone(), shape: AxisPattern::any() }
+                    Type { basetype: target.ret_type.basetype.clone(), shape: TypePattern::aud() }
                 } else {
                     target.ret_type.clone()
                 };
