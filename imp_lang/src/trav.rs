@@ -21,6 +21,7 @@ pub trait Traverse<'ast> {
 
     fn trav_fundef(&mut self, fundef: &mut Fundef<'ast, Self::Ast>) {
         let _ = self.trav_fargs(&mut fundef.args);
+        let _ = self.trav_fret(&mut fundef.ret_type);
 
         for vardec in &fundef.decs {
             self.trav_vardec(vardec);
@@ -40,6 +41,10 @@ pub trait Traverse<'ast> {
     }
 
     fn trav_farg(&mut self, _arg: &mut Farg) -> Self::DeclOut {
+        Default::default()
+    }
+
+    fn trav_fret(&mut self, _fret: &mut Type) -> Self::DeclOut {
         Default::default()
     }
 

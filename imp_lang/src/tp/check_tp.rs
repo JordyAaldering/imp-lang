@@ -18,6 +18,9 @@ pub fn check_tp<'ast>(mut program: Program<'ast, ParsedAst>) -> Result<Program<'
 
 #[derive(Default)]
 struct CheckTypePatterns {
+	fundef_name: String,
+	unconstrained_rank_captures: usize,
+	defined_symbols: HashSet<String>,
 	errors: Vec<String>,
 }
 
@@ -29,80 +32,58 @@ impl<'ast> Traverse<'ast> for CheckTypePatterns {
 	type ExprOut = ();
 
 	fn trav_fundef(&mut self, fundef: &mut Fundef<'ast, Self::Ast>) {
-		self.check_fundef(fundef);
-	}
-}
-
-impl CheckTypePatterns {
-	fn check_fundef(&mut self, fundef: &Fundef<'_, ParsedAst>) {
-		let mut defined_symbols: HashSet<String> = HashSet::new();
-
-		// Scalar argument names are valid symbolic constraints for later type patterns.
-		for arg in &fundef.args {
-			defined_symbols.insert(arg.id.clone());
-		}
-
-		let mut unconstrained_rank_captures = 0usize;
+		self.fundef_name = fundef.name.clone();
+		self.unconstrained_rank_captures = 0;
+		self.defined_symbols.clear();
 
 		for arg in &fundef.args {
-			self.collect_arg_symbols(arg, &mut defined_symbols, &mut unconstrained_rank_captures);
+			self.defined_symbols.insert(arg.id.clone());
 		}
 
-		if unconstrained_rank_captures > 1 {
+		self.trav_fargs(&mut fundef.args);
+
+		if self.unconstrained_rank_captures > 1 {
 			self.errors.push(format!(
 				"function `{}` has {} unconstrained rank captures in argument type patterns; at most one is allowed",
-				fundef.name, unconstrained_rank_captures
+				fundef.name, self.unconstrained_rank_captures
 			));
 		}
 
-		self.check_return_pattern(&fundef.name, &fundef.ret_type, &defined_symbols);
+		self.trav_fret(&mut fundef.ret_type);
 	}
 
-	fn collect_arg_symbols(
-		&mut self,
-		arg: &Farg,
-		defined_symbols: &mut HashSet<String>,
-		unconstrained_rank_captures: &mut usize,
-	) {
-		let Some(axes) = arg.ty.type_pattern() else {
-			return;
-		};
-
-		for axis in axes {
+	fn trav_farg(&mut self, arg: &mut Farg) {
+		for axis in &arg.ty.shape.0 {
 			match axis {
 				AxisPattern::ShapePattern { dim, shp } => {
 					if let RankCapture::Var(dim) = dim {
-						if !defined_symbols.contains(dim) {
-							*unconstrained_rank_captures += 1;
+						if !self.defined_symbols.contains(dim) {
+							self.unconstrained_rank_captures += 1;
 						}
 
-						defined_symbols.insert(dim.clone());
+						self.defined_symbols.insert(dim.clone());
 					}
 
 					if let Some(shp) = shp {
-						defined_symbols.insert(shp.clone());
+						self.defined_symbols.insert(shp.clone());
 					}
 				}
 				AxisPattern::DimPattern { len: RankCapture::Var(len) } => {
-					defined_symbols.insert(len.clone());
+					self.defined_symbols.insert(len.clone());
 				}
 				AxisPattern::DimPattern { len: _ } => {}
 			}
 		}
 	}
 
-	fn check_return_pattern(&mut self, fundef_name: &str, ret_shape: &Type, defined_symbols: &HashSet<String>) {
-		let Some(axes) = ret_shape.type_pattern() else {
-			return;
-		};
-
-		for axis in axes {
+	fn trav_fret(&mut self, ret_type: &mut Type) {
+		for axis in &ret_type.shape.0 {
 			if let ShapePattern { dim: RankCapture::Var(dim), shp: _ } = axis
-				&& !defined_symbols.contains(dim)
+				&& !self.defined_symbols.contains(dim)
 			{
 				self.errors.push(format!(
 					"function `{}` return type contains unconstrained rank capture `{}`; return rank captures must be constrained by argument symbols",
-					fundef_name, dim
+					self.fundef_name, dim
 				));
 			}
 		}
