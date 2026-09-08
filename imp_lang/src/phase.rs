@@ -35,7 +35,7 @@ pub enum Phase {
 
 macro_rules! phase_log {
     ($($arg:tt)*) => {
-        log::debug!(target: Self::PHASE.log_target(), $($arg)*);
+        log::trace!(target: Self::PHASE.log_target(), $($arg)*);
     };
 }
 

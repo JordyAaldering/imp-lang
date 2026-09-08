@@ -9,8 +9,6 @@ pub struct Options {
     pub b: Option<imp_lang::Phase>,
 
     /// Print debug information for the given [`imp_lang::Phase`].
-    ///
-    /// (Currently not yet used)
     #[arg(short('d'), long("debug"), value_delimiter(','))]
     pub d: Vec<imp_lang::Phase>,
 
@@ -21,11 +19,10 @@ pub struct Options {
 }
 
 fn init_logger(d: &[imp_lang::Phase]) {
-    let mut builder = env_logger::Builder::new();
+    let mut builder = env_logger::Builder::from_env(env_logger::Env::default());
 
-    // Note: this currently filters out ALL log messages other than those specified here, even ones that are not related to phases.
     for phase in d {
-        builder.filter_module(phase.log_target(), log::LevelFilter::Debug);
+        builder.filter_module(phase.log_target(), log::LevelFilter::Trace);
     }
 
     builder.init();
@@ -35,6 +32,8 @@ fn main() {
     let options = Options::parse();
 
     init_logger(&options.d);
+
+    log::debug!("Hello, world");
 
     let cpath = imp_lang::compile(options.b, &options.infile, options.outdir.as_ref());
     if let Some(cpath) = cpath {
