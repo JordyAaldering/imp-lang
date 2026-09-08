@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::ast::{AxisPattern::ShapePattern, *};
+use crate::ast::*;
 
 /// Not all patterns that can be constructed from the grammar are actually resolvable.
 /// This pass rejects unresolved variable-rank patterns (`d:shp`) at compile time.
@@ -56,7 +56,9 @@ impl<'ast> Traverse<'ast> for CheckTypePatterns {
 		for axis in &arg.ty.shape.0 {
 			match axis {
 				AxisPattern::ShapePattern { dim, shp } => {
-					if let RankCapture::Var(dim) = dim {
+					if let RankCapture::Free = dim {
+						self.unconstrained_rank_captures += 1;
+					} else if let RankCapture::Var(dim) = dim {
 						if !self.defined_symbols.contains(dim) {
 							self.unconstrained_rank_captures += 1;
 						}
@@ -68,17 +70,18 @@ impl<'ast> Traverse<'ast> for CheckTypePatterns {
 						self.defined_symbols.insert(shp.clone());
 					}
 				}
-				AxisPattern::DimPattern { len: RankCapture::Var(len) } => {
-					self.defined_symbols.insert(len.clone());
+				AxisPattern::DimPattern { len } => {
+					if let RankCapture::Var(len) = len {
+						self.defined_symbols.insert(len.clone());
+					}
 				}
-				AxisPattern::DimPattern { len: _ } => {}
 			}
 		}
 	}
 
 	fn trav_fret(&mut self, ret_type: &mut Type) {
 		for axis in &ret_type.shape.0 {
-			if let ShapePattern { dim: RankCapture::Var(dim), shp: _ } = axis
+			if let AxisPattern::ShapePattern { dim: RankCapture::Var(dim), shp: _ } = axis
 				&& !self.defined_symbols.contains(dim)
 			{
 				self.errors.push(format!(

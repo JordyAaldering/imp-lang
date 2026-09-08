@@ -44,7 +44,7 @@ pub trait Traverse<'ast> {
         Default::default()
     }
 
-    fn trav_fret(&mut self, _fret: &mut Type) -> Self::DeclOut {
+    fn trav_fret(&mut self, _ret_type: &mut Type) -> Self::DeclOut {
         Default::default()
     }
 
