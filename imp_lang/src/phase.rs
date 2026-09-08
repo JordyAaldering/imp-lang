@@ -33,9 +33,17 @@ pub enum Phase {
     SHOW,
 }
 
+macro_rules! phase_log {
+    ($($arg:tt)*) => {
+        log::debug!(target: Self::PHASE.log_target(), $($arg)*);
+    };
+}
+
+pub(crate) use phase_log;
+
 impl Phase {
     /// A unique string identifier for the phase.
-    pub fn uid(self) -> &'static str {
+    pub const fn name(self) -> &'static str {
         match self {
             Self::RD => "rd",
             Self::SCP => "scp",
@@ -51,7 +59,27 @@ impl Phase {
             Self::CGC => "cgc",
             Self::CGH => "cgh",
             Self::CGRS => "cgrs",
-            Self::SHOW => unreachable!(),
+            Self::SHOW => "show",
+        }
+    }
+
+    pub fn log_target(self) -> &'static str {
+        match self {
+            Self::RD => "imp_lang::phase::rd",
+            Self::SCP => "imp_lang::phase::scp",
+            Self::CTP => "imp_lang::phase::ctp",
+            Self::ATP => "imp_lang::phase::atp",
+            Self::FLT => "imp_lang::phase::flt",
+            Self::SSA => "imp_lang::phase::ssa",
+            Self::TI => "imp_lang::phase::ti",
+            Self::DR => "imp_lang::phase::dr",
+            Self::CF => "imp_lang::phase::cf",
+            Self::DCR => "imp_lang::phase::dcr",
+            Self::RNF => "imp_lang::phase::rnf",
+            Self::CGC => "imp_lang::phase::cgc",
+            Self::CGH => "imp_lang::phase::cgh",
+            Self::CGRS => "imp_lang::phase::cgrs",
+            Self::SHOW => "imp_lang::phase::show",
         }
     }
 }

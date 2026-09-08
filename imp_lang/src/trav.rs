@@ -1,7 +1,7 @@
-use crate::ast::*;
+use crate::{Phase, ast::*};
 
 pub trait Traverse<'ast> {
-    const PHASE: crate::Phase;
+    const PHASE: Phase;
 
     type Ast: Invariant + 'ast;
 

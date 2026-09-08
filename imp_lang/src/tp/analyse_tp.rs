@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::{Phase, ast::*};
+use crate::{Phase, ast::*, phase::phase_log};
 
 pub fn analyse_tp<'ast>(program: &mut Program<'ast, ParsedAst>, scope: &'ast Scope<'ast, ParsedAst>) {
     AnalyseTp::new(scope).trav_program(program);
@@ -144,6 +144,8 @@ impl<'ast> Traverse<'ast> for AnalyseTp<'ast> {
     type ExprOut = ();
 
     fn trav_fundef(&mut self, fundef: &mut Fundef<'ast, ParsedAst>) {
+        phase_log!("Analysing type patterns of {}", fundef.name);
+
         self.defined.clear();
         self.symbol_terms.clear();
 

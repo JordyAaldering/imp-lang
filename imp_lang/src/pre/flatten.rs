@@ -1,6 +1,6 @@
 use std::mem;
 
-use crate::{Phase, ast::*, trav_name::TravName};
+use crate::{Phase, ast::*, phase::phase_log, trav_name::TravName};
 
 pub fn flatten<'ast>(program: &mut Program<'ast, ParsedAst>, scope: &'ast Scope<'ast, ParsedAst>) {
     Flatten::new(scope).trav_program(program);
@@ -48,6 +48,8 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
     type ExprOut = ();
 
     fn trav_fundef(&mut self, fundef: &mut Fundef<'ast, ParsedAst>) {
+        phase_log!("Flattening {}", fundef.name);
+
         debug_assert!(self.new_decs.is_empty());
         debug_assert!(self.new_assigns.is_empty());
 
