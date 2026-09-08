@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::ast::*;
+use crate::{Phase, ast::*};
 
 pub fn analyse_tp<'ast>(program: &mut Program<'ast, ParsedAst>, scope: &'ast Scope<'ast, ParsedAst>) {
     AnalyseTp::new(scope).trav_program(program);
@@ -135,6 +135,8 @@ impl<'ast> FromIterator<PendingTerms<'ast>> for PendingTerms<'ast> {
 }
 
 impl<'ast> Traverse<'ast> for AnalyseTp<'ast> {
+	const PHASE: Phase = Phase::ATP;
+
     type Ast = ParsedAst;
 
     type DeclOut = PendingTerms<'ast>;

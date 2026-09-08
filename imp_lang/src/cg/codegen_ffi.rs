@@ -1,4 +1,4 @@
-use crate::ast::*;
+use crate::{Phase, ast::*};
 
 pub fn emit_ffi(ast: &mut Program<'_, TypedAst>) -> String {
     let mut cg = CompileFfi::default();
@@ -18,6 +18,8 @@ impl CompileFfi {
 }
 
 impl<'ast> Traverse<'ast> for CompileFfi {
+	const PHASE: Phase = Phase::CGRS;
+
     type Ast = TypedAst;
 
     type DeclOut = ();

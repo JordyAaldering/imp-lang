@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::ast::*;
+use crate::{Phase, ast::*};
 
 pub fn type_infer<'ast>(program: &mut Program<'ast, UntypedAst>) -> Result<(), InferenceError> {
     validate_overload_families(&program.overloads, &program.fundefs)?;
@@ -257,6 +257,8 @@ impl TypeInfer {
 }
 
 impl<'ast> Traverse<'ast> for TypeInfer {
+	const PHASE: Phase = Phase::TI;
+
     type Ast = UntypedAst;
 
     type DeclOut = ();

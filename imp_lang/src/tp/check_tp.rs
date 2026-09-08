@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::ast::*;
+use crate::{Phase, ast::*};
 
 /// Not all patterns that can be constructed from the grammar are actually resolvable.
 /// This pass rejects unresolved variable-rank patterns (`d:shp`) at compile time.
@@ -25,6 +25,8 @@ struct CheckTypePatterns {
 }
 
 impl<'ast> Traverse<'ast> for CheckTypePatterns {
+	const PHASE: Phase = Phase::CTP;
+
 	type Ast = ParsedAst;
 
 	type DeclOut = ();

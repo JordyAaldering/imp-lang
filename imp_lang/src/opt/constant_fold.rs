@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::ast::*;
+use crate::{Phase, ast::*};
 
 pub fn constant_fold<'ast>(program: &mut Program<'ast, TypedAst>) {
     ConstantFold::new().trav_program(program);
@@ -30,6 +30,8 @@ impl ConstantFold {
 }
 
 impl<'ast> Traverse<'ast> for ConstantFold {
+	const PHASE: Phase = Phase::CF;
+
     type Ast = TypedAst;
 
     type DeclOut = ();

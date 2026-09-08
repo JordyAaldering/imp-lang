@@ -1,4 +1,4 @@
-use crate::ast::*;
+use crate::{Phase, ast::*};
 
 const HEADER: &str =
 r#"#include <stdio.h>
@@ -150,6 +150,8 @@ impl CompileC {
 }
 
 impl<'ast> Traverse<'ast> for CompileC {
+	const PHASE: Phase = Phase::CGC;
+
     type Ast = TypedAst;
 
     type DeclOut = ();

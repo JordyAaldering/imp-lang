@@ -1,6 +1,8 @@
 use crate::ast::*;
 
 pub trait Traverse<'ast> {
+    const PHASE: crate::Phase;
+
     type Ast: Invariant + 'ast;
 
     /// Additional output type for accumulating declaration information.

@@ -1,6 +1,6 @@
 use std::collections::HashSet;
 
-use crate::ast::*;
+use crate::{Phase, ast::*};
 
 pub fn rename_fundefs(program: &mut Program<'_, TypedAst>) {
     RenameFundefs::default().trav_program(program);
@@ -73,6 +73,8 @@ impl FromIterator<MangledArgs> for MangledArgs {
 }
 
 impl<'ast> Traverse<'ast> for RenameFundefs {
+	const PHASE: Phase = Phase::RNF;
+
     type Ast = TypedAst;
 
     type DeclOut = MangledArgs;

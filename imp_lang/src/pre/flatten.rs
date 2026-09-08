@@ -1,6 +1,6 @@
 use std::mem;
 
-use crate::{ast::*, trav_name::TravName};
+use crate::{Phase, ast::*, trav_name::TravName};
 
 pub fn flatten<'ast>(program: &mut Program<'ast, ParsedAst>, scope: &'ast Scope<'ast, ParsedAst>) {
     Flatten::new(scope).trav_program(program);
@@ -19,7 +19,7 @@ impl<'ast> Flatten<'ast> {
             scope,
             new_decs: Vec::new(),
             new_assigns: Vec::new(),
-            uid: TravName::new(crate::Phase::FLT),
+            uid: TravName::new(Self::PHASE),
         }
     }
 
@@ -39,6 +39,8 @@ impl<'ast> Flatten<'ast> {
 }
 
 impl<'ast> Traverse<'ast> for Flatten<'ast> {
+	const PHASE: Phase = Phase::FLT;
+
     type Ast = ParsedAst;
 
     type DeclOut = ();

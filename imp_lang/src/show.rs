@@ -1,4 +1,4 @@
-use crate::ast::*;
+use crate::{Phase, ast::*};
 
 pub fn show<'ast, Ast: Invariant + 'ast>(program: &mut Program<'ast, Ast>) -> String {
     let mut show: Show<'ast, Ast> = Show::new(program.fundef_names());
@@ -35,6 +35,8 @@ impl<'ast, Ast: Invariant> Show<'ast, Ast> {
 }
 
 impl<'ast, Ast: Invariant + 'ast> Traverse<'ast> for Show<'ast, Ast> {
+	const PHASE: Phase = Phase::SHOW;
+
     type Ast = Ast;
 
     type DeclOut = ();

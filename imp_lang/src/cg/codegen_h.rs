@@ -1,4 +1,4 @@
-use crate::ast::*;
+use crate::{Phase, ast::*};
 
 const HEADER: &str =
 r#"#pragma once
@@ -26,6 +26,8 @@ struct CompileHeader {
 }
 
 impl<'ast> Traverse<'ast> for CompileHeader {
+	const PHASE: Phase = Phase::CGH;
+
     type Ast = TypedAst;
 
     type DeclOut = ();

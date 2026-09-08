@@ -29,6 +29,8 @@ pub enum Phase {
     CGC,
     /// Rust FFI code generation
     CGRS,
+    /// Print AST structure
+    SHOW,
 }
 
 impl Phase {
@@ -49,6 +51,7 @@ impl Phase {
             Self::CGC => "cgc",
             Self::CGH => "cgh",
             Self::CGRS => "cgrs",
+            Self::SHOW => unreachable!(),
         }
     }
 }

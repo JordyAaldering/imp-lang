@@ -1,6 +1,6 @@
 use std::{collections::HashSet, mem};
 
-use crate::ast::*;
+use crate::{Phase, ast::*};
 
 pub fn dead_code_removal<'ast>(program: &mut Program<'ast, TypedAst>) {
     DeadCodeRemoval::new().trav_program(program);
@@ -23,6 +23,8 @@ impl DeadCodeRemoval {
 }
 
 impl<'ast> Traverse<'ast> for DeadCodeRemoval {
+	const PHASE: Phase = Phase::DCR;
+
     type Ast = TypedAst;
 
     type DeclOut = ();
