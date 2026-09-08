@@ -601,7 +601,7 @@ impl<'ast> Traverse<'ast> for CompileC {
     fn trav_id(&mut self, id: &mut Id<'ast, Self::Ast>) {
         match id {
             Id::Arg(i) => self.expr_stack.push(self.arg_names[*i].clone()),
-            Id::Var(lvis) => self.expr_stack.push(lvis.name.clone()),
+            Id::Var(var) => self.expr_stack.push(var.name.clone()),
         }
     }
 

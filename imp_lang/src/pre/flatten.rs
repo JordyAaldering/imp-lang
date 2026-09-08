@@ -23,10 +23,10 @@ impl<'ast> Flatten<'ast> {
         }
     }
 
-    fn alloc_lvis(&mut self, name: String, ty: Option<Type>) -> &'ast VarInfo<'ast, ParsedAst> {
-        let lvis = self.scope.alloc_lvis(name, ty, ());
-        self.new_decs.push(lvis);
-        lvis
+    fn alloc_avis(&mut self, name: String, ty: Option<Type>) -> &'ast VarInfo<'ast, ParsedAst> {
+        let var = self.scope.alloc_avis(name, ty, ());
+        self.new_decs.push(var);
+        var
     }
 
     fn alloc_expr(&self, expr: Expr<'ast, ParsedAst>) -> &'ast ExprCell<'ast, ParsedAst> {
@@ -35,9 +35,9 @@ impl<'ast> Flatten<'ast> {
 
     fn emit_expr(&mut self, expr: Expr<'ast, ParsedAst>) -> Expr<'ast, ParsedAst> {
         let name = self.trav_name.next();
-        let lvis = self.alloc_lvis(name.clone(), None);
-        let rhs = self.alloc_expr(expr);
-        self.new_assigns.push(Assign { lhs: lvis, expr: rhs });
+        let lhs = self.alloc_avis(name.clone(), None);
+        let expr = self.alloc_expr(expr);
+        self.new_assigns.push(Assign { lhs, expr });
         Expr::Id(Id::Var(name))
     }
 }

@@ -17,13 +17,13 @@ impl ConstantFold {
         }
     }
 
-    fn ptr<'ast>(lvis: &VarInfo<'ast, TypedAst>) -> *const () {
-        lvis as *const _ as *const ()
+    fn ptr<'ast>(var: &VarInfo<'ast, TypedAst>) -> *const () {
+        var as *const _ as *const ()
     }
 
     fn const_u32<'ast>(&self, id: &Id<'ast, TypedAst>) -> Option<u32> {
         match id {
-            Id::Var(lvis) => self.known.get(&Self::ptr(lvis)).copied(),
+            Id::Var(var) => self.known.get(&Self::ptr(var)).copied(),
             Id::Arg(_) => None,
         }
     }

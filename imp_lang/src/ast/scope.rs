@@ -17,7 +17,7 @@ impl<'ast, Ast: Invariant> Scope<'ast, Ast> {
         }
     }
 
-    pub fn alloc_lvis(&'ast self, name: String, ty: Ast::VarType, ssa: Ast::SsaLink<'ast>) -> &'ast VarInfo<'ast, Ast> {
+    pub fn alloc_avis(&'ast self, name: String, ty: Ast::VarType, ssa: Ast::SsaLink<'ast>) -> &'ast VarInfo<'ast, Ast> {
         self.decs.alloc(VarInfo { name, ty, ssa })
     }
 

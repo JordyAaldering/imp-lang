@@ -33,10 +33,10 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         }
     }
 
-    fn alloc_lvis(&mut self, name: String, ty: Option<Type>) -> &'ast VarInfo<'ast, ParsedAst> {
-        let lvis = self.scope.alloc_lvis(name, ty, ());
-        self.current_decs.push(lvis);
-        lvis
+    fn alloc_avis(&mut self, name: String, ty: Option<Type>) -> &'ast VarInfo<'ast, ParsedAst> {
+        let var = self.scope.alloc_avis(name, ty, ());
+        self.current_decs.push(var);
+        var
     }
 
     fn alloc_expr(&self, expr: Expr<'ast, ParsedAst>) -> &'ast ExprCell<'ast, ParsedAst> {
@@ -208,7 +208,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                     .map_err(|_| ParseError::ExpectedStatement(err_token, err_loc))?;
 
                 let (expr, _) = self.parse_expr(None::<Bop>)?;
-                let lhs = self.alloc_lvis(lhs, None);
+                let lhs = self.alloc_avis(lhs, None);
                 Stmt::Assign(Assign { lhs, expr })
             }
             Token::Printf => {
@@ -289,7 +289,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
 
         let span_to = self.expect(Token::RBrace)?;
 
-        let iv = self.alloc_lvis(iv, None);
+        let iv = self.alloc_avis(iv, None);
         let tensor = self.alloc_expr(Expr::Tensor(Tensor {
             body,
             iv,

@@ -23,32 +23,26 @@ impl<'ast> AnalyseTp<'ast> {
         }
     }
 
-    fn alloc_lvis(&self, fundef: &mut Fundef<'ast, ParsedAst>, name: String, ty: Option<Type>) -> &'ast VarInfo<'ast, ParsedAst> {
-        let lvis = self.scope.alloc_lvis(name, ty, ());
-        fundef.decs.push(lvis);
-        lvis
-    }
-
-    fn alloc_expr(&self, expr: Expr<'ast, ParsedAst>) -> &'ast ExprCell<'ast, ParsedAst> {
-        self.scope.alloc_expr(expr)
-    }
-
-    fn arg_expr(&self, arg_index: usize) -> &'ast ExprCell<'ast, ParsedAst> {
-        self.alloc_expr(Expr::Id(Id::Arg(arg_index)))
+    fn alloc_avis(&self, fundef: &mut Fundef<'ast, ParsedAst>, name: String, ty: Option<Type>) -> &'ast VarInfo<'ast, ParsedAst> {
+        let var = self.scope.alloc_avis(name, ty, ());
+        fundef.decs.push(var);
+        var
     }
 
     fn shape_of_arg_expr(&self, arg_index: usize) -> Expr<'ast, ParsedAst> {
-        Expr::Prf(Prf::ShapeA(self.arg_expr(arg_index)))
+        let arg_id = Expr::Id(Id::Arg(arg_index));
+        Expr::Prf(Prf::ShapeA(self.scope.alloc_expr(arg_id)))
     }
 
     fn dim_of_arg_expr(&self, arg_index: usize) -> Expr<'ast, ParsedAst> {
-        Expr::Prf(Prf::DimA(self.arg_expr(arg_index)))
+        let arg_id = Expr::Id(Id::Arg(arg_index));
+        Expr::Prf(Prf::DimA(self.scope.alloc_expr(arg_id)))
     }
 
     fn dim_at_expr(&self, arg_index: usize, axis_index: usize) -> Expr<'ast, ParsedAst> {
-        let idx = self.alloc_expr(Expr::Const(Const::Usize(axis_index)));
-        let idx_vec = self.alloc_expr(Expr::Array(Array { elems: vec![idx] }));
-        let shp = self.alloc_expr(self.shape_of_arg_expr(arg_index));
+        let idx = self.scope.alloc_expr(Expr::Const(Const::Usize(axis_index)));
+        let idx_vec = self.scope.alloc_expr(Expr::Array(Array { elems: vec![idx] }));
+        let shp = self.scope.alloc_expr(self.shape_of_arg_expr(arg_index));
         Expr::Prf(Prf::SelVxA(idx_vec, shp))
     }
 
@@ -63,8 +57,8 @@ impl<'ast> AnalyseTp<'ast> {
         if self.defined.insert(symbol.to_owned()) {
             self.symbol_terms.insert(symbol.to_owned(), term.clone());
 
-            let lhs = self.alloc_lvis(fundef, symbol.to_owned(), Some(ty));
-            let expr = self.alloc_expr(expr);
+            let lhs = self.alloc_avis(fundef, symbol.to_owned(), Some(ty));
+            let expr = self.scope.alloc_expr(expr);
             fundef.shape_prelude.push(Assign { lhs, expr });
             fundef.shape_facts.bindings.push(ShapeBinding {
                 symbol: symbol.to_owned(),

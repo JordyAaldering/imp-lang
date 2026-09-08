@@ -17,8 +17,8 @@ impl DeadCodeRemoval {
         }
     }
 
-    fn ptr<'ast>(lvis: &VarInfo<'ast, TypedAst>) -> *const () {
-        lvis as *const _ as *const ()
+    fn ptr<'ast>(var: &VarInfo<'ast, TypedAst>) -> *const () {
+        var as *const _ as *const ()
     }
 }
 

@@ -171,12 +171,12 @@ impl TypeInfer {
     }
 
     fn extract_ub_axes<'ast>(&self, ub: &Id<'ast, UntypedAst>) -> Option<Vec<AxisPattern>> {
-        let lvis = match ub {
+        let var = match ub {
             Id::Var(v) => v,
             Id::Arg(_) => return None,
         };
 
-        let elems: Vec<Id<'ast, UntypedAst>> = match &*lvis.ssa?.borrow() {
+        let elems: Vec<Id<'ast, UntypedAst>> = match &*var.ssa?.borrow() {
             Expr::Array(arr) => arr.elems.clone(),
             _ => return None,
         };

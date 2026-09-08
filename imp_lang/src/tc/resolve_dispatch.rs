@@ -120,10 +120,10 @@ impl<'ast, 'stubs> DispatchResolver<'ast, 'stubs> {
         }
     }
 
-    fn alloc_lvis(&mut self, name: String, ty: Type, ssa: Option<&'ast ExprCell<'ast, TypedAst>>) -> &'ast VarInfo<'ast, TypedAst> {
-        let lvis = self.scope.alloc_lvis(name, ty, ssa);
-        self.new_decs.push(lvis);
-        lvis
+    fn alloc_avis(&mut self, name: String, ty: Type, ssa: Option<&'ast ExprCell<'ast, TypedAst>>) -> &'ast VarInfo<'ast, TypedAst> {
+        let var = self.scope.alloc_avis(name, ty, ssa);
+        self.new_decs.push(var);
+        var
     }
 
     fn alloc_expr(&self, expr: Expr<'ast, TypedAst>) -> &'ast ExprCell<'ast, TypedAst> {
@@ -247,7 +247,7 @@ impl<'ast, 'stubs> DispatchResolver<'ast, 'stubs> {
         let expr = self.lower_expr(assign.expr.borrow().clone());
         let expr_ref = self.alloc_expr(expr);
         let lhs_ty = self.require_ty(&assign.lhs.name, &assign.lhs.ty.borrow());
-        let lhs = self.alloc_lvis(assign.lhs.name.clone(), lhs_ty, Some(expr_ref));
+        let lhs = self.alloc_avis(assign.lhs.name.clone(), lhs_ty, Some(expr_ref));
         self.idmap.insert(assign.lhs as *const _, lhs);
         Assign { lhs, expr: expr_ref }
     }
@@ -337,7 +337,7 @@ impl<'ast, 'stubs> DispatchResolver<'ast, 'stubs> {
 
     fn lower_tensor(&mut self, tensor: Tensor<'ast, UntypedAst>) -> Tensor<'ast, TypedAst> {
         let iv_ty = self.require_ty(&tensor.iv.name, &tensor.iv.ty.borrow());
-        let iv = self.alloc_lvis(tensor.iv.name.clone(), iv_ty, None);
+        let iv = self.alloc_avis(tensor.iv.name.clone(), iv_ty, None);
         self.idmap.insert(tensor.iv as *const _, iv);
 
         Tensor {

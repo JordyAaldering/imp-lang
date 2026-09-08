@@ -50,10 +50,10 @@ impl<'ast> ToSsa<'ast> {
         }
     }
 
-    fn alloc_lvis(&mut self, name: String, ssa: Option<&'ast ExprCell<'ast, UntypedAst>>) -> &'ast VarInfo<'ast, UntypedAst> {
-        let lvis = self.scope.alloc_lvis(name, RefCell::new(None), ssa);
-        self.new_decs.push(lvis);
-        lvis
+    fn alloc_avis(&mut self, name: String, ssa: Option<&'ast ExprCell<'ast, UntypedAst>>) -> &'ast VarInfo<'ast, UntypedAst> {
+        let var = self.scope.alloc_avis(name, RefCell::new(None), ssa);
+        self.new_decs.push(var);
+        var
     }
 
     fn alloc_expr(&self, expr: Expr<'ast, UntypedAst>) -> &'ast ExprCell<'ast, UntypedAst> {
@@ -163,10 +163,10 @@ impl<'ast> ToSsa<'ast> {
 
         let expr = self.trav_expr(assign.expr.borrow().clone());
         let expr = self.alloc_expr(expr);
-        let lvis = self.alloc_lvis(new_name, Some(expr));
-        self.bind_env(old_name, Id::Var(lvis));
+        let lhs = self.alloc_avis(new_name, Some(expr));
+        self.bind_env(old_name, Id::Var(lhs));
 
-        Assign { lhs: lvis, expr }
+        Assign { lhs, expr }
     }
 
     fn trav_printf(&mut self, printf: Printf<'ast, ParsedAst>) -> Printf<'ast, UntypedAst> {
@@ -233,21 +233,16 @@ impl<'ast> ToSsa<'ast> {
         let lb = tensor.lb.map(|lb| self.unwrap_id_operand(lb));
         let ub = self.unwrap_id_operand(tensor.ub);
 
-        let iv_lvis = self.alloc_lvis(tensor.iv.name.clone(), None);
+        let iv = self.alloc_avis(tensor.iv.name.clone(), None);
 
         self.push_env();
-        self.bind_env(tensor.iv.name.clone(), Id::Var(iv_lvis));
+        self.bind_env(tensor.iv.name.clone(), Id::Var(iv));
 
         let body = self.trav_body(tensor.body);
 
         self.pop_env();
 
-        Tensor {
-            body,
-            iv: iv_lvis,
-            lb,
-            ub,
-        }
+        Tensor { body, iv, lb, ub }
     }
 
     fn trav_fold(&mut self, fold: Fold<'ast, ParsedAst>) -> Fold<'ast, UntypedAst> {
