@@ -65,20 +65,6 @@ impl CompileC {
         self.expr_stack.pop().expect("ID stack underflow")
     }
 
-    fn id_type(&self, id: &Id<'_, TypedAst>) -> Type {
-        match id {
-            Id::Arg(i) => self.arg_types[*i].clone(),
-            Id::Var(v) => v.ty.clone(),
-        }
-    }
-
-    fn nameof(&mut self, id: &Id<'_, TypedAst>) -> String {
-        match id {
-            Id::Arg(i) => self.arg_names[*i].clone(),
-            Id::Var(v) => v.name.clone(),
-        }
-    }
-
     fn emit_function_prototype(&mut self, fundef: &Fundef<'_, TypedAst>) {
         let args: Vec<String> = fundef
             .args
@@ -160,11 +146,6 @@ impl CompileC {
 
         self.indent -= 1;
         self.push_line("}");
-    }
-
-    fn emit_return(&mut self, ret: Id<'_, TypedAst>) {
-        let name = self.render_id(ret);
-        self.push_line(&format!("return {name};"));
     }
 }
 
@@ -249,7 +230,10 @@ impl<'ast> Traverse<'ast> for CompileC {
         for stmt in &mut fundef.body.stmts {
             self.trav_stmt(stmt);
         }
-        self.emit_return(fundef.body.ret);
+
+        let ret_id = self.render_id(fundef.body.ret);
+        self.push_line(&format!("return {ret_id};"));
+
         self.indent -= 1;
 
         self.push_line("}");
@@ -277,27 +261,27 @@ impl<'ast> Traverse<'ast> for CompileC {
     }
 
     fn trav_printf(&mut self, printf: &mut Printf<'ast, Self::Ast>) {
-        let id = self.nameof(&printf.id);
+        let id = printf.id.get_name(&self.arg_names);
         self.push_line(&format!("printf(\"Hello, {}\\n\");", id));
     }
 
     fn trav_cond(&mut self, cond: &mut Cond<'ast, Self::Ast>) {
         if cond.then_branch.stmts.is_empty() && cond.else_branch.stmts.is_empty() {
-            let c = self.nameof(&cond.cond);
-            let t = self.nameof(&cond.then_branch.ret);
-            let f = self.nameof(&cond.else_branch.ret);
+            let c = cond.cond.get_name(&self.arg_names);
+            let t = cond.then_branch.ret.get_name(&self.arg_names);
+            let f = cond.else_branch.ret.get_name(&self.arg_names);
             self.expr_stack.push(format!("{} ? {} : {}", c, t, f));
         } else {
-            self.push_line(&format!("{} cond_ret;", self.id_type(&cond.then_branch.ret).c_str()));
+            self.push_line(&format!("{} cond_ret;", cond.then_branch.ret.get_type(&self.arg_types).c_str()));
 
-            let c = self.nameof(&cond.cond);
+            let c = cond.cond.get_name(&self.arg_names);
             self.push_line(&format!("if ({}) {{", c));
             self.indent += 1;
 
             for stmt in &mut cond.then_branch.stmts {
                 self.trav_stmt(stmt);
             }
-            let t = self.nameof(&cond.then_branch.ret);
+            let t = cond.then_branch.ret.get_name(&self.arg_names);
             self.push_line(&format!("cond_ret = {};", t));
 
             self.indent -= 1;
@@ -307,7 +291,7 @@ impl<'ast> Traverse<'ast> for CompileC {
             for stmt in &mut cond.else_branch.stmts {
                 self.trav_stmt(stmt);
             }
-            let f = self.nameof(&cond.else_branch.ret);
+            let f = cond.else_branch.ret.get_name(&self.arg_names);
             self.push_line(&format!("cond_ret = {};", f));
 
             self.indent -= 1;
@@ -331,10 +315,10 @@ impl<'ast> Traverse<'ast> for CompileC {
         // Extract scalar lower/upper bound per dimension.
         for d in 0..rank {
             if let Some(lb) = &tensor.lb {
-                let lb_name = self.nameof(lb);
+                let lb_name = lb.get_name(&self.arg_names);
                 self.push_line(&format!("size_t {iv_name}_lb{d}_{t_uid} = ((size_t *){lb_name}.data)[{d}];"));
             }
-            let ub_name = self.nameof(&tensor.ub);
+            let ub_name = tensor.ub.get_name(&self.arg_names);
             self.push_line(&format!("size_t {iv_name}_ub{d}_{t_uid} = ((size_t *){ub_name}.data)[{d}];"));
         }
 
@@ -437,7 +421,7 @@ impl<'ast> Traverse<'ast> for CompileC {
             (name, ty, false)
         } else {
             self.tensor_uid += 1;
-            (format!("_fold_{}", self.tensor_uid), self.id_type(&fold.neutral), true)
+            (format!("_fold_{}", self.tensor_uid), fold.neutral.get_type(&self.arg_types).clone(), true)
         };
 
         let iv_name = fold.selection.iv.name.clone();
@@ -452,10 +436,10 @@ impl<'ast> Traverse<'ast> for CompileC {
 
         for d in 0..rank {
             if let Some(lb) = &fold.selection.lb {
-                let lb_name = self.nameof(lb);
+                let lb_name = lb.get_name(&self.arg_names);
                 self.push_line(&format!("size_t {iv_name}_lb{d}_{t_uid} = ((size_t *){lb_name}.data)[{d}];"));
             }
-            let ub_name = self.nameof(&fold.selection.ub);
+            let ub_name = fold.selection.ub.get_name(&self.arg_names);
             self.push_line(&format!("size_t {iv_name}_ub{d}_{t_uid} = ((size_t *){ub_name}.data)[{d}];"));
         }
 
@@ -558,7 +542,7 @@ impl<'ast> Traverse<'ast> for CompileC {
             SelVxA(idx, arr) => {
                 let arr_name = self.render_id(*arr);
                 let idx_name = self.render_id(*idx);
-                let elem_base = elem_ctype_of_id(arr, &self.arg_types);
+                let elem_base = arr.get_type(&self.arg_types).basetype.c_str();
                 format!("(({elem_base} *){arr_name}.data)[imp_flat_index({arr_name}, {idx_name})]")
             }
             AddSxS(a, b) => format!("{} + {}", self.render_id(*a), self.render_id(*b)),
@@ -636,12 +620,5 @@ fn wrapper_call_arg(ty: &Type, arg: &str, base: &BaseType) -> String {
         format!("(*({}*){}.data)", base.c_str(), arg)
     } else {
         arg.to_owned()
-    }
-}
-
-fn elem_ctype_of_id(id: &Id<'_, TypedAst>, args: &[Type]) -> String {
-    match id {
-        Id::Arg(i) => args[*i].basetype.c_str(),
-        Id::Var(v) => v.ty.basetype.c_str(),
     }
 }
