@@ -4,35 +4,36 @@ use crate::ast::{AxisPattern::ShapePattern, *};
 
 /// Not all patterns that can be constructed from the grammar are actually resolvable.
 /// This pass rejects unresolved variable-rank patterns (`d:shp`) at compile time.
-pub fn check_tp<'ast>(program: Program<'ast, ParsedAst>) -> Result<Program<'ast, ParsedAst>, String> {
-	CheckTypePatterns::new().run(program)
+pub fn check_tp<'ast>(mut program: Program<'ast, ParsedAst>) -> Result<Program<'ast, ParsedAst>, String> {
+	let mut trav = CheckTypePatterns::default();
+
+	trav.trav_program(&mut program);
+
+	if trav.errors.is_empty() {
+		Ok(program)
+	} else {
+		Err(trav.errors.join("\n"))
+	}
 }
 
+#[derive(Default)]
 struct CheckTypePatterns {
 	errors: Vec<String>,
 }
 
+impl<'ast> Traverse<'ast> for CheckTypePatterns {
+	type Ast = ParsedAst;
+
+	type DeclOut = ();
+
+	type ExprOut = ();
+
+	fn trav_fundef(&mut self, fundef: &mut Fundef<'ast, Self::Ast>) {
+		self.check_fundef(fundef);
+	}
+}
+
 impl CheckTypePatterns {
-	fn new() -> Self {
-		Self { errors: Vec::new() }
-	}
-
-	fn run<'ast>(mut self, program: Program<'ast, ParsedAst>) -> Result<Program<'ast, ParsedAst>, String> {
-        for (_, groups) in &program.overloads {
-            for (_, fundef_ids) in groups {
-                for fundef_id in fundef_ids {
-					self.check_fundef(program.fundef(*fundef_id));
-                }
-            }
-        }
-
-		if self.errors.is_empty() {
-			Ok(program)
-		} else {
-			Err(self.errors.join("\n"))
-		}
-	}
-
 	fn check_fundef(&mut self, fundef: &Fundef<'_, ParsedAst>) {
 		let mut defined_symbols: HashSet<String> = HashSet::new();
 
