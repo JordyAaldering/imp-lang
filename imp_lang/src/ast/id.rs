@@ -17,12 +17,12 @@ pub struct VarInfo<'ast, Ast: Invariant> {
 }
 
 impl<'ast, Ast: Invariant> Id<'ast, Ast> {
-    pub fn get(&'ast self, args: &'ast [Ast::VarLink<'ast>]) -> &'ast Ast::VarLink<'ast> {
-        match self {
-            Self::Arg(i) => &args[*i],
-            Self::Var(v) => v,
-        }
-    }
+    // pub fn get(&'ast self, args: &'ast [Ast::VarLink<'ast>]) -> &'ast Ast::VarLink<'ast> {
+    //     match self {
+    //         Self::Arg(i) => &args[*i],
+    //         Self::Var(v) => v,
+    //     }
+    // }
 
     pub fn get_name(&self, arg_names: &[String]) -> String {
         match self {

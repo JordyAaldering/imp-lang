@@ -89,18 +89,18 @@ impl Type {
         self.is_scalar().unwrap_or(false)
     }
 
-    pub fn is_maybe_scalar(&self) -> bool {
-        self.is_scalar().unwrap_or(true)
-    }
+    // pub fn is_maybe_scalar(&self) -> bool {
+    //     self.is_scalar().unwrap_or(true)
+    // }
 
     /// Check whether the type is an array. Returns None if the rank is possibly non-zero, but variable.
     pub fn is_array(&self) -> Option<bool> {
         self.shape.is_array()
     }
 
-    pub fn is_definitely_array(&self) -> bool {
-        self.is_array().unwrap_or(false)
-    }
+    // pub fn is_definitely_array(&self) -> bool {
+    //     self.is_array().unwrap_or(false)
+    // }
 
     pub fn is_maybe_array(&self) -> bool {
         self.is_array().unwrap_or(true)

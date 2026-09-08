@@ -12,10 +12,8 @@ mod cg;
 
 use std::{fs, path::PathBuf};
 
-use ast::*;
 use phase::phase_log;
 use phase_id::PhaseId;
-
 pub use phase::Phase;
 
 macro_rules! breakpoint {
@@ -40,7 +38,7 @@ pub fn compile(breakpoint: Option<Phase>, infile: &PathBuf, outdir: Option<&Path
     let src = fs::read_to_string(&infile).unwrap();
     breakpoint_str!(breakpoint, Phase::RD, src);
 
-    let parsed_scope = Scope::<ParsedAst>::new();
+    let parsed_scope = ast::Scope::<ast::ParsedAst>::new();
     let mut ast = scp::scanparse(&src, &parsed_scope).unwrap();
     breakpoint!(breakpoint, Phase::SCP, ast);
 
@@ -53,14 +51,14 @@ pub fn compile(breakpoint: Option<Phase>, infile: &PathBuf, outdir: Option<&Path
     pre::flatten(&mut ast, &parsed_scope);
     breakpoint!(breakpoint, Phase::FLT, ast);
 
-    let untyped_scope = Scope::<UntypedAst>::new();
+    let untyped_scope = ast::Scope::<ast::UntypedAst>::new();
     let mut ast = pre::to_ssa(ast, &untyped_scope);
     breakpoint!(breakpoint, Phase::SSA, ast);
 
     tc::type_infer(&mut ast).unwrap();
     breakpoint!(breakpoint, Phase::TI, ast);
 
-    let typed_scope = Scope::<TypedAst>::new();
+    let typed_scope = ast::Scope::<ast::TypedAst>::new();
     let mut ast = tc::resolve_dispatch(ast, &typed_scope).unwrap();
     breakpoint!(breakpoint, Phase::DR, ast);
 
