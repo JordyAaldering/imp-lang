@@ -8,35 +8,31 @@ pub fn flatten<'ast>(program: &mut Program<'ast, ParsedAst>, scope: &'ast Scope<
 
 struct Flatten<'ast> {
     scope: &'ast Scope<'ast, ParsedAst>,
-    trav_name: TravName,
     new_decs: Vec<&'ast VarInfo<'ast, ParsedAst>>,
     new_assigns: Vec<Assign<'ast, ParsedAst>>,
+    uid: TravName,
 }
 
 impl<'ast> Flatten<'ast> {
     fn new(scope: &'ast Scope<'ast, ParsedAst>) -> Self {
         Self {
             scope,
-            trav_name: TravName::new(crate::Phase::FLT),
             new_decs: Vec::new(),
             new_assigns: Vec::new(),
+            uid: TravName::new(crate::Phase::FLT),
         }
     }
 
-    fn alloc_avis(&mut self, name: String, ty: Option<Type>) -> &'ast VarInfo<'ast, ParsedAst> {
+    fn emit_var(&mut self, name: String, ty: Option<Type>) -> &'ast VarInfo<'ast, ParsedAst> {
         let var = self.scope.alloc_avis(name, ty, ());
         self.new_decs.push(var);
         var
     }
 
-    fn alloc_expr(&self, expr: Expr<'ast, ParsedAst>) -> &'ast ExprCell<'ast, ParsedAst> {
-        self.scope.alloc_expr(expr)
-    }
-
     fn emit_expr(&mut self, expr: Expr<'ast, ParsedAst>) -> Expr<'ast, ParsedAst> {
-        let name = self.trav_name.next();
-        let lhs = self.alloc_avis(name.clone(), None);
-        let expr = self.alloc_expr(expr);
+        let name = self.uid.next();
+        let lhs = self.emit_var(name.clone(), None);
+        let expr = self.scope.alloc_expr(expr);
         self.new_assigns.push(Assign { lhs, expr });
         Expr::Id(Id::Var(name))
     }
@@ -85,21 +81,12 @@ impl<'ast> Traverse<'ast> for Flatten<'ast> {
     }
 
     fn trav_expr_value(&mut self, expr: Expr<'ast, Self::Ast>) -> (Expr<'ast, Self::Ast>, Self::ExprOut) {
-        use Expr::*;
-        let (expr, _) = match expr {
-            Id(n) => {
-                return (Id(n), ());
-            }
-            Cond(n) => self.trav_cond_expr(n),
-            Call(n) => self.trav_call_expr(n),
-            Prf(n) => self.trav_prf_expr(n),
-            Tensor(n) => self.trav_tensor_expr(n),
-            Fold(n) => self.trav_fold_expr(n),
-            Array(n) => self.trav_array_expr(n),
-            Const(n) => self.trav_const_expr(n),
-        };
-
-        let id = self.emit_expr(expr);
-        (id, ())
+        if let Expr::Id(_) = expr {
+            (expr, ())
+        } else {
+            let expr = expr.visit(self).0;
+            let id = self.emit_expr(expr);
+            (id, ())
+        }
     }
 }
