@@ -86,7 +86,7 @@ fn mangle_args<'a>(args: &[Farg]) -> String
 }
 
 pub fn mangle_type(ty: &Type) -> String {
-    format!("{}_{}", ty.basetype.rstype(), mangle_shape(&ty))
+    format!("{}_{}", ty.basetype.rs_str(), mangle_shape(&ty))
 }
 
 fn mangle_shape(ty: &Type) -> String {

@@ -33,8 +33,8 @@ impl<'ast> Traverse<'ast> for CompileFfi {
                 for fundef_id in fundef_ids {
                     let fundef = program.fundef(*fundef_id);
                     self.push(&format!("    fn IMP_{}(", fundef.name));
-                    self.push(&join_args(&fundef.args, Type::rstype));
-                    self.push(&format!(") -> {};\n", fundef.ret_type.rstype()));
+                    self.push(&join_args(&fundef.args, Type::rs_str));
+                    self.push(&format!(") -> {};\n", fundef.ret_type.rs_str()));
                 }
             }
         }
@@ -83,7 +83,7 @@ impl CompileFfi {
         sig: &BaseSignature,
         fundefs: &Vec<&Fundef<'_, TypedAst>>,
     ) {
-        let sig_str = sig.base_types.iter().map(BaseType::rstype).collect::<Vec<_>>();
+        let sig_str = sig.base_types.iter().map(BaseType::rs_str).collect::<Vec<_>>();
 
         // Per-position: is this arg scalar for ALL variants?
         let n_args = sig.base_types.len();
@@ -98,9 +98,9 @@ impl CompileFfi {
             .enumerate()
             .map(|(i, base)| {
                 if all_scalar_args[i] {
-                    format!("arg{}: {}", i, base.rstype())
+                    format!("arg{}: {}", i, base.rs_str())
                 } else {
-                    format!("arg{}: ImpArray<{}>", i, base.rstype())
+                    format!("arg{}: ImpArray<{}>", i, base.rs_str())
                 }
             })
             .collect::<Vec<_>>()
@@ -108,9 +108,9 @@ impl CompileFfi {
 
         let first = fundefs[0];
         let ret_ty_str = if all_scalar_ret {
-            first.ret_type.basetype.rstype()
+            first.ret_type.basetype.rs_str()
         } else {
-            format!("ImpArray<{}>", first.ret_type.basetype.rstype())
+            format!("ImpArray<{}>", first.ret_type.basetype.rs_str())
         };
 
         self.push(&format!(
@@ -174,9 +174,9 @@ fn join_args(args: &[Farg], map_ty: fn(&Type) -> String) -> String {
 /// Rust type used in wrapper signatures: arrays -> `ImpArray<T>`, scalars -> `T`.
 fn rust_wrapper_type(ty: &Type) -> String {
     if ty.is_maybe_array() {
-        format!("ImpArray<{}>", ty.basetype.rstype())
+        format!("ImpArray<{}>", ty.basetype.rs_str())
     } else {
-        ty.basetype.rstype()
+        ty.basetype.rs_str()
     }
 }
 
@@ -237,7 +237,7 @@ fn emit_return_expr(symbol_name: &str, ret_type: &Type, call_args: &[String]) ->
             "let __res_raw = unsafe {{ IMP_{}({}) }};\nunsafe {{ ImpArray::<{}>::from_raw(__res_raw) }}",
             symbol_name,
             call_args.join(", "),
-            ret_type.basetype.rstype(),
+            ret_type.basetype.rs_str(),
         )
     } else {
         format!("unsafe {{ IMP_{}({}) }}", symbol_name, call_args.join(", "))
@@ -260,7 +260,7 @@ fn emit_family_return_expr(
             "let __res_raw = unsafe {{ IMP_{}({}) }};\nunsafe {{ ImpArray::<{}>::from_raw(__res_raw) }}",
             symbol_name,
             call_args.join(", "),
-            ret_type.basetype.rstype(),
+            ret_type.basetype.rs_str(),
         )
     } else {
         // variant returns scalar but wrapper return type is ImpArray<T>

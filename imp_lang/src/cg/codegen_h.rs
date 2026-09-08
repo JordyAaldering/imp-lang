@@ -42,12 +42,12 @@ impl<'ast> Traverse<'ast> for CompileHeader {
     fn trav_fundef(&mut self, fundef: &mut Fundef<'ast, TypedAst>) {
         let args: Vec<String> = fundef.args
             .iter()
-            .map(|arg| format!("{} {}", &arg.ty.ctype(), arg.id))
+            .map(|arg| format!("{} {}", &arg.ty.c_str(), arg.id))
             .collect();
 
         self.output.push_str(&format!(
             "{} IMP_{}({});\n",
-            fundef.ret_type.ctype(),
+            fundef.ret_type.c_str(),
             fundef.name,
             args.join(", "),
         ));

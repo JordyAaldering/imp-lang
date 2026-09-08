@@ -83,18 +83,18 @@ impl CompileC {
         let args: Vec<String> = fundef
             .args
             .iter()
-            .map(|arg| format!("{} {}", arg.ty.ctype(), arg.id))
+            .map(|arg| format!("{} {}", arg.ty.c_str(), arg.id))
             .collect();
         self.output.push_str(&format!(
             "{} IMP_{}({});\n",
-            fundef.ret_type.ctype(),
+            fundef.ret_type.c_str(),
             fundef.name,
             args.join(", ")
         ));
     }
 
     fn emit_wrapper_prototype(&mut self, base_name: &str, sig: &BaseSignature, _ret_ty: &BaseType) {
-        let sig_str = sig.base_types.iter().map(BaseType::ctype).collect::<Vec<_>>();
+        let sig_str = sig.base_types.iter().map(BaseType::c_str).collect::<Vec<_>>();
         let fargs: Vec<String> = sig.base_types
             .iter()
             .enumerate()
@@ -105,7 +105,7 @@ impl CompileC {
     }
 
     fn emit_wrapper_function(&mut self, base_name: &str, sig: &BaseSignature, family: &Vec<&Fundef<'_, TypedAst>>) {
-        let sig_str = sig.base_types.iter().map(BaseType::ctype).collect::<Vec<_>>();
+        let sig_str = sig.base_types.iter().map(BaseType::c_str).collect::<Vec<_>>();
         let fargs: Vec<String> = sig.base_types
             .iter()
             .enumerate()
@@ -142,7 +142,7 @@ impl CompileC {
                 self.push_line(&format!("return {call_expr};"));
             } else {
                 // Scalar return: wrap in a 0-d ImpArrayRaw (dim=0, len=1, shp=NULL)
-                let base = fundef.ret_type.basetype.ctype();
+                let base = fundef.ret_type.basetype.c_str();
                 self.push_line(&format!("{base} __ret_val = {call_expr};"));
                 self.push_line(&format!("{base} *__ret_data = IMP_ALLOC_DATA({base}, 1);"));
                 self.push_line("*__ret_data = __ret_val;");
@@ -234,12 +234,12 @@ impl<'ast> Traverse<'ast> for CompileC {
         self.arg_types = fundef.args.iter().map(|arg| arg.ty.clone()).collect();
         self.ret_type = Some(fundef.ret_type.clone());
         let args: Vec<String> = fundef.args.iter()
-            .map(|arg| format!("{} {}", arg.ty.ctype(), arg.id))
+            .map(|arg| format!("{} {}", arg.ty.c_str(), arg.id))
             .collect();
 
         self.push_line(&format!(
             "{} IMP_{}({}) {{",
-            fundef.ret_type.ctype(), fundef.name, args.join(", ")
+            fundef.ret_type.c_str(), fundef.name, args.join(", ")
         ));
 
         self.indent += 1;
@@ -270,7 +270,7 @@ impl<'ast> Traverse<'ast> for CompileC {
         self.trav_expr(assign.expr);
         if !matches!(&*assign.expr.borrow(), Expr::Tensor(_) | Expr::Fold(_) | Expr::Array(_)) {
             let rhs = self.expr_stack.pop().expect("expression stack underflow");
-            self.push_line(&format!("{} {} = {};", ty.ctype(), name, rhs));
+            self.push_line(&format!("{} {} = {};", ty.c_str(), name, rhs));
         }
 
         self.lhs_target = prev_lhs_target;
@@ -288,7 +288,7 @@ impl<'ast> Traverse<'ast> for CompileC {
             let f = self.nameof(&cond.else_branch.ret);
             self.expr_stack.push(format!("{} ? {} : {}", c, t, f));
         } else {
-            self.push_line(&format!("{} cond_ret;", self.id_type(&cond.then_branch.ret).ctype()));
+            self.push_line(&format!("{} cond_ret;", self.id_type(&cond.then_branch.ret).c_str()));
 
             let c = self.nameof(&cond.cond);
             self.push_line(&format!("if ({}) {{", c));
@@ -319,7 +319,7 @@ impl<'ast> Traverse<'ast> for CompileC {
 
     fn trav_tensor(&mut self, tensor: &mut Tensor<'ast, Self::Ast>) {
         let (target_name, target_ty) = self.lhs_target.clone().expect("tensor target must be set");
-        let base = target_ty.basetype.ctype();
+        let base = target_ty.basetype.c_str();
         let iv_name = tensor.iv.name.clone();
 
         let rank = tensor.iv.ty.rank()
@@ -377,7 +377,7 @@ impl<'ast> Traverse<'ast> for CompileC {
         }
 
         // Build iv as a stack-allocated ImpArrayRaw so that iv[i] selections work.
-        let iv_elem = &tensor.iv.ty.basetype.ctype();
+        let iv_elem = &tensor.iv.ty.basetype.c_str();
         let iv_components: Vec<String> = (0..rank)
             .map(|d| format!("({iv_elem}){iv_name}_{d}_{t_uid}"))
             .collect();
@@ -448,7 +448,7 @@ impl<'ast> Traverse<'ast> for CompileC {
         let t_uid = self.tensor_uid;
 
         let neutral_expr = self.render_id(fold.neutral);
-        self.push_line(&format!("{} {} = {};", target_ty.ctype(), target_name, neutral_expr));
+        self.push_line(&format!("{} {} = {};", target_ty.c_str(), target_name, neutral_expr));
 
         for d in 0..rank {
             if let Some(lb) = &fold.selection.lb {
@@ -468,7 +468,7 @@ impl<'ast> Traverse<'ast> for CompileC {
             self.indent += 1;
         }
 
-        let iv_elem = fold.selection.iv.ty.basetype.ctype();
+        let iv_elem = fold.selection.iv.ty.basetype.c_str();
         let iv_components: Vec<String> = (0..rank)
             .map(|d| format!("({iv_elem}){iv_name}_{d}_{t_uid}"))
             .collect();
@@ -583,7 +583,7 @@ impl<'ast> Traverse<'ast> for CompileC {
         let data_name = format!("{}_data", target_name);
         let shp_name = format!("{}_shp", target_name);
         let len_name = format!("{}_len", target_name);
-        let base = target_ty.basetype.ctype();
+        let base = target_ty.basetype.c_str();
 
         self.push_line(&format!("size_t {} = {};", len_name, array.elems.len()));
         self.push_line(&format!("{base} *{data_name} = IMP_ALLOC_DATA({base}, {len_name});"));
@@ -633,7 +633,7 @@ fn shape_match_condition(ty: &Type, arg: &str) -> String {
 
 fn wrapper_call_arg(ty: &Type, arg: &str, base: &BaseType) -> String {
     if let Some(_) = ty.type_pattern() {
-        format!("(*({}*){}.data)", base.ctype(), arg)
+        format!("(*({}*){}.data)", base.c_str(), arg)
     } else {
         arg.to_owned()
     }
@@ -641,7 +641,7 @@ fn wrapper_call_arg(ty: &Type, arg: &str, base: &BaseType) -> String {
 
 fn elem_ctype_of_id(id: &Id<'_, TypedAst>, args: &[Type]) -> String {
     match id {
-        Id::Arg(i) => args[*i].basetype.ctype(),
-        Id::Var(v) => v.ty.basetype.ctype(),
+        Id::Arg(i) => args[*i].basetype.c_str(),
+        Id::Var(v) => v.ty.basetype.c_str(),
     }
 }

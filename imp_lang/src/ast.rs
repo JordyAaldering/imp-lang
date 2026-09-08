@@ -19,6 +19,7 @@ mod array;
 // Terminals
 mod id;
 mod constval;
+mod type_pattern;
 mod typ;
 
 // Declarations
@@ -42,6 +43,7 @@ pub use array::*;
 // Terminals
 pub use id::*;
 pub use constval::*;
+pub use type_pattern::*;
 pub use typ::*;
 
 use std::{cell::RefCell, fmt};
