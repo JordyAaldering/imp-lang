@@ -1,6 +1,6 @@
 use std::{cell::RefCell, collections::HashMap, mem};
 
-use crate::{ast::*, trav_name::TravName};
+use crate::{ast::*, PhaseId};
 
 pub fn to_ssa<'ast>(program: Program<'ast, ParsedAst>, scope: &'ast Scope<'ast, UntypedAst>) -> Program<'ast, UntypedAst> {
     let mut overloads = HashMap::new();
@@ -33,7 +33,7 @@ pub fn to_ssa<'ast>(program: Program<'ast, ParsedAst>, scope: &'ast Scope<'ast, 
 
 pub struct ToSsa<'ast> {
     scope: &'ast Scope<'ast, UntypedAst>,
-    trav_name: TravName,
+    trav_name: PhaseId,
     new_decs: Vec<&'ast VarInfo<'ast, UntypedAst>>,
     new_assigns: Vec<Stmt<'ast, UntypedAst>>,
     env_stack: Vec<HashMap<String, Id<'ast, UntypedAst>>>,
@@ -43,7 +43,7 @@ impl<'ast> ToSsa<'ast> {
     fn new(scope: &'ast Scope<'ast, UntypedAst>) -> Self {
         Self {
             scope,
-            trav_name: TravName::new(crate::Phase::SSA),
+            trav_name: PhaseId::new(crate::Phase::SSA),
             new_decs: Vec::new(),
             new_assigns: Vec::new(),
             env_stack: Vec::new(),

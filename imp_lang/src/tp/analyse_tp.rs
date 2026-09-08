@@ -1,6 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use crate::{Phase, ast::*, phase::phase_log};
+use crate::{ast::*, Phase, phase_log};
 
 pub fn analyse_tp<'ast>(program: &mut Program<'ast, ParsedAst>, scope: &'ast Scope<'ast, ParsedAst>) {
     AnalyseTp::new(scope).trav_program(program);

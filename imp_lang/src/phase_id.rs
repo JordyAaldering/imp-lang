@@ -1,17 +1,17 @@
 use crate::Phase;
 
-pub struct TravName {
-    str: &'static str,
+pub struct PhaseId {
+    phase: Phase,
     id: usize,
 }
 
-impl TravName {
+impl PhaseId {
     pub fn new(phase: Phase) -> Self {
-        Self { str: phase.name(), id: 0 }
+        Self { phase, id: 0 }
     }
 
     pub fn next(&mut self) -> String {
         self.id += 1;
-        format!("{}{}", self.str, self.id)
+        format!("{}{}", self.phase.name(), self.id)
     }
 }

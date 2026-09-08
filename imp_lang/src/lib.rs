@@ -1,5 +1,5 @@
+mod phase_id;
 mod phase;
-mod trav_name;
 mod ast;
 mod trav;
 mod show;
@@ -13,6 +13,8 @@ mod cg;
 use std::{fs, path::PathBuf};
 
 use ast::{Scope, ParsedAst, TypedAst, UntypedAst};
+use phase_id::PhaseId;
+use phase::phase_log;
 pub use phase::Phase;
 
 macro_rules! breakpoint {
