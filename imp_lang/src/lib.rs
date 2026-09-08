@@ -12,9 +12,10 @@ mod cg;
 
 use std::{fs, path::PathBuf};
 
-use ast::{Scope, ParsedAst, TypedAst, UntypedAst};
-use phase_id::PhaseId;
+use ast::*;
 use phase::phase_log;
+use phase_id::PhaseId;
+
 pub use phase::Phase;
 
 macro_rules! breakpoint {
