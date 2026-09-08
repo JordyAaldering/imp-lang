@@ -22,10 +22,14 @@ pub enum AxisPattern {
     },
 }
 
+/// Captures the extent of a single dimension.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum RankCapture {
+    /// `5`: a dimension of fixed length 5.
     Fixed(usize),
+    /// `d`: a dimension of variable length `d`.
     Var(String),
+    /// `_`: a dimension of variable, unnamed length.
     Free,
 }
 

@@ -1,3 +1,38 @@
+//! This module implements dispatch resolution for overloaded functions. It takes a program with
+//! untyped AST and a scope with typed AST, and produces a program with typed AST where all function
+//! calls are resolved to specific overloads based on the argument types.
+//!
+//! It is not always possible to statically decide which overload to call, namely with respect to
+//! shapes, which are not always statically known. For these cases, we generate `wrapper functions'.
+//! These wrapper functions are generated for each overload of the same base types, but with different
+//! shapes. The wrapper function checks the shapes of the arguments at runtime and dispatches to the
+//! correct overload.
+//!
+//! It is required that all overloads are non-ambiguous, i.e., for any given set of argument types,
+//! there is at most one overload that `most compatible' with those types. Where `most compatible' is
+//! to say that, when there are multiple overloads, such as `int` and int[d:shp] (where both may fit
+//! if d is 0), the `int` case is more specific than the `int[*]` case.
+//!
+//! For a failing example, consider:
+//!
+//! ```imp
+//! foo(x: int, y: int[*]) -> int
+//!
+//! foo(x: int[*], y: int) -> int
+//! ```
+//!
+//! Here, if we call `foo(5, 5)`, both overloads are compatible, and we can define no clear ordering
+//! between these overloads. In this case, the user should make the signatures more specific:
+//!
+//! ```imp
+//! foo(x: int, y: int[*]) -> int
+//!
+//! foo(x: int[+], y: int) -> int
+//! ```
+//!
+//! Now, `foo(5, 5)` can only refer to the first case, and any higher-dimensional
+//! case can only match either one, but not both.
+
 use std::collections::HashMap;
 
 use crate::ast::*;
