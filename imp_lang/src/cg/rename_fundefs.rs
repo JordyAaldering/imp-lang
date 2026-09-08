@@ -52,13 +52,35 @@ struct RenameFundefs {
     used_names: HashSet<String>,
 }
 
+#[derive(Default)]
+struct MangledArgs(String);
+
+impl From<String> for MangledArgs {
+    fn from(s: String) -> Self {
+        MangledArgs(s)
+    }
+}
+
+impl FromIterator<MangledArgs> for MangledArgs {
+    fn from_iter<T: IntoIterator<Item = MangledArgs>>(iter: T) -> Self {
+        let args: Vec<_> = iter.into_iter().map(|x| x.0).collect();
+        if args.is_empty() {
+            Self("void".to_string())
+        } else {
+            Self(args.join("__"))
+        }
+    }
+}
+
 impl<'ast> Traverse<'ast> for RenameFundefs {
     type Ast = TypedAst;
+
+    type DeclOut = MangledArgs;
 
     type ExprOut = ();
 
     fn trav_fundef(&mut self, fundef: &mut Fundef<'ast, Self::Ast>) {
-        let arg_suffix = mangle_args(&fundef.args);
+        let arg_suffix = self.trav_fargs(&mut fundef.args).0;
 
         debug_assert!(!fundef.name.ends_with(&arg_suffix), "It seems we tried to mangle function `{}' twice", fundef.name);
 
@@ -68,20 +90,8 @@ impl<'ast> Traverse<'ast> for RenameFundefs {
         debug_assert!(self.used_names.insert(fundef.name.clone()), "Name collision: {}", fundef.name);
     }
 
-    fn trav_farg(&mut self, _arg: &mut Farg) {
-
-    }
-}
-
-fn mangle_args<'a>(args: &[Farg]) -> String
-{
-    if args.is_empty() {
-        "void".to_string()
-    } else {
-        args.iter()
-            .map(|arg| mangle_type(&arg.ty))
-            .collect::<Vec<String>>()
-            .join("__")
+    fn trav_farg(&mut self, arg: &mut Farg) -> Self::DeclOut {
+        mangle_type(&arg.ty).into()
     }
 }
 

@@ -32,6 +32,8 @@ impl ConstantFold {
 impl<'ast> Traverse<'ast> for ConstantFold {
     type Ast = TypedAst;
 
+    type DeclOut = ();
+
     type ExprOut = ();
 
     fn trav_assign(&mut self, assign: &mut Assign<'ast, Self::Ast>) {

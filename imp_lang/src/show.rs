@@ -37,6 +37,8 @@ impl<'ast, Ast: Invariant> Show<'ast, Ast> {
 impl<'ast, Ast: Invariant + 'ast> Traverse<'ast> for Show<'ast, Ast> {
     type Ast = Ast;
 
+    type DeclOut = ();
+
     type ExprOut = ();
 
     fn trav_fundef(&mut self, fundef: &mut Fundef<'ast, Self::Ast>) {

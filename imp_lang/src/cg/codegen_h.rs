@@ -28,6 +28,8 @@ struct CompileHeader {
 impl<'ast> Traverse<'ast> for CompileHeader {
     type Ast = TypedAst;
 
+    type DeclOut = ();
+
     type ExprOut = ();
 
     fn trav_program(&mut self, program: &mut Program<'ast, TypedAst>) {

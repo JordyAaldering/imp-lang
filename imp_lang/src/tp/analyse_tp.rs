@@ -180,6 +180,8 @@ impl<'ast> AnalyseTp<'ast> {
 impl<'ast> Traverse<'ast> for AnalyseTp<'ast> {
     type Ast = ParsedAst;
 
+    type DeclOut = ();
+
     type ExprOut = ();
 
     fn trav_fundef(&mut self, fundef: &mut Fundef<'ast, ParsedAst>) {

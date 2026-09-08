@@ -259,6 +259,8 @@ impl TypeInfer {
 impl<'ast> Traverse<'ast> for TypeInfer {
     type Ast = UntypedAst;
 
+    type DeclOut = ();
+
     type ExprOut = Type;
 
     fn trav_fundef(&mut self, fundef: &mut Fundef<'ast, UntypedAst>) {

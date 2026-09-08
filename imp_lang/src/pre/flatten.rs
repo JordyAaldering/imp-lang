@@ -45,6 +45,8 @@ impl<'ast> Flatten<'ast> {
 impl<'ast> Traverse<'ast> for Flatten<'ast> {
     type Ast = ParsedAst;
 
+    type DeclOut = ();
+
     type ExprOut = ();
 
     fn trav_fundef(&mut self, fundef: &mut Fundef<'ast, ParsedAst>) {

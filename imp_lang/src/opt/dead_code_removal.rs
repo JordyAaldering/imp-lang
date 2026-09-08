@@ -25,6 +25,8 @@ impl DeadCodeRemoval {
 impl<'ast> Traverse<'ast> for DeadCodeRemoval {
     type Ast = TypedAst;
 
+    type DeclOut = ();
+
     type ExprOut = ();
 
     fn trav_fundef(&mut self, fundef: &mut Fundef<'ast, Self::Ast>) {
