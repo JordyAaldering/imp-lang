@@ -12,6 +12,7 @@ struct AnalyseTp<'ast> {
     /// accumulated left-to-right across arguments and their type patterns.
     defined: HashSet<String>,
     symbol_terms: HashMap<String, ShapeTerm>,
+    arg_index: usize,
 }
 
 impl<'ast> AnalyseTp<'ast> {
@@ -20,6 +21,7 @@ impl<'ast> AnalyseTp<'ast> {
             scope,
             defined: HashSet::new(),
             symbol_terms: HashMap::new(),
+            arg_index: 0,
         }
     }
 
@@ -72,66 +74,9 @@ impl<'ast> AnalyseTp<'ast> {
         }
     }
 
-    fn analyse_arg_patterns(&mut self, fundef: &mut Fundef<'ast, ParsedAst>) {
-        let mut pending: Vec<(String, ShapeTerm, Expr<'ast, ParsedAst>, Type)> = Vec::new();
-
-        for (arg_index, arg) in fundef.args.iter().enumerate() {
-            let Some(axes) = arg.ty.type_pattern() else {
-                continue;
-            };
-
-            for (axis_index, axis) in axes.iter().enumerate() {
-                match axis {
-                    AxisPattern::ShapePattern { dim, shp } => {
-                        if let RankCapture::Var(dim) = dim {
-                            let dim_term = ShapeTerm::ArgRank {
-                                arg_index,
-                                axis_index,
-                            };
-                            let dim_expr = self.dim_of_arg_expr(arg_index);
-                            pending.push((
-                                dim.clone(),
-                                dim_term,
-                                dim_expr,
-                                Type::scalar(BaseType::Usize),
-                            ));
-                        }
-
-                        if let Some(shp) = shp {
-                            let shp_term = ShapeTerm::TailShape {
-                                arg_index,
-                                start_axis: axis_index,
-                            };
-                            let shp_expr = self.shape_of_arg_expr(arg_index);
-                            pending.push((
-                                shp.clone(),
-                                shp_term,
-                                shp_expr,
-                                Type {
-                                    basetype: BaseType::Usize,
-                                    shape: TypePattern::scalar(),
-                                },
-                            ));
-                        }
-                    },
-                    AxisPattern::DimPattern { len: RankCapture::Var(len) } => {
-                        let term = ShapeTerm::ArgDim { arg_index, axis_index };
-                        let expr = self.dim_at_expr(arg_index, axis_index);
-                        pending.push((len.clone(), term, expr, Type::scalar(BaseType::Usize)));
-                    }
-                    AxisPattern::DimPattern { .. } => {}
-                }
-            }
-        }
-
-        for (symbol, term, expr, ty) in pending {
-            self.bind_symbol(fundef, &symbol, term, expr, ty);
-        }
-    }
-
-    fn analyse_ret_constraints(&mut self, fundef: &mut Fundef<'ast, ParsedAst>) {
+    fn analyse_ret_constraints(&mut self, fundef: &mut Fundef<'ast, ParsedAst>) -> usize {
         let Some(axes) = fundef.ret_type.type_pattern() else {
-            return;
+            return 0;
         };
 
         let mut unconstrained_rank_captures = 0usize;
@@ -173,14 +118,26 @@ impl<'ast> AnalyseTp<'ast> {
             }
         }
 
-        fundef.shape_facts.unconstrained_rank_captures = unconstrained_rank_captures;
+        unconstrained_rank_captures
+    }
+}
+
+#[derive(Default)]
+struct PendingTerms<'ast>(Vec<(String, ShapeTerm, Expr<'ast, ParsedAst>, Type)>);
+
+impl<'ast> FromIterator<PendingTerms<'ast>> for PendingTerms<'ast> {
+    fn from_iter<T: IntoIterator<Item = PendingTerms<'ast>>>(iter: T) -> Self {
+        let terms: Vec<_> = iter.into_iter()
+            .flat_map(|x| x.0)
+            .collect();
+        Self(terms)
     }
 }
 
 impl<'ast> Traverse<'ast> for AnalyseTp<'ast> {
     type Ast = ParsedAst;
 
-    type DeclOut = ();
+    type DeclOut = PendingTerms<'ast>;
 
     type ExprOut = ();
 
@@ -191,7 +148,85 @@ impl<'ast> Traverse<'ast> for AnalyseTp<'ast> {
         fundef.shape_prelude.clear();
         fundef.shape_facts = ShapeFacts::default();
 
-        self.analyse_arg_patterns(fundef);
-        self.analyse_ret_constraints(fundef);
+        // Arguments
+        {
+            let pending = self.trav_fargs(&mut fundef.args).0;
+
+            for (symbol, term, expr, ty) in pending {
+                self.bind_symbol(fundef, &symbol, term, expr, ty);
+            }
+        }
+
+        // Return type
+        {
+            let unconstrained_rank_captures = self.analyse_ret_constraints(fundef);
+            fundef.shape_facts.unconstrained_rank_captures = unconstrained_rank_captures;
+        }
+    }
+
+    fn trav_fargs(&mut self, args: &mut [Farg]) -> Self::DeclOut {
+        args.iter_mut()
+            .enumerate()
+            .map(|(i, arg)| {
+                self.arg_index = i;
+                self.trav_farg(arg)
+            })
+            .collect()
+    }
+
+    fn trav_farg(&mut self, arg: &mut Farg) -> Self::DeclOut {
+        let Some(axes) = arg.ty.type_pattern() else {
+            return Default::default();
+        };
+
+        let mut pending = Vec::new();
+
+        for (axis_index, axis) in axes.iter().enumerate() {
+            match axis {
+                AxisPattern::ShapePattern { dim, shp } => {
+                    if let RankCapture::Var(dim) = dim {
+                        let dim_term = ShapeTerm::ArgRank {
+                            arg_index: self.arg_index,
+                            axis_index,
+                        };
+                        let dim_expr = self.dim_of_arg_expr(self.arg_index);
+                        pending.push((
+                            dim.clone(),
+                            dim_term,
+                            dim_expr,
+                            Type::scalar(BaseType::Usize),
+                        ));
+                    }
+
+                    if let Some(shp) = shp {
+                        let shp_term = ShapeTerm::TailShape {
+                            arg_index: self.arg_index,
+                            start_axis: axis_index,
+                        };
+                        let shp_expr = self.shape_of_arg_expr(self.arg_index);
+                        pending.push((
+                            shp.clone(),
+                            shp_term,
+                            shp_expr,
+                            Type {
+                                basetype: BaseType::Usize,
+                                shape: TypePattern::scalar(),
+                            },
+                        ));
+                    }
+                },
+                AxisPattern::DimPattern { len: RankCapture::Var(len) } => {
+                    let term = ShapeTerm::ArgDim {
+                        arg_index: self.arg_index,
+                        axis_index,
+                    };
+                    let expr = self.dim_at_expr(self.arg_index, axis_index);
+                    pending.push((len.clone(), term, expr, Type::scalar(BaseType::Usize)));
+                }
+                AxisPattern::DimPattern { .. } => {}
+            }
+        }
+
+        PendingTerms(pending)
     }
 }
