@@ -23,6 +23,7 @@ pub struct Options {
 fn init_logger(d: &[imp_lang::Phase]) {
     let mut builder = env_logger::Builder::new();
 
+    // Note: this currently filters out ALL log messages other than those specified here, even ones that are not related to phases.
     for phase in d {
         builder.filter_module(phase.log_target(), log::LevelFilter::Debug);
     }
