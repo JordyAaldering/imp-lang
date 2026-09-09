@@ -24,11 +24,25 @@ pub struct Program<'ast, Ast: Invariant> {
     ///   }
     /// }
     /// ```
-    pub overloads: HashMap<String, HashMap<BaseSignature, Vec<FundefId<'ast, Ast>>>>,
+    pub overloads: OverloadFamilies<'ast, Ast>,
     /// Owns every [`Fundef`] in the program.
     ///
     /// References use [`FundefId`] rather than raw pointers, so this arena can be freely mutated.
     pub fundefs: id_arena::Arena<Fundef<'ast, Ast>>,
+}
+
+pub struct OverloadFamilies<'ast, Ast>
+where
+    Ast: Invariant,
+{
+    /// Contains all fundefs in the program, grouped by overload.
+    ///
+    /// Maps each function name to a HashMap that contains all overloads of that function,
+    /// grouped by the base types of their arguments (ignoring shapes). Functions with the
+    /// same argument base types are required to have the same return base type.
+    /// This second HashMap contains for each unique base signature combination a list
+    /// of all fundefs that have that base signature, which may differ in argument shapes.
+    pub families: HashMap<String, HashMap<BaseSignature, Vec<FundefId<'ast, Ast>>>>
 }
 
 impl<'ast, Ast: Invariant> Program<'ast, Ast> {

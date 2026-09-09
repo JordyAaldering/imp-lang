@@ -3,10 +3,10 @@ use std::{cell::RefCell, collections::HashMap, mem};
 use crate::{ast::*, PhaseId};
 
 pub fn to_ssa<'ast>(program: Program<'ast, ParsedAst>, scope: &'ast Scope<'ast, UntypedAst>) -> Program<'ast, UntypedAst> {
-    let mut overloads = HashMap::new();
+    let mut families = HashMap::new();
     let mut fundefs = id_arena::Arena::new();
 
-    for (name, groups) in program.overloads {
+    for (name, groups) in program.overloads.families {
         let mut new_groups = HashMap::new();
 
         for (sig, fundef_ids) in groups {
@@ -22,11 +22,11 @@ pub fn to_ssa<'ast>(program: Program<'ast, ParsedAst>, scope: &'ast Scope<'ast, 
             new_groups.insert(sig, new_ids);
         }
 
-        overloads.insert(name, new_groups);
+        families.insert(name, new_groups);
     }
 
     Program {
-        overloads,
+        overloads: OverloadFamilies { families },
         fundefs,
     }
 }

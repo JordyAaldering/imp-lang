@@ -1,6 +1,8 @@
 //! # Type checking (`tc`)
-mod resolve_dispatch;
+mod validate_overloads;
 mod type_infer;
+mod resolve_dispatch;
 
-pub use resolve_dispatch::resolve_dispatch;
+pub use validate_overloads::validate_overloads;
 pub use type_infer::type_infer;
+pub use resolve_dispatch::resolve_dispatch;

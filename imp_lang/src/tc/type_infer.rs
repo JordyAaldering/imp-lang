@@ -3,11 +3,9 @@ use std::collections::HashMap;
 use crate::{Phase, ast::*};
 
 pub fn type_infer<'ast>(program: &mut Program<'ast, UntypedAst>) -> Result<(), InferenceError> {
-    validate_overload_families(&program.overloads, &program.fundefs)?;
-
     let mut stubs: HashMap<String, HashMap<BaseSignature, Vec<DispatchStub>>> = HashMap::new();
 
-    for (name, overloads) in &program.overloads {
+    for (name, overloads) in &program.overloads.families {
         let mut stub_groups = HashMap::new();
         for (sig, fundef_ids) in overloads {
             let mut stub_fundefs = Vec::new();
@@ -41,30 +39,6 @@ struct DispatchStub {
     ret_type: Type,
 }
 
-fn validate_overload_families<'ast>(
-    overloads: &HashMap<String, HashMap<BaseSignature, Vec<FundefId<'ast, UntypedAst>>>>,
-    fundefs: &id_arena::Arena<Fundef<'ast, UntypedAst>>,
-) -> Result<(), InferenceError> {
-    for (name, group) in overloads {
-        for (sig, ids) in group {
-            let (first, rest) = ids.split_first().unwrap();
-            let expected_ret_ty = &fundefs[*first].ret_type.basetype;
-            for &id in rest {
-                let fundef = &fundefs[id];
-                if &fundef.ret_type.basetype != expected_ret_ty {
-                    return Err(InferenceError::InconsistentOverloadReturnBase {
-                        name: name.clone(),
-                        arg_bases: sig.clone(),
-                        expected: expected_ret_ty.clone(),
-                        found: fundef.ret_type.basetype.clone(),
-                    });
-                }
-            }
-        }
-    }
-    Ok(())
-}
-
 pub struct TypeInfer {
     args: Vec<Farg>,
     stubs: HashMap<String, HashMap<BaseSignature, Vec<DispatchStub>>>,
@@ -83,7 +57,6 @@ pub enum InferenceError {
     CallArgumentTypeMismatch { func_name: String, arg_index: usize, expected: Type, provided: Type },
     AmbiguousOverload { name: String, arg_bases: BaseSignature },
     PrimitiveArgumentKindMismatch { primitive: String, arg_index: usize, expected: &'static str, provided: Type },
-    InconsistentOverloadReturnBase { name: String, arg_bases: BaseSignature, expected: BaseType, found: BaseType },
     FoldSelectionTypeMismatch { expected: Type, found: Type },
     FoldFunPlaceholderCountMismatch { found: usize },
     FoldFunctionTypeMismatch { expected: Type, found: Type },

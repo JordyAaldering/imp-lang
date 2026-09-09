@@ -32,7 +32,7 @@ impl<'ast> Traverse<'ast> for CompileFfi {
         self.push("\n");
 
         self.push("unsafe extern \"C\" {\n");
-        for (_name, overloads) in &program.overloads {
+        for (_name, overloads) in &program.overloads.families {
             for (_sig, fundef_ids) in overloads {
                 for fundef_id in fundef_ids {
                     let fundef = program.fundef(*fundef_id);
@@ -44,7 +44,7 @@ impl<'ast> Traverse<'ast> for CompileFfi {
         }
         self.push("}\n");
 
-        for (name, overloads) in &program.overloads {
+        for (name, overloads) in &program.overloads.families {
             for (sig, fundef_ids) in overloads {
                 self.push("\n");
                 let fundefs: Vec<&Fundef<TypedAst>> = fundef_ids.iter().map(|&id| program.fundef(id)).collect();

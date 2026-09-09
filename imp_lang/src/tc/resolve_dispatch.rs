@@ -38,11 +38,11 @@ use std::collections::HashMap;
 use crate::ast::*;
 
 pub fn resolve_dispatch<'ast>(program: Program<'ast, UntypedAst>, scope: &'ast Scope<'ast, TypedAst>) -> Result<Program<'ast, TypedAst>, DispatchError> {
-    let mut overloads: HashMap<String, HashMap<BaseSignature, Vec<FundefId<'ast, TypedAst>>>> = HashMap::new();
+    let mut families: HashMap<String, HashMap<BaseSignature, Vec<FundefId<'ast, TypedAst>>>> = HashMap::new();
     let mut stubs: id_arena::Arena<Fundef<'ast, TypedAst>> = id_arena::Arena::new();
     let mut work_items: Vec<(FundefId<'ast, TypedAst>, FundefId<'ast, UntypedAst>)> = Vec::new();
 
-    for (name, groups) in &program.overloads {
+    for (name, groups) in &program.overloads.families {
         let mut out_groups = HashMap::new();
         for (sig, fundef_ids) in groups {
             let mut out_ids = Vec::new();
@@ -65,12 +65,12 @@ pub fn resolve_dispatch<'ast>(program: Program<'ast, UntypedAst>, scope: &'ast S
             }
             out_groups.insert(sig.clone(), out_ids);
         }
-        overloads.insert(name.clone(), out_groups);
+        families.insert(name.clone(), out_groups);
     }
 
     for (id, src_id) in work_items {
         let src_fundef = program.fundef(src_id);
-        let mut lower = DispatchResolver::new(scope, &stubs, overloads.clone());
+        let mut lower = DispatchResolver::new(scope, &stubs, families.clone());
         let lowered = lower.lower_fundef(src_fundef);
         if let Some(err) = lower.errors.into_iter().next() {
             return Err(err);
@@ -79,7 +79,7 @@ pub fn resolve_dispatch<'ast>(program: Program<'ast, UntypedAst>, scope: &'ast S
     }
 
     Ok(Program {
-        overloads,
+        overloads: OverloadFamilies { families },
         fundefs: stubs,
     })
 }

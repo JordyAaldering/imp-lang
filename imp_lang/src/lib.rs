@@ -55,6 +55,9 @@ pub fn compile(breakpoint: Option<Phase>, infile: &PathBuf, outdir: Option<&Path
     let mut ast = pre::to_ssa(ast, &untyped_scope);
     breakpoint!(breakpoint, Phase::SSA, ast);
 
+    tc::validate_overloads(&mut ast).unwrap();
+    breakpoint!(breakpoint, Phase::VO, ast);
+
     tc::type_infer(&mut ast).unwrap();
     breakpoint!(breakpoint, Phase::TI, ast);
 

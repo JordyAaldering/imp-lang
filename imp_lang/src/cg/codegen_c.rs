@@ -169,7 +169,7 @@ impl<'ast> Traverse<'ast> for CompileC {
         self.output.push_str("// Forward declarations\n");
         self.output.push_str("//\n");
 
-        for (_name, overloads) in &program.overloads {
+        for (_name, overloads) in &program.overloads.families {
             for (_sig, fundef_ids) in overloads {
                 for fundef_id in fundef_ids {
                     self.output.push('\n');
@@ -183,7 +183,7 @@ impl<'ast> Traverse<'ast> for CompileC {
         self.output.push_str("// Wrappers\n");
         self.output.push_str("//\n");
 
-        for (name, overloads) in &program.overloads {
+        for (name, overloads) in &program.overloads.families {
             for (sig, fundef_ids) in overloads {
                 if overloads.len() > 1 || fundef_ids.len() > 1 {
                     self.output.push('\n');
@@ -203,7 +203,7 @@ impl<'ast> Traverse<'ast> for CompileC {
             self.trav_fundef(fundef);
         }
 
-        for (name, overloads) in &program.overloads {
+        for (name, overloads) in &program.overloads.families {
             for (sig, fundef_ids) in overloads {
                 if overloads.len() > 1 || fundef_ids.len() > 1 {
                     self.output.push('\n');

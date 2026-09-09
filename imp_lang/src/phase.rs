@@ -13,6 +13,8 @@ pub enum Phase {
     FLT,
     /// Convert to SSA
     SSA,
+    /// Validate overloads
+    VO,
     /// Type inference
     TI,
     /// Function dispatch resolution
@@ -51,6 +53,7 @@ impl Phase {
             Self::ATP => "atp",
             Self::FLT => "flt",
             Self::SSA => "ssa",
+            Self::VO => "vo",
             Self::TI => "ti",
             Self::DR => "dr",
             Self::CF => "cf",
@@ -71,6 +74,7 @@ impl Phase {
             Self::ATP => "imp_lang::phase::atp",
             Self::FLT => "imp_lang::phase::flt",
             Self::SSA => "imp_lang::phase::ssa",
+            Self::VO => "imp_lang::phase::vo",
             Self::TI => "imp_lang::phase::ti",
             Self::DR => "imp_lang::phase::dr",
             Self::CF => "imp_lang::phase::cf",

@@ -106,7 +106,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
     /// <program> = <fundef>*
     /// ```
     pub fn parse_program(&mut self) -> ParseResult<Program<'ast, ParsedAst>> {
-        let mut overloads = HashMap::new();
+        let mut families = HashMap::new();
         let mut fundefs = id_arena::Arena::new();
 
         while let Some((token, _)) = self.lexer.peek() {
@@ -116,7 +116,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                     let name = fundef.name.clone();
                     let sig = fundef.signature();
                     let id = fundefs.alloc(fundef);
-                    let group = overloads.entry(name).or_insert(HashMap::new());
+                    let group = families.entry(name).or_insert(HashMap::new());
                     let ids = group.entry(sig).or_insert(Vec::new());
                     ids.push(id);
                 }
@@ -128,7 +128,7 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         }
 
         Ok(Program {
-            overloads,
+            overloads: OverloadFamilies { families },
             fundefs,
         })
     }
