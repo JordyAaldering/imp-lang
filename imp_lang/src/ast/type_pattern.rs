@@ -1,4 +1,6 @@
-use std::fmt;
+use std::{cmp, fmt};
+
+use crate::ast::ShapeKnowledge;
 
 #[derive(Clone, Debug)]
 pub struct TypePattern(pub Vec<AxisPattern>);
@@ -102,6 +104,19 @@ impl TypePattern {
             .sum()
     }
 
+    /// The shape of this type pattern, if it is fixed. Returns None if any shape component is variable.
+    pub fn shape(&self) -> Option<Vec<usize>> {
+        self.0
+            .iter()
+            .map(|axis| {
+                match axis.rank() {
+                    RankCapture::Fixed(len) => Some(*len),
+                    _ => None,
+                }
+            })
+            .collect()
+    }
+
     /// The rank of this type pattern, if it is fixed. Returns None if the rank is variable.
     pub fn rank(&self) -> Option<usize> {
         self.0
@@ -112,6 +127,21 @@ impl TypePattern {
                     _ => None,
                 }
             })
+    }
+
+    pub fn shape_knowledge(&self) -> ShapeKnowledge {
+        if let Some(shape) = self.shape() {
+            ShapeKnowledge::AKS(shape)
+        } else if let Some(rank) = self.rank() {
+            ShapeKnowledge::AKD(rank)
+        } else {
+            let min_rank = self.min_rank();
+            if min_rank > 0 {
+                ShapeKnowledge::AUDGN(min_rank)
+            } else {
+                ShapeKnowledge::AUD
+            }
+        }
     }
 }
 
@@ -146,6 +176,31 @@ impl fmt::Display for AxisPattern {
         }
     }
 }
+
+// impl cmp::PartialOrd for RankCapture {
+//     /// Defines which of two rank captures is more 'precise'. A fixed rank is more
+//     /// precise than a variable rank, which is more precise than a free rank. Returns
+//     /// `None` if both ranks are equally precise, even if their actual lengths differ.
+//     fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
+//         match (self, other) {
+//             // `self` is more precise than `other`
+//             (Self::Fixed(_), Self::Var(_)) |
+//             (Self::Fixed(_), Self::Free) |
+//             (Self::Var(_), Self::Free) =>
+//                 Some(cmp::Ordering::Less),
+//             // `other` is more precise than `self`
+//             (Self::Var(_), Self::Fixed(_)) |
+//             (Self::Free, Self::Fixed(_)) |
+//             (Self::Free, Self::Var(_)) =>
+//                 Some(cmp::Ordering::Greater),
+//             // `self` and `other` are equally precise (but possibly different lengths)
+//             (Self::Fixed(_), Self::Fixed(_)) |
+//             (Self::Var(_), Self::Var(_)) |
+//             (Self::Free, Self::Free) =>
+//                 None,
+//         }
+//     }
+// }
 
 impl fmt::Display for RankCapture {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

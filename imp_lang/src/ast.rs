@@ -19,6 +19,7 @@ mod array;
 // Terminals
 mod id;
 mod constval;
+mod shape_knowledge;
 mod type_pattern;
 mod typ;
 
@@ -43,6 +44,7 @@ pub use array::*;
 // Terminals
 pub use id::*;
 pub use constval::*;
+pub use shape_knowledge::*;
 pub use type_pattern::*;
 pub use typ::*;
 
