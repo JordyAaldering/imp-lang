@@ -73,7 +73,6 @@ fn compare<'ast>(
     b: &id_arena::Id<Fundef<'ast, UntypedAst>>,
     fundefs: &id_arena::Arena<Fundef<'ast, UntypedAst>>,
 ) -> Ordering {
-
     let a_args = &fundefs[*a].args;
     let b_args = &fundefs[*b].args;
 

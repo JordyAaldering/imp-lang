@@ -1,6 +1,6 @@
 use std::fmt;
 
-use super::type_pattern::*;
+use super::{type_pattern::*, shape_knowledge::*};
 
 #[derive(Clone, Debug)]
 pub struct Type {
@@ -52,6 +52,7 @@ impl Type {
     pub fn get_vector(&self) -> Option<&RankCapture> {
         match &self.shape.0[..] {
             [AxisPattern::DimPattern { len }] => Some(len),
+            [AxisPattern::ShapePattern { dim: RankCapture::Fixed(1), .. }] => Some(&RankCapture::Free),
             _ => None,
         }
     }
@@ -109,6 +110,10 @@ impl Type {
     /// The rank of this type, if it is fixed. Returns None if the rank is variable.
     pub fn rank(&self) -> Option<usize> {
         self.shape.rank()
+    }
+
+    pub fn shape_knowledge(&self) -> ShapeKnowledge {
+        self.shape.shape_knowledge()
     }
 }
 

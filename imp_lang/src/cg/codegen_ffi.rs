@@ -299,7 +299,7 @@ fn build_variant_condition(args: &[Farg], all_scalar_args: &[bool]) -> String {
             for (axis_index, axis) in axes.iter().enumerate() {
                 match axis {
                     AxisPattern::ShapePattern { dim, shp: _ } => {
-                        if let RankCapture::Var(dim) = dim {
+                        if let RankCapture::Var(dim, _) = dim {
                             let expr = format!("arg{arg_index}.dim()");
 
                             if let Some((_, bound_expr)) = bound_ranks.iter().find(|(name, _)| name == dim)
@@ -310,7 +310,7 @@ fn build_variant_condition(args: &[Farg], all_scalar_args: &[bool]) -> String {
                             }
                         }
                     }
-                    AxisPattern::DimPattern { len: RankCapture::Var(len) } => {
+                    AxisPattern::DimPattern { len: RankCapture::Var(len, _) } => {
                         let expr = format!("arg{arg_index}.extent({axis_index})");
                         if let Some((_, bound_expr)) =
                             bound_dims.iter().find(|(name, _)| name == len)
@@ -359,7 +359,7 @@ fn generate_shape_checks(args: &[Farg]) -> String {
         for (idx, axis) in axes.iter().enumerate() {
             match axis {
                 AxisPattern::ShapePattern { dim, shp: _ } => {
-                    if let RankCapture::Var(dim) = dim {
+                    if let RankCapture::Var(dim, _) = dim {
                         let binding = format!("_imp_rank_{}", dim);
                         if bound_ranks.iter().any(|existing| existing == &binding) {
                             out.push_str(&format!("    assert_eq!({}.dim(), {}, \"rank {} mismatch\");\n",
@@ -372,7 +372,7 @@ fn generate_shape_checks(args: &[Farg]) -> String {
                         }
                     }
                 }
-                AxisPattern::DimPattern { len: RankCapture::Var(len) } => {
+                AxisPattern::DimPattern { len: RankCapture::Var(len, _) } => {
                     let binding = format!("_imp_extent_{}", len);
                     if bound_dims.iter().any(|existing| existing == &binding) {
                         out.push_str(&format!(

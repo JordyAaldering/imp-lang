@@ -55,7 +55,6 @@ pub enum InferenceError {
     UndefinedFunction { name: String },
     NoMatchingOverload { name: String, arg_bases: BaseSignature },
     CallArgumentTypeMismatch { func_name: String, arg_index: usize, expected: Type, provided: Type },
-    AmbiguousOverload { name: String, arg_bases: BaseSignature },
     PrimitiveArgumentKindMismatch { primitive: String, arg_index: usize, expected: &'static str, provided: Type },
     FoldSelectionTypeMismatch { expected: Type, found: Type },
     FoldFunPlaceholderCountMismatch { found: usize },
@@ -113,8 +112,8 @@ impl TypeInfer {
                     let ty = Type::aks_vector(ub_ty.basetype.clone(), *len);
                     (ty, Some(*len))
                 }
-                RankCapture::Var(len) => {
-                    let ty = Type::akd_vector(ub_ty.basetype.clone(), RankCapture::Var(len.clone()));
+                RankCapture::Var(len, gt) => {
+                    let ty = Type::akd_vector(ub_ty.basetype.clone(), RankCapture::Var(len.clone(), gt.clone()));
                     (ty, None)
                 }
                 RankCapture::Free => {
@@ -123,7 +122,9 @@ impl TypeInfer {
                 }
             }
         } else {
-            unreachable!("cannot iterate over scalar ub")
+            // unreachable!("cannot iterate over scalar ub")
+            let ty = Type::akd_vector(ub_ty.basetype.clone(), RankCapture::Free);
+            (ty, None)
         }
     }
 
@@ -157,7 +158,7 @@ impl TypeInfer {
         let mut axes = Vec::with_capacity(elems.len());
         for elem in &elems {
             let dp = match elem {
-                Id::Arg(i) => AxisPattern::DimPattern { len: RankCapture::Var(self.args[*i].id.clone()) },
+                Id::Arg(i) => AxisPattern::DimPattern { len: RankCapture::Var(self.args[*i].id.clone(), None) },
                 Id::Var(v) => {
                     let known_usize = v.ssa.and_then(|cell| match &*cell.borrow() {
                         Expr::Const(Const::Usize(val)) => Some(*val),
@@ -165,7 +166,7 @@ impl TypeInfer {
                     });
                     match known_usize {
                         Some(val) => AxisPattern::DimPattern { len: RankCapture::Fixed(val) },
-                        None => AxisPattern::DimPattern { len: RankCapture::Var(v.name.clone()) },
+                        None => AxisPattern::DimPattern { len: RankCapture::Var(v.name.clone(), None) },
                     }
                 }
             };
@@ -216,14 +217,6 @@ impl TypeInfer {
 
         let best_matches = maximal_candidates(&matches);
         let needs_runtime_dispatch = best_matches.len() > 1;
-        let runtime_dispatch_allowed = arg_types.iter().any(type_requires_runtime_dispatch);
-
-        if needs_runtime_dispatch && !runtime_dispatch_allowed {
-            self.errors.push(InferenceError::AmbiguousOverload {
-                name: func_name.to_owned(),
-                arg_bases: key,
-            });
-        }
 
         (best_matches[0], needs_runtime_dispatch)
     }
@@ -304,16 +297,7 @@ impl<'ast> Traverse<'ast> for TypeInfer {
     fn trav_prf(&mut self, prf: &mut Prf<'ast, UntypedAst>) -> Self::ExprOut {
         use Prf::*;
         match prf {
-            ShapeA(arr) => {
-                let arr_ty = self.trav_id(arr);
-                if arr_ty.is_definitely_scalar() {
-                    self.errors.push(InferenceError::PrimitiveArgumentKindMismatch {
-                        primitive: "shape".to_owned(),
-                        arg_index: 0,
-                        expected: "array",
-                        provided: arr_ty,
-                    });
-                }
+            ShapeA(_) => {
                 Type::akd_vector(BaseType::Usize, RankCapture::Free)
             }
             DimA(arr) => {
@@ -468,21 +452,17 @@ impl<'ast> Traverse<'ast> for TypeInfer {
 }
 
 fn types_compatible(expected: &Type, provided: &Type) -> bool {
-    expected.basetype == provided.basetype && shapes_compatible(&expected.shape, &provided.shape)
+    expected.basetype == provided.basetype &&
+        shapes_compatible(&expected.shape, &provided.shape)
 }
 
 fn shapes_compatible(expected: &TypePattern, provided: &TypePattern) -> bool {
-    if expected.0.len() != provided.0.len() {
-        return false;
+    match (expected.rank(), provided.rank()) {
+        (Some(er), Some(pr)) => er == pr,
+        (None, Some(_)) => true,
+        (Some(_), None) => true,
+        (None, None) => true,
     }
-
-    expected
-        .0
-        .iter()
-        .zip(provided.0.iter())
-        .all(|(e, p)| match (e, p) {
-            _ => false,
-        })
 }
 
 fn maximal_candidates<'a>(candidates: &[&'a DispatchStub]) -> Vec<&'a DispatchStub> {

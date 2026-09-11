@@ -39,6 +39,8 @@ mod tests {
     )]
     fn test_shape_knowledge_a_lt_b(pair: (ShapeKnowledge, ShapeKnowledge)) {
         let (l, r) = pair;
-        assert!(l < r)
+        assert!(l < r);
+        assert!(r > l);
+        assert!(l != r);
     }
 }

@@ -84,7 +84,7 @@ impl<'ast> AnalyseTp<'ast> {
         for (axis_index, axis) in axes.iter().enumerate() {
             match axis {
                 AxisPattern::ShapePattern { dim, shp: _ } => {
-                    let constrained_by = if let RankCapture::Var(dim) = dim && self.defined.contains(dim) {
+                    let constrained_by = if let RankCapture::Var(dim, _) = dim && self.defined.contains(dim) {
                         vec![ShapeTerm::Symbol(dim.clone())]
                     } else {
                         unconstrained_rank_captures += 1;
@@ -102,7 +102,7 @@ impl<'ast> AnalyseTp<'ast> {
                         constrained_by: Vec::new(),
                     });
                 },
-                AxisPattern::DimPattern { len: RankCapture::Var(len) } => {
+                AxisPattern::DimPattern { len: RankCapture::Var(len, ..) } => {
                     let constrained_by = if self.defined.contains(len) {
                         vec![ShapeTerm::Symbol(len.clone())]
                     } else {
@@ -188,7 +188,7 @@ impl<'ast> Traverse<'ast> for AnalyseTp<'ast> {
         for (axis_index, axis) in axes.iter().enumerate() {
             match axis {
                 AxisPattern::ShapePattern { dim, shp } => {
-                    if let RankCapture::Var(dim) = dim {
+                    if let RankCapture::Var(dim, _) = dim {
                         let dim_term = ShapeTerm::ArgRank {
                             arg_index: self.arg_index,
                             axis_index,
@@ -219,7 +219,7 @@ impl<'ast> Traverse<'ast> for AnalyseTp<'ast> {
                         ));
                     }
                 },
-                AxisPattern::DimPattern { len: RankCapture::Var(len) } => {
+                AxisPattern::DimPattern { len: RankCapture::Var(len, _) } => {
                     let term = ShapeTerm::ArgDim {
                         arg_index: self.arg_index,
                         axis_index,

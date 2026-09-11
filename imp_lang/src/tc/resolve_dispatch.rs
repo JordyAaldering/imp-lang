@@ -152,7 +152,7 @@ impl<'ast, 'stubs> DispatchResolver<'ast, 'stubs> {
     fn resolve_target(&mut self, func_name: &str, arg_types: &[Type]) -> FundefId<'ast, TypedAst> {
         let Some(group) = self.overloads.get(func_name) else {
             self.errors.push(DispatchError::UndefinedFunction {
-                name: func_name.to_owned(),
+                name: func_name.to_string(),
             });
             panic!("undefined function during dispatch resolution: {}", func_name);
         };
@@ -163,43 +163,34 @@ impl<'ast, 'stubs> DispatchResolver<'ast, 'stubs> {
 
         let Some(candidates) = group.get(&key) else {
             self.errors.push(DispatchError::NoMatchingOverload {
-                name: func_name.to_owned(),
+                name: func_name.to_string(),
                 arg_bases: key.clone(),
             });
             panic!("no matching overload during dispatch resolution: {}", func_name);
         };
 
-        let mut matches = Vec::new();
-        for &target in candidates {
-            let mut ok = true;
-            for (expected, provided) in self.stubs[target].args.iter().zip(arg_types.iter()) {
-                if !types_compatible(&expected.ty, provided) {
-                    ok = false;
+        let mut matched = None;
+
+        // At this point, candidates are already sorted by specificity,
+        // so we can just take the first one that is compatible with the provided types.
+        for id in candidates {
+            for (candidate, provided) in self.stubs[*id].args.iter().zip(arg_types.iter()) {
+                if true {
+                    matched = Some(*id);
                     break;
                 }
             }
-            if ok {
-                matches.push(target);
-            }
         }
 
-        if matches.is_empty() {
+        let Some(matched) = matched else {
             self.errors.push(DispatchError::NoMatchingOverload {
-                name: func_name.to_owned(),
+                name: func_name.to_string(),
                 arg_bases: key.clone(),
             });
             panic!("no compatible overload during dispatch resolution: {}", func_name);
-        }
+        };
 
-        let best = maximal_candidates(self.stubs, &matches);
-        if best.len() > 1 && !arg_types.iter().any(type_requires_runtime_dispatch) {
-            self.errors.push(DispatchError::AmbiguousOverload {
-                name: func_name.to_owned(),
-                arg_bases: key,
-            });
-        }
-
-        best[0]
+        matched
     }
 
     fn lower_fundef(&mut self, fundef: &Fundef<'ast, UntypedAst>) -> Fundef<'ast, TypedAst> {
@@ -365,98 +356,5 @@ impl<'ast, 'stubs> DispatchResolver<'ast, 'stubs> {
                 Id::Var(*mapped)
             }
         }
-    }
-}
-
-fn maximal_candidates<'ast>(stubs: &id_arena::Arena<Fundef<'ast, TypedAst>>, candidates: &[FundefId<'ast, TypedAst>]) -> Vec<FundefId<'ast, TypedAst>> {
-    let mut maximal = Vec::new();
-
-    'outer: for &a in candidates {
-        for &b in candidates {
-            if a == b {
-                continue;
-            }
-            if overload_more_specific(&stubs[b].args, &stubs[a].args) {
-                continue 'outer;
-            }
-        }
-        maximal.push(a);
-    }
-
-    maximal
-}
-
-fn overload_more_specific(a: &[Farg], b: &[Farg]) -> bool {
-    if a.len() != b.len() {
-        return false;
-    }
-
-    let mut any_strict = false;
-    for (a_arg, b_arg) in a.iter().zip(b.iter()) {
-        let rel = shape_relation(&a_arg.ty.shape, &b_arg.ty.shape);
-        match rel {
-            ShapeRel::More => any_strict = true,
-            ShapeRel::Equal => {}
-            ShapeRel::Less | ShapeRel::Incomparable => return false,
-        }
-    }
-
-    any_strict
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum ShapeRel {
-    More,
-    Equal,
-    Less,
-    Incomparable,
-}
-
-fn shape_relation(a: &TypePattern, b: &TypePattern) -> ShapeRel {
-    if shape_more_or_equal(a, b) {
-        if shape_more_or_equal(b, a) {
-            ShapeRel::Equal
-        } else {
-            ShapeRel::More
-        }
-    } else if shape_more_or_equal(b, a) {
-        ShapeRel::Less
-    } else {
-        ShapeRel::Incomparable
-    }
-}
-
-fn shape_more_or_equal(a: &TypePattern, b: &TypePattern) -> bool {
-    if a.0.len() != b.0.len() {
-        return false;
-    }
-
-    a.0
-        .iter()
-        .zip(b.0.iter())
-        .all(|(a_axis, b_axis)| axis_more_or_equal(a_axis, b_axis))
-}
-
-fn axis_more_or_equal(a: &AxisPattern, b: &AxisPattern) -> bool {
-    match (a, b) {
-        _ => false,
-    }
-}
-
-fn types_compatible(expected: &Type, provided: &Type) -> bool {
-    expected.basetype == provided.basetype && shape_more_or_equal(&expected.shape, &provided.shape)
-}
-
-fn type_requires_runtime_dispatch(ty: &Type) -> bool {
-    ty.shape
-        .0
-        .iter()
-        .any(axis_requires_runtime_dispatch)
-}
-
-fn axis_requires_runtime_dispatch(axis: &AxisPattern) -> bool {
-    match axis {
-        AxisPattern::DimPattern { .. } => false,
-        AxisPattern::ShapePattern { .. } => true,
     }
 }

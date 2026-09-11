@@ -5,6 +5,8 @@ use crate::ast::ShapeKnowledge;
 #[derive(Clone, Debug)]
 pub struct TypePattern(pub Vec<AxisPattern>);
 
+/// TODO: using RankCapture is really messy. They have a different meaning in `dim` and `len`.
+/// RankCapture should at some point be removed.
 #[derive(Clone, Debug)]
 pub enum AxisPattern {
     /// Shape capture, e.g.: `5:shp`, `d:shp`, or `_:_`.
@@ -23,8 +25,9 @@ pub enum AxisPattern {
 pub enum RankCapture {
     /// `5`: a dimension of fixed length 5.
     Fixed(usize),
-    /// `d`: a dimension of variable length `d`.
-    Var(String),
+    /// `d`: a dimension of variable length `d`, or
+    /// `d>5`: a dimension of variable length `d` greater than 5.
+    Var(String, Option<usize>),
     /// `_`: a dimension of variable, unnamed length.
     Free,
 }
@@ -190,7 +193,8 @@ impl fmt::Display for RankCapture {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Fixed(len) => write!(f, "{len}"),
-            Self::Var(len) => write!(f, "{len}"),
+            Self::Var(len, Some(gt)) => write!(f, "{len}>{gt}"),
+            Self::Var(len, None) => write!(f, "{len}"),
             Self::Free => write!(f, "_"),
         }
     }

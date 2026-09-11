@@ -563,8 +563,8 @@ impl<'src, 'ast> Parser<'src, 'ast> {
             }
             Token::Identifier(id) => {
                 if self.matches(&Token::Gt).is_some() || self.matches(&Token::Ge).is_some() {
-                    match self.next()? {
-                        (Token::NatValue(_), _) => {}
+                    let gt = match self.next()? {
+                        (Token::NatValue(gt), _) => gt,
                         (token, span) => {
                             return Err(ParseError::UnexpectedToken(
                                 "natural number bound".to_owned(),
@@ -572,19 +572,20 @@ impl<'src, 'ast> Parser<'src, 'ast> {
                                 span,
                             ))
                         }
-                    }
+                    };
+
                     self.expect(Token::Colon)?;
                     let (shp, _) = self.parse_id()?;
-                    let dim = if id == "_" { RankCapture::Free } else { RankCapture::Var(id) };
+                    let dim = if id == "_" { RankCapture::Free } else { RankCapture::Var(id, Some(gt)) };
                     let shp = if shp == "_" { None } else { Some(shp) };
                     AxisPattern::ShapePattern { dim, shp }
                 } else if self.matches(&Token::Colon).is_some() {
                     let (shp, _) = self.parse_id()?;
-                    let dim = if id == "_" { RankCapture::Free } else { RankCapture::Var(id) };
+                    let dim = if id == "_" { RankCapture::Free } else { RankCapture::Var(id, None) };
                     let shp = if shp == "_" { None } else { Some(shp) };
                     AxisPattern::ShapePattern { dim, shp }
                 } else {
-                    let len = if id == "_" { RankCapture::Free } else { RankCapture::Var(id) };
+                    let len = if id == "_" { RankCapture::Free } else { RankCapture::Var(id, None) };
                     AxisPattern::DimPattern { len }
                 }
             }

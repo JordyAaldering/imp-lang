@@ -60,7 +60,7 @@ impl<'ast> Traverse<'ast> for CheckTypePatterns {
 				AxisPattern::ShapePattern { dim, shp } => {
 					if let RankCapture::Free = dim {
 						self.unconstrained_rank_captures += 1;
-					} else if let RankCapture::Var(dim) = dim {
+					} else if let RankCapture::Var(dim, _) = dim {
 						if !self.defined_symbols.contains(dim) {
 							self.unconstrained_rank_captures += 1;
 						}
@@ -73,7 +73,7 @@ impl<'ast> Traverse<'ast> for CheckTypePatterns {
 					}
 				}
 				AxisPattern::DimPattern { len } => {
-					if let RankCapture::Var(len) = len {
+					if let RankCapture::Var(len, _) = len {
 						self.defined_symbols.insert(len.clone());
 					}
 				}
@@ -83,7 +83,7 @@ impl<'ast> Traverse<'ast> for CheckTypePatterns {
 
 	fn trav_fret(&mut self, ret_type: &mut Type) {
 		for axis in &ret_type.shape.0 {
-			if let AxisPattern::ShapePattern { dim: RankCapture::Var(dim), shp: _ } = axis
+			if let AxisPattern::ShapePattern { dim: RankCapture::Var(dim, _), shp: _ } = axis
 				&& !self.defined_symbols.contains(dim)
 			{
 				self.errors.push(format!(
