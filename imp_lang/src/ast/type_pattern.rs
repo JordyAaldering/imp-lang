@@ -9,27 +9,25 @@ pub struct TypePattern(pub Vec<AxisPattern>);
 /// RankCapture should at some point be removed.
 #[derive(Clone, Debug)]
 pub enum AxisPattern {
-    /// Shape capture, e.g.: `5:shp`, `d:shp`, or `_:_`.
-    ShapePattern {
-        dim: RankCapture,
+    /// Constant-rank capture, e.g. `5`.
+    FixedDim {
+        len: usize,
+    },
+    /// Variable-rank capture, e.g. `5`.
+    VarDim {
+        len: Option<String>,
+    },
+    /// Fixed-length shape capture, e.g. `5:shp`.
+    FixedShape {
+        dim: usize,
         shp: Option<String>,
     },
-    /// Rank capture, e.g.: `5`, `d`, or `_`.
-    DimPattern {
-        len: RankCapture,
+    /// Variable-length shape capture, e.g. `d>0:shp`.
+    VarShape {
+        dim: Option<String>,
+        min_dim: usize,
+        shp: Option<String>,
     },
-}
-
-/// Captures the extent of a single dimension.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum RankCapture {
-    /// `5`: a dimension of fixed length 5.
-    Fixed(usize),
-    /// `d`: a dimension of variable length `d`, or
-    /// `d>5`: a dimension of variable length `d` greater than 5.
-    Var(String, Option<usize>),
-    /// `_`: a dimension of variable, unnamed length.
-    Free,
 }
 
 impl TypePattern {
@@ -43,7 +41,7 @@ impl TypePattern {
     }
 
     pub fn aud() -> Self {
-        Self(vec![AxisPattern::ShapePattern { dim: RankCapture::Free, shp: None }])
+        Self(vec![AxisPattern::VarShape { dim: None, min_dim: 0, shp: None }])
     }
 
     /// Check whether the type pattern is scalar. Returns None if the rank is possibly zero, but variable.
@@ -53,7 +51,7 @@ impl TypePattern {
         } else if self.min_rank() > 0 {
             // Definitely not a scalar
             Some(false)
-        } else if self.0.iter().any(|axis| matches!(axis, AxisPattern::ShapePattern { .. })) {
+        } else if self.rank().is_none() {
             // Minimum rank is zero, but there might be a variable-rank axis, so this could be a scalar or an array
             None
         } else {
@@ -69,7 +67,7 @@ impl TypePattern {
         } else if self.min_rank() > 0 {
             // Definitely an array
             Some(true)
-        } else if self.0.iter().any(|axis| matches!(axis, AxisPattern::ShapePattern { .. })) {
+        } else if self.rank().is_none() {
             // Minimum rank is zero, but there might be a variable-rank axis, so this could be a scalar or an array
             None
         } else {
@@ -82,12 +80,7 @@ impl TypePattern {
     pub fn min_rank(&self) -> usize {
         self.0
             .iter()
-            .map(|axis| {
-                match axis.rank() {
-                    RankCapture::Fixed(len) => *len,
-                    _ => 0,
-                }
-            })
+            .map(|axis| axis.rank().unwrap_or(0))
             .sum()
     }
 
@@ -96,8 +89,8 @@ impl TypePattern {
         self.0
             .iter()
             .map(|axis| {
-                match axis.rank() {
-                    RankCapture::Fixed(len) => Some(*len),
+                match axis {
+                    AxisPattern::FixedDim { len } => Some(*len),
                     _ => None,
                 }
             })
@@ -109,9 +102,10 @@ impl TypePattern {
         self.0
             .iter()
             .try_fold(0, |acc, axis| {
-                match axis.rank() {
-                    RankCapture::Fixed(len) => Some(acc + *len),
-                    _ => None,
+                if let Some(dim) = axis.rank() {
+                    Some(acc + dim)
+                } else {
+                    None
                 }
             })
     }
@@ -133,10 +127,11 @@ impl TypePattern {
 }
 
 impl AxisPattern {
-    pub fn rank(&self) -> &RankCapture {
+    pub fn rank(&self) -> Option<usize> {
         match self {
-            Self::ShapePattern { dim, .. } => dim,
-            Self::DimPattern { len } => len,
+            Self::FixedDim { .. } | Self::VarDim { .. } => Some(1),
+            Self::FixedShape { dim, .. } => Some(*dim),
+            Self::VarShape { .. } => None,
         }
     }
 }
@@ -155,47 +150,19 @@ impl fmt::Display for TypePattern {
 impl fmt::Display for AxisPattern {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::ShapePattern { dim, shp } => {
-                let shp = shp.as_ref().map(|s| s.as_str()).unwrap_or("_");
-                write!(f, "{dim}:{shp}")
+            Self::FixedDim { len } =>
+                write!(f, "{}", len),
+            Self::VarDim { len } =>
+                write!(f, "{}", len.clone().unwrap_or("_".to_string())),
+            Self::FixedShape { dim, shp } =>
+                write!(f, "{}:{}", dim, shp.clone().unwrap_or("_".to_string())),
+            Self::VarShape { dim, min_dim, shp } => {
+                if *min_dim == 0 {
+                    write!(f, "{}:{}", dim.clone().unwrap_or("_".to_string()), shp.clone().unwrap_or("_".to_string()))
+                } else {
+                    write!(f, "{}>{}:{}", dim.clone().unwrap_or("_".to_string()), min_dim, shp.clone().unwrap_or("_".to_string()))
+                }
             }
-            Self::DimPattern { len } => write!(f, "{len}"),
-        }
-    }
-}
-
-// impl cmp::PartialOrd for RankCapture {
-//     /// Defines which of two rank captures is more 'precise'. A fixed rank is more
-//     /// precise than a variable rank, which is more precise than a free rank. Returns
-//     /// `None` if both ranks are equally precise, even if their actual lengths differ.
-//     fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
-//         match (self, other) {
-//             // `self` is more precise than `other`
-//             (Self::Fixed(_), Self::Var(_)) |
-//             (Self::Fixed(_), Self::Free) |
-//             (Self::Var(_), Self::Free) =>
-//                 Some(cmp::Ordering::Less),
-//             // `other` is more precise than `self`
-//             (Self::Var(_), Self::Fixed(_)) |
-//             (Self::Free, Self::Fixed(_)) |
-//             (Self::Free, Self::Var(_)) =>
-//                 Some(cmp::Ordering::Greater),
-//             // `self` and `other` are equally precise (but possibly different lengths)
-//             (Self::Fixed(_), Self::Fixed(_)) |
-//             (Self::Var(_), Self::Var(_)) |
-//             (Self::Free, Self::Free) =>
-//                 None,
-//         }
-//     }
-// }
-
-impl fmt::Display for RankCapture {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Fixed(len) => write!(f, "{len}"),
-            Self::Var(len, Some(gt)) => write!(f, "{len}>{gt}"),
-            Self::Var(len, None) => write!(f, "{len}"),
-            Self::Free => write!(f, "_"),
         }
     }
 }
