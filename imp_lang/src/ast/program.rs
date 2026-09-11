@@ -54,3 +54,18 @@ impl<'ast, Ast: Invariant> Program<'ast, Ast> {
         self.fundefs.iter().map(|(_, f)| f.name.clone()).collect()
     }
 }
+
+impl<'ast, Ast: Invariant> OverloadFamilies<'ast, Ast> {
+    pub fn flatten(&self) -> impl Iterator<Item = (&String, &BaseSignature, &Vec<FundefId<'ast, Ast>>)> {
+        self.families
+            .iter()
+            .flat_map(|(name, family)| {
+                debug_assert!(!family.is_empty());
+                family.iter()
+                    .map(move |(signature, overloads)| {
+                        debug_assert!(!overloads.is_empty());
+                        (name, signature, overloads)
+                    })
+            })
+    }
+}

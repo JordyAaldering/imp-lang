@@ -25,22 +25,20 @@ impl<'ast> Traverse<'ast> for ValidateOverloads {
     type ExprOut = ();
 
     fn trav_program(&mut self, program: &mut Program<'ast, Self::Ast>) {
-        for (name, family) in &program.overloads.families {
-            for (sig, ids) in family {
-                let (id, rest) = ids.split_first().unwrap();
-                let expected_ret_ty = &program.fundefs[*id].ret_type.basetype;
+        for (name, signature, ids) in program.overloads.flatten() {
+            let (id, rest) = ids.split_first().unwrap();
+            let expected_ret_ty = &program.fundefs[*id].ret_type.basetype;
 
-                for id in rest {
-                    let actual_ret_ty = &program.fundefs[*id].ret_type.basetype;
-                    if actual_ret_ty != expected_ret_ty {
-                        self.errors.push(format!(
-                            "Inconsistent return base type for overload family '{}', argument bases {:?}: expected {}, found {}",
-                            name,
-                            sig,
-                            expected_ret_ty,
-                            actual_ret_ty,
-                        ));
-                    }
+            for id in rest {
+                let actual_ret_ty = &program.fundefs[*id].ret_type.basetype;
+                if actual_ret_ty != expected_ret_ty {
+                    self.errors.push(format!(
+                        "Inconsistent return base type for overload family '{}', argument bases {:?}: expected {}, found {}",
+                        name,
+                        signature,
+                        expected_ret_ty,
+                        actual_ret_ty,
+                    ));
                 }
             }
         }
