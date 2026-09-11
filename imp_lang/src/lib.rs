@@ -58,6 +58,9 @@ pub fn compile(breakpoint: Option<Phase>, infile: &PathBuf, outdir: Option<&Path
     tc::validate_overloads(&mut ast).unwrap();
     breakpoint!(breakpoint, Phase::VO, ast);
 
+    tc::sort_overloads(&mut ast).unwrap();
+    breakpoint!(breakpoint, Phase::SO, ast);
+
     tc::type_infer(&mut ast).unwrap();
     breakpoint!(breakpoint, Phase::TI, ast);
 
