@@ -85,10 +85,7 @@ fn compare<'ast>(
         let a_shape = &a_arg.ty.shape;
         let b_shape = &b_arg.ty.shape;
 
-        if (a_shape.min_rank() < b_shape.min_rank()) ||
-            (a_shape.is_definitely_scalar() && b_shape.is_maybe_scalar()) ||
-            (a_shape.is_maybe_array() && b_shape.is_definitely_array())
-        {
+        if a_shape.shape_knowledge() < b_shape.shape_knowledge() {
             // `a` is more precise than `b` in this argument
             match ord {
                 Some(Ordering::Greater) => {
@@ -107,10 +104,7 @@ fn compare<'ast>(
                 }
             }
 
-        } else if (b_shape.min_rank() < a_shape.min_rank()) ||
-            (b_shape.is_definitely_scalar() && a_shape.is_maybe_scalar()) ||
-            (b_shape.is_maybe_array() && a_shape.is_definitely_array())
-        {
+        } else if b_shape.shape_knowledge() < a_shape.shape_knowledge() {
             // `b` is more precise than `a` in this argument
             match ord {
                 Some(Ordering::Greater) => {

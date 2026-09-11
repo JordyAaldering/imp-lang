@@ -234,6 +234,7 @@ dependencies = [
  "env_logger",
  "id-arena",
  "log",
+ "parameterized",
  "typed-arena",
 ]
 
