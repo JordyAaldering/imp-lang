@@ -57,6 +57,14 @@ impl TypePattern {
         }
     }
 
+    pub fn is_definitely_scalar(&self) -> bool {
+        self.is_scalar().unwrap_or(false)
+    }
+
+    pub fn is_maybe_scalar(&self) -> bool {
+        self.is_scalar().unwrap_or(true)
+    }
+
     /// Check whether the type pattern is an array. Returns None if the rank is possibly non-zero, but variable.
     pub fn is_array(&self) -> Option<bool> {
         if self.0.is_empty() {
@@ -71,6 +79,14 @@ impl TypePattern {
             // Minimum rank is zero, and there are no variable-rank axes, so this is definitely a scalar
             Some(false)
         }
+    }
+
+    pub fn is_definitely_array(&self) -> bool {
+        self.is_array().unwrap_or(false)
+    }
+
+    pub fn is_maybe_array(&self) -> bool {
+        self.is_array().unwrap_or(true)
     }
 
     /// The minimum rank of this type pattern. The actual rank may be higher if there is a variable-rank axis.

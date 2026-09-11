@@ -33,11 +33,8 @@ impl<'ast> Traverse<'ast> for ValidateOverloads {
                 let actual_ret_ty = &program.fundefs[*id].ret_type.basetype;
                 if actual_ret_ty != expected_ret_ty {
                     self.errors.push(format!(
-                        "Inconsistent return base type for overload family '{}', argument bases {:?}: expected {}, found {}",
-                        name,
-                        signature,
-                        expected_ret_ty,
-                        actual_ret_ty,
+                        "Inconsistent return base type for overload family `{}{}`: found {} and {}",
+                        name, signature, expected_ret_ty, actual_ret_ty,
                     ));
                 }
             }

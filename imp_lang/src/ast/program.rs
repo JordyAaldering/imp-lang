@@ -68,4 +68,17 @@ impl<'ast, Ast: Invariant> OverloadFamilies<'ast, Ast> {
                     })
             })
     }
+
+    pub fn flatten_mut(&mut self) -> impl Iterator<Item = (&String, &BaseSignature, &mut Vec<FundefId<'ast, Ast>>)> {
+        self.families
+            .iter_mut()
+            .flat_map(|(name, family)| {
+                debug_assert!(!family.is_empty());
+                family.iter_mut()
+                    .map(move |(signature, overloads)| {
+                        debug_assert!(!overloads.is_empty());
+                        (name, signature, overloads)
+                    })
+            })
+    }
 }

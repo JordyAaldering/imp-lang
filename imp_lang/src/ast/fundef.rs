@@ -45,3 +45,16 @@ impl<'ast, Ast: Invariant> Fundef<'ast, Ast> {
         }
     }
 }
+
+impl fmt::Display for Farg {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}: {}", self.id, self.ty)
+    }
+}
+
+impl fmt::Display for BaseSignature {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let types: Vec<_> = self.base_types.iter().map(BaseType::to_string).collect();
+        write!(f, "({})", types.join(", "))
+    }
+}
