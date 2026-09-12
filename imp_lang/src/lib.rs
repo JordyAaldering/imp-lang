@@ -42,7 +42,7 @@ pub fn compile(breakpoint: Option<Phase>, infile: &PathBuf, outdir: Option<&Path
     let mut ast = scp::scanparse(&src, &parsed_scope).unwrap();
     breakpoint!(breakpoint, Phase::SCP, ast);
 
-    let mut ast = tp::check_tp(ast).unwrap();
+    let mut ast = tp::validate_tp(ast).unwrap();
     breakpoint!(breakpoint, Phase::CTP, ast);
 
     tp::analyse_tp(&mut ast, &parsed_scope);

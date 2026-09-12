@@ -4,7 +4,7 @@ use crate::{Phase, ast::*};
 
 /// Not all patterns that can be constructed from the grammar are actually resolvable.
 /// This pass rejects unresolved variable-rank patterns (`d:shp`) at compile time.
-pub fn check_tp<'ast>(mut program: Program<'ast, ParsedAst>) -> Result<Program<'ast, ParsedAst>, String> {
+pub fn validate_tp<'ast>(mut program: Program<'ast, ParsedAst>) -> Result<Program<'ast, ParsedAst>, String> {
 	let mut trav = CheckTypePatterns::default();
 
 	trav.trav_program(&mut program);
