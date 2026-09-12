@@ -53,8 +53,28 @@ impl<'ast> Traverse<'ast> for SortOverloads {
         let fundefs = &program.fundefs;
 
         for (name, signature, ids) in program.overloads.flatten_mut() {
+            if ids.len() <= 1 {
+                continue;
+            }
+
             phase_log!("Sorting overloads for `{}` with signature {}", name, signature);
             ids.sort_by(|a, b| compare(a, b, fundefs));
+
+            phase_log!("Sorted overloads for `{}` with signature {}:\n{}",
+                name,
+                signature,
+                ids.iter()
+                    .map(|id| {
+                        fundefs[*id]
+                            .args
+                            .iter()
+                            .map(|arg| arg.ty.to_string())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n"),
+            );
         }
     }
 }
