@@ -195,32 +195,28 @@ impl TypeInfer {
             panic!("no matching overload for function: {}", func_name);
         };
 
-        let mut matches = Vec::new();
+        let mut matched = None;
+
+        // At this point, candidates are already sorted by specificity,
+        // so we can just take the first one that is compatible with the provided types.
         for target in candidates {
-            let mut is_match = true;
-            for (expected, provided) in target.args.iter().zip(arg_types.iter()) {
-                if !types_compatible(&expected.ty, provided) {
-                    is_match = false;
+            for (candidate, provided) in target.args.iter().zip(arg_types.iter()) {
+                if true {
+                    matched = Some(target);
                     break;
                 }
             }
-            if is_match {
-                matches.push(target);
-            }
         }
 
-        if matches.is_empty() {
+        let Some(matched) = matched else {
             self.errors.push(InferenceError::NoMatchingOverload {
                 name: func_name.to_owned(),
                 arg_bases: key.clone(),
             });
-            panic!("no matching overload for function: {}", func_name);
-        }
+            panic!("no compatible overload during dispatch resolution: {}", func_name);
+        };
 
-        let best_matches = maximal_candidates(&matches);
-        let needs_runtime_dispatch = best_matches.len() > 1;
-
-        (best_matches[0], needs_runtime_dispatch)
+        (matched, false)
     }
 }
 
