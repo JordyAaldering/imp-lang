@@ -76,6 +76,15 @@ fn compare<'ast>(
     let a_args = &fundefs[*a].args;
     let b_args = &fundefs[*b].args;
 
+    let ord = compare_args(a_args, b_args);
+
+    ord.expect(&format!("No clear ordering between `{}({})` and `{}({})`",
+        fundefs[*a].name, fundefs[*a].args.iter().map(|arg| arg.ty.to_string()).collect::<Vec<_>>().join(", "),
+        fundefs[*b].name, fundefs[*b].args.iter().map(|arg| arg.ty.to_string()).collect::<Vec<_>>().join(", "),
+    ))
+}
+
+fn compare_args(a_args: &[Farg], b_args: &[Farg]) -> Option<Ordering> {
     debug_assert_eq!(a_args.len(), b_args.len());
 
     let mut ord = None;
@@ -127,8 +136,25 @@ fn compare<'ast>(
         }
     }
 
-    ord.expect(&format!("No clear ordering between `{}({})` and `{}({})`",
-        fundefs[*a].name, fundefs[*a].args.iter().map(|arg| arg.ty.to_string()).collect::<Vec<_>>().join(", "),
-        fundefs[*b].name, fundefs[*b].args.iter().map(|arg| arg.ty.to_string()).collect::<Vec<_>>().join(", "),
-    ))
+    ord
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use parameterized::parameterized;
+
+    #[parameterized(
+        p1 = { vec![AxisPattern::FixedDim { len: 1 }] },
+        p2 = { vec![AxisPattern::VarDim { len: None }] },
+    )]
+    fn test_sort_overload(p1: Vec<AxisPattern>, p2: Vec<AxisPattern>) {
+        let a_args = vec![Farg { id: "x".to_string(), ty: Type::new(BaseType::I32, p1) }];
+        let b_args = vec![Farg { id: "x".to_string(), ty: Type::new(BaseType::I32, p2) }];
+
+        let ord = compare_args(&a_args, &b_args);
+        assert_eq!(ord, Some(Ordering::Less));
+        let ord = compare_args(&b_args, &a_args);
+        assert_eq!(ord, Some(Ordering::Greater));
+    }
 }

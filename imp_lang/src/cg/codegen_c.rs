@@ -599,24 +599,25 @@ impl<'ast> Traverse<'ast> for CompileC {
 }
 
 fn shape_match_condition(ty: &Type, arg: &str) -> String {
-    if let Some(axes) = ty.type_pattern() {
-        if axes.iter().any(|axis| matches!(axis, AxisPattern::ShapePattern { .. })) {
-            format!("{arg}.dim > 0")
-        } else {
-            let mut checks = vec![
-                format!("{arg}.dim == {}", axes.len()),
-            ];
-            for (i, axis) in axes.iter().enumerate() {
-                match axis {
-                    AxisPattern::DimPattern { len } => checks.push(format!("{arg}.shp[{i}] == {len}")),
-                    _ => {},
-                }
-            }
-            checks.join(" && ")
-        }
-    } else {
-        format!("{arg}.dim == 0")
-    }
+    // if let Some(axes) = ty.type_pattern() {
+    //     if axes.iter().any(|axis| matches!(axis, AxisPattern::ShapePattern { .. })) {
+    //         format!("{arg}.dim > 0")
+    //     } else {
+    //         let mut checks = vec![
+    //             format!("{arg}.dim == {}", axes.len()),
+    //         ];
+    //         for (i, axis) in axes.iter().enumerate() {
+    //             match axis {
+    //                 AxisPattern::DimPattern { len } => checks.push(format!("{arg}.shp[{i}] == {len}")),
+    //                 _ => {},
+    //             }
+    //         }
+    //         checks.join(" && ")
+    //     }
+    // } else {
+    //     format!("{arg}.dim == 0")
+    // }
+    "".to_string()
 }
 
 fn wrapper_call_arg(ty: &Type, arg: &str, base: &BaseType) -> String {

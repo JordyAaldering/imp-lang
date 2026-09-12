@@ -558,12 +558,17 @@ impl<'src, 'ast> Parser<'src, 'ast> {
         let (token, span) = self.next()?;
         let pattern = match token {
             Token::NatValue(len) => {
-                let len = RankCapture::Fixed(len);
-                AxisPattern::DimPattern { len }
+                if self.matches(&Token::Colon).is_some() {
+                    let (shp, _) = self.parse_id()?;
+                    let shp = if shp == "_" { None } else { Some(shp) };
+                    AxisPattern::FixedShape { dim: len, shp }
+                } else {
+                    AxisPattern::FixedDim { len }
+                }
             }
             Token::Identifier(id) => {
                 if self.matches(&Token::Gt).is_some() || self.matches(&Token::Ge).is_some() {
-                    let gt = match self.next()? {
+                    let min_dim = match self.next()? {
                         (Token::NatValue(gt), _) => gt,
                         (token, span) => {
                             return Err(ParseError::UnexpectedToken(
@@ -576,17 +581,17 @@ impl<'src, 'ast> Parser<'src, 'ast> {
 
                     self.expect(Token::Colon)?;
                     let (shp, _) = self.parse_id()?;
-                    let dim = if id == "_" { RankCapture::Free } else { RankCapture::Var(id, Some(gt)) };
+                    let dim = if id == "_" { None } else { Some(id) };
                     let shp = if shp == "_" { None } else { Some(shp) };
-                    AxisPattern::ShapePattern { dim, shp }
+                    AxisPattern::VarShape { dim, min_dim, shp }
                 } else if self.matches(&Token::Colon).is_some() {
                     let (shp, _) = self.parse_id()?;
-                    let dim = if id == "_" { RankCapture::Free } else { RankCapture::Var(id, None) };
+                    let dim = if id == "_" { None } else { Some(id) };
                     let shp = if shp == "_" { None } else { Some(shp) };
-                    AxisPattern::ShapePattern { dim, shp }
+                    AxisPattern::VarShape { dim, min_dim: 0, shp }
                 } else {
-                    let len = if id == "_" { RankCapture::Free } else { RankCapture::Var(id, None) };
-                    AxisPattern::DimPattern { len }
+                    let len = if id == "_" { None } else { Some(id) };
+                    AxisPattern::VarDim { len }
                 }
             }
             _ => {

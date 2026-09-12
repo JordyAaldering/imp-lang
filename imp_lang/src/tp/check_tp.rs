@@ -57,24 +57,29 @@ impl<'ast> Traverse<'ast> for CheckTypePatterns {
 	fn trav_farg(&mut self, arg: &mut Farg) {
 		for axis in &arg.ty.shape.0 {
 			match axis {
-				AxisPattern::ShapePattern { dim, shp } => {
-					if let RankCapture::Free = dim {
-						self.unconstrained_rank_captures += 1;
-					} else if let RankCapture::Var(dim, _) = dim {
+				AxisPattern::FixedDim { .. } => {}
+				AxisPattern::VarDim { len: None } => {}
+				AxisPattern::VarDim { len: Some(len) } => {
+					self.defined_symbols.insert(len.clone());
+				}
+				AxisPattern::FixedShape { shp, .. } => {
+					if let Some(shp) = shp {
+						self.defined_symbols.insert(shp.clone());
+					}
+				}
+				AxisPattern::VarShape { dim, shp, .. } => {
+					if let Some(dim) = dim {
 						if !self.defined_symbols.contains(dim) {
 							self.unconstrained_rank_captures += 1;
 						}
 
 						self.defined_symbols.insert(dim.clone());
+					} else {
+						self.unconstrained_rank_captures += 1;
 					}
 
 					if let Some(shp) = shp {
 						self.defined_symbols.insert(shp.clone());
-					}
-				}
-				AxisPattern::DimPattern { len } => {
-					if let RankCapture::Var(len, _) = len {
-						self.defined_symbols.insert(len.clone());
 					}
 				}
 			}
@@ -83,13 +88,16 @@ impl<'ast> Traverse<'ast> for CheckTypePatterns {
 
 	fn trav_fret(&mut self, ret_type: &mut Type) {
 		for axis in &ret_type.shape.0 {
-			if let AxisPattern::ShapePattern { dim: RankCapture::Var(dim, _), shp: _ } = axis
-				&& !self.defined_symbols.contains(dim)
-			{
-				self.errors.push(format!(
-					"function `{}` return type contains unconstrained rank capture `{}`; return rank captures must be constrained by argument symbols",
-					self.fundef_name, dim
-				));
+			match axis {
+				AxisPattern::VarShape { dim, .. } => {
+					if dim.as_ref().is_none_or(|dim| !self.defined_symbols.contains(dim)) {
+						self.errors.push(format!(
+							"function `{}` return type contains unconstrained rank capture `{}`; return rank captures must be constrained by argument symbols",
+							self.fundef_name, dim.as_ref().unwrap_or(&"_".to_string())
+						));
+					}
+				}
+				_ => {}
 			}
 		}
 	}

@@ -114,14 +114,21 @@ fn mangle_shape(ty: &Type) -> String {
 
 fn mangle_axis(axis: &AxisPattern) -> String {
     match axis {
-        AxisPattern::ShapePattern { dim, shp } => {
-            let dim = if matches!(dim, RankCapture::Free) { "X".to_string() } else { dim.to_string() };
-            let shp = shp.as_ref().map(|s| s.as_str()).unwrap_or("X");
+        AxisPattern::FixedDim { len } => {
+            len.to_string()
+        }
+        AxisPattern::VarDim { len } => {
+            let len = len.as_ref().map_or("X", |x| x);
+            format!("{len}")
+        }
+        AxisPattern::FixedShape { dim, shp } => {
+            let shp = shp.as_ref().map_or("X", |x| x);
             format!("{dim}_{shp}")
         }
-        AxisPattern::DimPattern { len } => {
-            let len = if matches!(len, RankCapture::Free) { "X".to_string() } else { len.to_string() };
-            format!("{len}")
+        AxisPattern::VarShape { dim, min_dim, shp } => {
+            let dim = dim.as_ref().map_or("X", |x| x);
+            let shp = shp.as_ref().map_or("X", |x| x);
+            format!("{dim}{min_dim}_{shp}")
         }
     }
 }

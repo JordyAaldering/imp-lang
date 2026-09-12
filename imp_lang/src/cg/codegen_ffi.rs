@@ -278,124 +278,128 @@ fn emit_family_return_expr(
 /// Only checks positions exposed as `ImpArray<T>` (i.e., `!all_scalar_args[i]`).
 /// Positions exposed as `T` are always scalar -- no runtime check needed.
 fn build_variant_condition(args: &[Farg], all_scalar_args: &[bool]) -> String {
-    let mut checks = Vec::new();
-    let mut bound_dims: Vec<(String, String)> = Vec::new();
-    let mut bound_ranks: Vec<(String, String)> = Vec::new();
+    // let mut checks = Vec::new();
+    // let mut bound_dims: Vec<(String, String)> = Vec::new();
+    // let mut bound_ranks: Vec<(String, String)> = Vec::new();
 
-    for (arg_index, (arg, &exposed_as_scalar)) in
-        args.iter().zip(all_scalar_args.iter()).enumerate()
-    {
-        if exposed_as_scalar {
-            continue;
-        }
+    // for (arg_index, (arg, &exposed_as_scalar)) in
+    //     args.iter().zip(all_scalar_args.iter()).enumerate()
+    // {
+    //     if exposed_as_scalar {
+    //         continue;
+    //     }
 
-        if let Some(axes) = arg.ty.type_pattern() {
-            // if axes.iter().any(|ax| matches!(ax, AxisPattern::Rank(_))) {
-            //     checks.push(format!("!arg{arg_index}.is_scalar()"));
-            // } else {
-            //     checks.push(format!("arg{arg_index}.dim() == {}", axes.len()));
-            // }
+    //     if let Some(axes) = arg.ty.type_pattern() {
+    //         // if axes.iter().any(|ax| matches!(ax, AxisPattern::Rank(_))) {
+    //         //     checks.push(format!("!arg{arg_index}.is_scalar()"));
+    //         // } else {
+    //         //     checks.push(format!("arg{arg_index}.dim() == {}", axes.len()));
+    //         // }
 
-            for (axis_index, axis) in axes.iter().enumerate() {
-                match axis {
-                    AxisPattern::ShapePattern { dim, shp: _ } => {
-                        if let RankCapture::Var(dim, _) = dim {
-                            let expr = format!("arg{arg_index}.dim()");
+    //         for (axis_index, axis) in axes.iter().enumerate() {
+    //             match axis {
+    //                 AxisPattern::ShapePattern { dim, shp: _ } => {
+    //                     if let RankCapture::Var(dim, _) = dim {
+    //                         let expr = format!("arg{arg_index}.dim()");
 
-                            if let Some((_, bound_expr)) = bound_ranks.iter().find(|(name, _)| name == dim)
-                            {
-                                checks.push(format!("{expr} == {bound_expr}"));
-                            } else {
-                                bound_ranks.push((dim.clone(), expr));
-                            }
-                        }
-                    }
-                    AxisPattern::DimPattern { len: RankCapture::Var(len, _) } => {
-                        let expr = format!("arg{arg_index}.extent({axis_index})");
-                        if let Some((_, bound_expr)) =
-                            bound_dims.iter().find(|(name, _)| name == len)
-                        {
-                            checks.push(format!("{expr} == {bound_expr}"));
-                        } else {
-                            bound_dims.push((len.clone(), expr));
-                        }
-                    }
-                    AxisPattern::DimPattern { len } => {
-                        checks.push(format!("arg{arg_index}.extent({axis_index}) == {len}"));
-                    }
-                }
-            }
-        } else {
-            checks.push(format!("arg{arg_index}.is_scalar()"));
-        }
-    }
+    //                         if let Some((_, bound_expr)) = bound_ranks.iter().find(|(name, _)| name == dim)
+    //                         {
+    //                             checks.push(format!("{expr} == {bound_expr}"));
+    //                         } else {
+    //                             bound_ranks.push((dim.clone(), expr));
+    //                         }
+    //                     }
+    //                 }
+    //                 AxisPattern::DimPattern { len: RankCapture::Var(len, _) } => {
+    //                     let expr = format!("arg{arg_index}.extent({axis_index})");
+    //                     if let Some((_, bound_expr)) =
+    //                         bound_dims.iter().find(|(name, _)| name == len)
+    //                     {
+    //                         checks.push(format!("{expr} == {bound_expr}"));
+    //                     } else {
+    //                         bound_dims.push((len.clone(), expr));
+    //                     }
+    //                 }
+    //                 AxisPattern::DimPattern { len } => {
+    //                     checks.push(format!("arg{arg_index}.extent({axis_index}) == {len}"));
+    //                 }
+    //             }
+    //         }
+    //     } else {
+    //         checks.push(format!("arg{arg_index}.is_scalar()"));
+    //     }
+    // }
 
-    if checks.is_empty() {
-        "true".to_owned()
-    } else {
-        checks.join(" && ")
-    }
+    // if checks.is_empty() {
+    //     "true".to_string()
+    // } else {
+    //     checks.join(" && ")
+    // }
+
+    "true".to_string()
 }
 
 fn generate_shape_checks(args: &[Farg]) -> String {
-    let mut out = String::new();
-    let mut bound_dims: Vec<String> = Vec::new();
-    let mut bound_ranks: Vec<String> = Vec::new();
+    // let mut out = String::new();
+    // let mut bound_dims: Vec<String> = Vec::new();
+    // let mut bound_ranks: Vec<String> = Vec::new();
 
-    for arg in args {
-        let Some(axes) = &arg.ty.type_pattern() else {
-            continue;
-        };
+    // for arg in args {
+    //     let Some(axes) = &arg.ty.type_pattern() else {
+    //         continue;
+    //     };
 
-        // if !axes.iter().any(|axis| matches!(axis, AxisPattern::Rank(_))) {
-        //     out.push_str(&format!(
-        //         "    assert_eq!({}.dim(), {}, \"{} rank mismatch\");\n",
-        //         arg.id,
-        //         axes.len(),
-        //         arg.id,
-        //     ));
-        // }
+    //     if !axes.iter().any(|axis| matches!(axis, AxisPattern::Rank(_))) {
+    //         out.push_str(&format!(
+    //             "    assert_eq!({}.dim(), {}, \"{} rank mismatch\");\n",
+    //             arg.id,
+    //             axes.len(),
+    //             arg.id,
+    //         ));
+    //     }
 
-        for (idx, axis) in axes.iter().enumerate() {
-            match axis {
-                AxisPattern::ShapePattern { dim, shp: _ } => {
-                    if let RankCapture::Var(dim, _) = dim {
-                        let binding = format!("_imp_rank_{}", dim);
-                        if bound_ranks.iter().any(|existing| existing == &binding) {
-                            out.push_str(&format!("    assert_eq!({}.dim(), {}, \"rank {} mismatch\");\n",
-                                arg.id, binding, dim));
-                        } else {
-                            out.push_str(&format!("    let {} = {}.dim();\n",
-                                binding, arg.id
-                            ));
-                            bound_ranks.push(binding);
-                        }
-                    }
-                }
-                AxisPattern::DimPattern { len: RankCapture::Var(len, _) } => {
-                    let binding = format!("_imp_extent_{}", len);
-                    if bound_dims.iter().any(|existing| existing == &binding) {
-                        out.push_str(&format!(
-                            "    assert_eq!({}.extent({}), {}, \"extent {} mismatch\");\n",
-                            arg.id, idx, binding, len
-                        ));
-                    } else {
-                        out.push_str(&format!(
-                            "    let {} = {}.extent({});\n",
-                            binding, arg.id, idx
-                        ));
-                        bound_dims.push(binding);
-                    }
-                }
-                AxisPattern::DimPattern { len } => {
-                    out.push_str(&format!(
-                        "    assert_eq!({}.extent({}), {}, \"{} extent mismatch at axis {}\");\n",
-                        arg.id, idx, len, arg.id, idx,
-                    ));
-                }
-            }
-        }
-    }
+    //     for (idx, axis) in axes.iter().enumerate() {
+    //         match axis {
+    //             AxisPattern::ShapePattern { dim, shp: _ } => {
+    //                 if let RankCapture::Var(dim, _) = dim {
+    //                     let binding = format!("_imp_rank_{}", dim);
+    //                     if bound_ranks.iter().any(|existing| existing == &binding) {
+    //                         out.push_str(&format!("    assert_eq!({}.dim(), {}, \"rank {} mismatch\");\n",
+    //                             arg.id, binding, dim));
+    //                     } else {
+    //                         out.push_str(&format!("    let {} = {}.dim();\n",
+    //                             binding, arg.id
+    //                         ));
+    //                         bound_ranks.push(binding);
+    //                     }
+    //                 }
+    //             }
+    //             AxisPattern::DimPattern { len: RankCapture::Var(len, _) } => {
+    //                 let binding = format!("_imp_extent_{}", len);
+    //                 if bound_dims.iter().any(|existing| existing == &binding) {
+    //                     out.push_str(&format!(
+    //                         "    assert_eq!({}.extent({}), {}, \"extent {} mismatch\");\n",
+    //                         arg.id, idx, binding, len
+    //                     ));
+    //                 } else {
+    //                     out.push_str(&format!(
+    //                         "    let {} = {}.extent({});\n",
+    //                         binding, arg.id, idx
+    //                     ));
+    //                     bound_dims.push(binding);
+    //                 }
+    //             }
+    //             AxisPattern::DimPattern { len } => {
+    //                 out.push_str(&format!(
+    //                     "    assert_eq!({}.extent({}), {}, \"{} extent mismatch at axis {}\");\n",
+    //                     arg.id, idx, len, arg.id, idx,
+    //                 ));
+    //             }
+    //         }
+    //     }
+    // }
 
-    out
+    // out
+
+    "".to_string()
 }

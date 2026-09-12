@@ -1,6 +1,6 @@
 use std::fmt;
 
-use super::{type_pattern::*, shape_knowledge::*};
+use super::type_pattern::*;
 
 #[derive(Clone, Debug)]
 pub struct Type {
@@ -41,18 +41,12 @@ impl Type {
         Self { basetype, shape: TypePattern::scalar() }
     }
 
-    pub fn aks_vector(basetype: BaseType, len: usize) -> Self {
-        Self { basetype, shape: TypePattern::new(vec![AxisPattern::DimPattern { len: RankCapture::Fixed(len) }]) }
-    }
-
-    pub fn akd_vector(basetype: BaseType, len: RankCapture) -> Self {
-        Self { basetype, shape: TypePattern::new(vec![AxisPattern::DimPattern { len }]) }
-    }
-
-    pub fn get_vector(&self) -> Option<&RankCapture> {
+    pub fn get_vector(&self) -> Option<&AxisPattern> {
         match &self.shape.0[..] {
-            [AxisPattern::DimPattern { len }] => Some(len),
-            [AxisPattern::ShapePattern { dim: RankCapture::Fixed(1), .. }] => Some(&RankCapture::Free),
+            [AxisPattern::FixedDim { .. }] |
+            [AxisPattern::VarDim { .. }] |
+            [AxisPattern::FixedShape { dim: 1, .. }] =>
+                Some(&self.shape.0[0]),
             _ => None,
         }
     }
@@ -110,10 +104,6 @@ impl Type {
     /// The rank of this type, if it is fixed. Returns None if the rank is variable.
     pub fn rank(&self) -> Option<usize> {
         self.shape.rank()
-    }
-
-    pub fn shape_knowledge(&self) -> ShapeKnowledge {
-        self.shape.shape_knowledge()
     }
 }
 

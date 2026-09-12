@@ -90,7 +90,7 @@ impl TypeInfer {
             }
         }
 
-        let leading = AxisPattern::DimPattern { len: RankCapture::Fixed(count) };
+        let leading = AxisPattern::FixedDim { len: count };
         let result_shape = if let Some(axes) = first.type_pattern() {
             // (Potentially) non-scalar
             let mut new_axes = Vec::with_capacity(1 + axes.len());
@@ -106,24 +106,26 @@ impl TypeInfer {
     }
 
     fn tensor_iv_and_dims(ub_ty: &Type) -> (Type, Option<usize>) {
+        let basetype = ub_ty.basetype.clone();
         if let Some(axis) = ub_ty.get_vector() {
             match axis {
-                RankCapture::Fixed(len) => {
-                    let ty = Type::aks_vector(ub_ty.basetype.clone(), *len);
+                AxisPattern::FixedDim { len } => {
+                    let ty = Type { basetype, shape: TypePattern::new(vec![AxisPattern::FixedDim { len: *len }]) };
                     (ty, Some(*len))
                 }
-                RankCapture::Var(len, gt) => {
-                    let ty = Type::akd_vector(ub_ty.basetype.clone(), RankCapture::Var(len.clone(), gt.clone()));
+                AxisPattern::VarDim { len } => {
+                    let ty = Type { basetype, shape: TypePattern::new(vec![AxisPattern::VarDim { len: len.clone() }]) };
                     (ty, None)
                 }
-                RankCapture::Free => {
-                    let ty = Type::akd_vector(ub_ty.basetype.clone(), RankCapture::Free);
+                AxisPattern::FixedShape { dim: 1, .. } => {
+                    let ty = Type { basetype, shape: TypePattern::new(vec![AxisPattern::VarDim { len: None }]) };
                     (ty, None)
                 }
+                _ => unreachable!(),
             }
         } else {
             // unreachable!("cannot iterate over scalar ub")
-            let ty = Type::akd_vector(ub_ty.basetype.clone(), RankCapture::Free);
+            let ty = Type { basetype, shape: TypePattern::new(vec![AxisPattern::VarDim { len: None }]) };
             (ty, None)
         }
     }
@@ -158,15 +160,15 @@ impl TypeInfer {
         let mut axes = Vec::with_capacity(elems.len());
         for elem in &elems {
             let dp = match elem {
-                Id::Arg(i) => AxisPattern::DimPattern { len: RankCapture::Var(self.args[*i].id.clone(), None) },
+                Id::Arg(i) => AxisPattern::VarDim { len: Some(self.args[*i].id.clone()) },
                 Id::Var(v) => {
                     let known_usize = v.ssa.and_then(|cell| match &*cell.borrow() {
                         Expr::Const(Const::Usize(val)) => Some(*val),
                         _ => None,
                     });
                     match known_usize {
-                        Some(val) => AxisPattern::DimPattern { len: RankCapture::Fixed(val) },
-                        None => AxisPattern::DimPattern { len: RankCapture::Var(v.name.clone(), None) },
+                        Some(len) => AxisPattern::FixedDim { len },
+                        None => AxisPattern::VarDim { len: None },
                     }
                 }
             };
@@ -298,7 +300,7 @@ impl<'ast> Traverse<'ast> for TypeInfer {
         use Prf::*;
         match prf {
             ShapeA(_) => {
-                Type::akd_vector(BaseType::Usize, RankCapture::Free)
+                Type { basetype: BaseType::Usize, shape: TypePattern::new(vec![AxisPattern::VarDim { len: None }]) }
             }
             DimA(arr) => {
                 let arr_ty = self.trav_id(arr);
@@ -365,7 +367,7 @@ impl<'ast> Traverse<'ast> for TypeInfer {
         let (iv_ty, leading_k) = Self::tensor_iv_and_dims(&ub_ty);
 
         let leading_axes: Option<Vec<AxisPattern>> = ub_named_axes.or_else(|| {
-            leading_k.map(|k| (0..k).map(|_| AxisPattern::DimPattern { len: RankCapture::Free }).collect())
+            leading_k.map(|k| (0..k).map(|_| AxisPattern::VarDim { len: None }).collect())
         });
 
         *tensor.iv.ty.borrow_mut() = Some(iv_ty);
@@ -549,9 +551,5 @@ fn type_requires_runtime_dispatch(ty: &Type) -> bool {
 }
 
 fn axis_requires_runtime_dispatch(axis: &AxisPattern) -> bool {
-    match axis {
-        AxisPattern::ShapePattern { .. } => true,
-        AxisPattern::DimPattern { len: RankCapture::Fixed(_) } => false,
-        AxisPattern::DimPattern { len: _ } => true,
-    }
+    true
 }

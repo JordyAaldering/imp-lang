@@ -83,38 +83,42 @@ impl<'ast> AnalyseTp<'ast> {
 
         for (axis_index, axis) in axes.iter().enumerate() {
             match axis {
-                AxisPattern::ShapePattern { dim, shp: _ } => {
-                    let constrained_by = if let RankCapture::Var(dim, _) = dim && self.defined.contains(dim) {
-                        vec![ShapeTerm::Symbol(dim.clone())]
-                    } else {
-                        unconstrained_rank_captures += 1;
-                        Vec::new()
-                    };
-
-                    fundef.shape_facts.output_constraints.push(OutputShapeConstraint {
-                        output: ShapeTerm::RetRank { axis_index },
-                        constrained_by,
-                    });
-                },
-                AxisPattern::DimPattern { len: RankCapture::Fixed(_) } => {
+                AxisPattern::FixedDim { .. } => {
                     fundef.shape_facts.output_constraints.push(OutputShapeConstraint {
                         output: ShapeTerm::RetDim { axis_index },
                         constrained_by: Vec::new(),
                     });
-                },
-                AxisPattern::DimPattern { len: RankCapture::Var(len, ..) } => {
-                    let constrained_by = if self.defined.contains(len) {
-                        vec![ShapeTerm::Symbol(len.clone())]
-                    } else {
-                        Vec::new()
-                    };
-
-                    fundef.shape_facts.output_constraints.push(OutputShapeConstraint {
-                        output: ShapeTerm::RetDim { axis_index },
-                        constrained_by,
-                    });
                 }
-                AxisPattern::DimPattern { len: RankCapture::Free } => {},
+                AxisPattern::VarDim { len } => {
+                    if let Some(len) = len {
+                        let constrained_by = if self.defined.contains(len) {
+                            vec![ShapeTerm::Symbol(len.clone())]
+                        } else {
+                            Vec::new()
+                        };
+
+                        fundef.shape_facts.output_constraints.push(OutputShapeConstraint {
+                            output: ShapeTerm::RetDim { axis_index },
+                            constrained_by,
+                        });
+                    }
+                }
+                AxisPattern::FixedShape { .. } => {}
+                AxisPattern::VarShape { dim, .. } => {
+                    if let Some(dim) = dim {
+                        let constrained_by = if self.defined.contains(dim) {
+                            vec![ShapeTerm::Symbol(dim.clone())]
+                        } else {
+                            unconstrained_rank_captures += 1;
+                            Vec::new()
+                        };
+
+                        fundef.shape_facts.output_constraints.push(OutputShapeConstraint {
+                            output: ShapeTerm::RetRank { axis_index },
+                            constrained_by,
+                        });
+                    }
+                }
             }
         }
 
@@ -187,8 +191,8 @@ impl<'ast> Traverse<'ast> for AnalyseTp<'ast> {
 
         for (axis_index, axis) in axes.iter().enumerate() {
             match axis {
-                AxisPattern::ShapePattern { dim, shp } => {
-                    if let RankCapture::Var(dim, _) = dim {
+                AxisPattern::VarShape { dim, shp, .. } => {
+                    if let Some(dim) = dim {
                         let dim_term = ShapeTerm::ArgRank {
                             arg_index: self.arg_index,
                             axis_index,
@@ -218,8 +222,28 @@ impl<'ast> Traverse<'ast> for AnalyseTp<'ast> {
                             },
                         ));
                     }
-                },
-                AxisPattern::DimPattern { len: RankCapture::Var(len, _) } => {
+                }
+                AxisPattern::FixedShape { shp, .. } => {
+                    if let Some(shp) = shp {
+                        let shp_term = ShapeTerm::TailShape {
+                            arg_index: self.arg_index,
+                            start_axis: axis_index,
+                        };
+                        let shp_expr = self.shape_of_arg_expr(self.arg_index);
+                        pending.push((
+                            shp.clone(),
+                            shp_term,
+                            shp_expr,
+                            Type {
+                                basetype: BaseType::Usize,
+                                shape: TypePattern::scalar(),
+                            },
+                        ));
+                    }
+                }
+                AxisPattern::FixedDim { .. } => {}
+                AxisPattern::VarDim { len: None } => {}
+                AxisPattern::VarDim { len: Some(len) } => {
                     let term = ShapeTerm::ArgDim {
                         arg_index: self.arg_index,
                         axis_index,
@@ -227,7 +251,6 @@ impl<'ast> Traverse<'ast> for AnalyseTp<'ast> {
                     let expr = self.dim_at_expr(self.arg_index, axis_index);
                     pending.push((len.clone(), term, expr, Type::scalar(BaseType::Usize)));
                 }
-                AxisPattern::DimPattern { .. } => {}
             }
         }
 
